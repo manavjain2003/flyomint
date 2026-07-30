@@ -45,6 +45,10 @@ async function fetchSignatureKey() {
     return cachedKey;
 }
 
+export function setUniqueKey(uniqueKey, validity) {
+  cachedKey = { uniqueKey: uniqueKey?.trim(), validity };
+}
+
 export async function getUniqueKey({ forceRefresh = false } = {}) {
     if (!forceRefresh && isKeyStillValid(cachedKey)) {
         return cachedKey.uniqueKey;

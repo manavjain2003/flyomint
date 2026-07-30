@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import {
     HiOutlineUser,
     HiOutlinePaperAirplane,
@@ -10,6 +10,7 @@ import {
     HiOutlineCog6Tooth,
     HiOutlineArrowRightOnRectangle,
 } from "react-icons/hi2";
+import { logoutUser } from "@/app/lib/authApi";
 
 type NavItem = {
     label: string;
@@ -27,6 +28,13 @@ const NAV_ITEMS: NavItem[] = [
 
 export default function AccountSidebar() {
     const pathname = usePathname();
+    const router = useRouter();
+
+async function handleLogout() {
+    await logoutUser();
+    window.dispatchEvent(new Event("flyomint:logout")); 
+    router.push("/");
+}
 
     return (
         <nav className="bg-white rounded-2xl border border-gray-200 p-2 flex flex-col">
@@ -55,6 +63,7 @@ export default function AccountSidebar() {
             <div className="border-t border-gray-100 mt-2 pt-2">
                 <button
                     type="button"
+                    onClick={handleLogout}
                     className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-red-500 hover:bg-red-50 transition-colors"
                 >
                     <HiOutlineArrowRightOnRectangle className="w-4 h-4" />

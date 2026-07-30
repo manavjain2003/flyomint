@@ -187,7 +187,7 @@ export default function LoginDrawer({ open, onClose, onLoginSuccess }: LoginDraw
 
        try {
         saveLoginSession({ uniqueKey: res.uniqueKey, validity: res.validity });
-        window.dispatchEvent(new Event("flyomint:login")); // <-- add this
+        window.dispatchEvent(new CustomEvent("flyomint:login"));
     } catch (err) {
         console.error("Failed to persist login session:", err);
     }

@@ -1,17 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { HiMenu, HiX, HiSupport, HiSun } from "react-icons/hi";
+import { HiOutlineUserCircle, HiOutlineUser, HiOutlineArrowRightOnRectangle, HiChevronDown } from "react-icons/hi2";
 import { MdFlight } from "react-icons/md";
 import { FiClipboard } from "react-icons/fi";
-import LoginDrawer, { isLoggedInSession, clearLoginSession } from "@/app/components/booking/LoginDrawer";
+import LoginDrawer, { isLoggedInSession } from "@/app/components/booking/LoginDrawer";
+import { getUserProfile, logoutUser } from "@/app/lib/authApi";
 
 const NAV_LINKS = [
     { href: "/", label: "Search", icon: MdFlight },
-    { href: "/my-bookings", label: "My Trips", icon: FiClipboard },
+    { href: "/my-bookings", label: "My Trips", icon: FiClipboard, authOnly: true },
     { href: "/support", label: "Support", icon: HiSupport },
 ];
 
@@ -20,20 +22,27 @@ export default function Navbar() {
     const [mobileOpen, setMobileOpen] = useState(false);
     const [loginOpen, setLoginOpen] = useState(false);
     const [loggedIn, setLoggedIn] = useState(false);
+    const [profileName, setProfileName] = useState("");
+    const [menuOpen, setMenuOpen] = useState(false);
+    const menuRef = useRef<HTMLDivElement | null>(null);
     const pathname = usePathname();
+
+    const visibleNavLinks = NAV_LINKS.filter((link) => !link.authOnly || loggedIn);
 
     // Check on mount + when other tabs/pages log in
     useEffect(() => {
         const check = () => setLoggedIn(isLoggedInSession());
-        check(); 
+        check();
 
         window.addEventListener("flyomint:login", check);
+        window.addEventListener("flyomint:logout", check);
         document.addEventListener("visibilitychange", () => {
             if (document.visibilityState === "visible") check();
         });
 
         return () => {
             window.removeEventListener("flyomint:login", check);
+            window.removeEventListener("flyomint:logout", check);
         };
     }, []);
 
@@ -42,6 +51,33 @@ export default function Navbar() {
             setLoggedIn(isLoggedInSession());
         }
     }, [loginOpen]);
+
+    // Fetch the logged-in user's name for the navbar dropdown
+    useEffect(() => {
+        if (!loggedIn) {
+            setProfileName("");
+            return;
+        }
+        let cancelled = false;
+        getUserProfile().then((res) => {
+            if (!cancelled && res.success) setProfileName(res.name || "");
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [loggedIn]);
+
+    // Close the dropdown on outside click
+    useEffect(() => {
+        if (!menuOpen) return;
+        function onClickOutside(e: MouseEvent) {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+                setMenuOpen(false);
+            }
+        }
+        document.addEventListener("mousedown", onClickOutside);
+        return () => document.removeEventListener("mousedown", onClickOutside);
+    }, [menuOpen]);
 
     useEffect(() => {
         const onScroll = () => setScrolled(window.scrollY > 6);
@@ -59,9 +95,12 @@ export default function Navbar() {
         setLoginOpen(false);
     }
 
-    function handleLogout() {
-        clearLoginSession();
+    async function handleLogout() {
+        setMenuOpen(false);
+        await logoutUser();
+        window.dispatchEvent(new Event("flyomint:logout"));
         setLoggedIn(false);
+        setProfileName("");
     }
 
     return (
@@ -81,7 +120,7 @@ export default function Navbar() {
 
                     {/* Center nav */}
                     <nav className="hidden lg:flex items-center gap-1 absolute left-1/2 -translate-x-1/2">
-                        {NAV_LINKS.map(({ href, label, icon: Icon }) => {
+                        {visibleNavLinks.map(({ href, label, icon: Icon }) => {
                             const active = pathname === href;
                             return (
                                 <Link
@@ -111,12 +150,54 @@ export default function Navbar() {
                         </button>
 
                         {loggedIn ? (
-                            <button
-                                onClick={handleLogout}
-                                className="hidden sm:inline-flex items-center justify-center h-9 px-4 rounded-full border border-gray-200 text-gray-700 text-sm font-semibold hover:bg-gray-50 transition-colors"
+                            <div
+                                ref={menuRef}
+                                className="hidden sm:block relative"
+                                onMouseEnter={() => setMenuOpen(true)}
+                                onMouseLeave={() => setMenuOpen(false)}
                             >
-                                Sign out
-                            </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setMenuOpen((v) => !v)}
+                                    aria-haspopup="menu"
+                                    aria-expanded={menuOpen}
+                                    className="flex items-center gap-1.5 h-9 pl-2 pr-3 rounded-full border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
+                                >
+                                    <HiOutlineUserCircle className="w-6 h-6 text-gray-500" />
+                                    <span className="max-w-[110px] truncate text-sm font-medium">
+                                        {profileName || "Account"}
+                                    </span>
+                                    <HiChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${menuOpen ? "rotate-180" : ""}`} />
+                                </button>
+
+                                {menuOpen && (
+                                    <div
+                                        role="menu"
+                                        className="absolute right-0 top-full pt-2 w-48"
+                                    >
+                                        <div className="rounded-2xl border border-gray-200 bg-white shadow-lg py-1.5 overflow-hidden">
+                                            <Link
+                                                href="/my-profile"
+                                                role="menuitem"
+                                                onClick={() => setMenuOpen(false)}
+                                                className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                                            >
+                                                <HiOutlineUser className="w-4 h-4 text-gray-400" />
+                                                My Profile
+                                            </Link>
+                                            <button
+                                                type="button"
+                                                role="menuitem"
+                                                onClick={handleLogout}
+                                                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-red-500 hover:bg-red-50"
+                                            >
+                                                <HiOutlineArrowRightOnRectangle className="w-4 h-4" />
+                                                Log out
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         ) : (
                             <button
                                 onClick={() => setLoginOpen(true)}
@@ -140,12 +221,22 @@ export default function Navbar() {
                     <div className="lg:hidden border-t border-gray-100 bg-white">
                         <div className="max-w-7xl mx-auto px-4 py-3 space-y-0.5">
                             {loggedIn ? (
-                                <button
-                                    onClick={() => { handleLogout(); setMobileOpen(false); }}
-                                    className="block w-full text-center mb-2 py-2.5 rounded-full border border-gray-200 text-gray-700 font-semibold text-sm"
-                                >
-                                    Sign out
-                                </button>
+                                <>
+                                    <Link
+                                        href="/my-profile"
+                                        onClick={() => setMobileOpen(false)}
+                                        className="flex items-center gap-2 justify-center mb-2 py-2.5 rounded-full border border-gray-200 text-gray-700 font-semibold text-sm"
+                                    >
+                                        <HiOutlineUserCircle className="w-5 h-5 text-gray-500" />
+                                        {profileName || "My Profile"}
+                                    </Link>
+                                    <button
+                                        onClick={() => { handleLogout(); setMobileOpen(false); }}
+                                        className="block w-full text-center mb-2 py-2.5 rounded-full border border-gray-200 text-red-500 font-semibold text-sm"
+                                    >
+                                        Log out
+                                    </button>
+                                </>
                             ) : (
                                 <button
                                     onClick={() => { setLoginOpen(true); setMobileOpen(false); }}
@@ -154,7 +245,7 @@ export default function Navbar() {
                                     Sign in
                                 </button>
                             )}
-                            {NAV_LINKS.map(({ href, label, icon: Icon }) => (
+                            {visibleNavLinks.map(({ href, label, icon: Icon }) => (
                                 <Link
                                     key={href}
                                     href={href}
