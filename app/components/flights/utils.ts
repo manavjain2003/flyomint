@@ -100,6 +100,21 @@ export function formatAirportLocation(airport: Airport) {
     return `${airport.CityName} (${airport.AirportCode}), ${airport.CountryName}`;
 }
 
+/**
+ * "CODE - City, State" (or just "CODE - City" when there's no distinct
+ * state, or bare "CODE" when we don't have the full Airport record at all).
+ * Shared so ModifySearchPanel and FlightResults render airports identically
+ * instead of each keeping their own slightly different formatting.
+ */
+export function formatAirportCodeLabel(code: string, city: string, airport?: Airport | null) {
+    if (!code) return "";
+    if (airport?.StateName && airport.StateName !== airport.CityName) {
+        return `${code} - ${city}, ${airport.StateName}`;
+    }
+    if (city) return `${code} - ${city}`;
+    return code;
+}
+
 export function getAirlineLogo(seg?: { VACLogo?: string; MACLogo?: string; OACLogo?: string }) {
     const file = seg?.VACLogo || seg?.MACLogo || seg?.OACLogo;
     if (!file) return null;
@@ -127,8 +142,12 @@ export function formatOffMessage(message?: string) {
 }
 export function primaryFareAmount(fare: FareInfo): number {
     const { gross, net } = getDisplayFareValues(fare);
-    return fare.FareDisplayType === "G" ? gross : net;
-}
+    // P = Published fare → show Gross
+    // G = Published fare without Discount → show Gross
+    // S = Strike Thru fare → show Net (with Gross struck through)
+    // N = Display fare with Discount → show Net
+   return fare.FareDisplayType === "G" || fare.FareDisplayType === "P" ? gross : net;
+ }
 
 export function cheapestFare(journey: Journey): FareInfo | undefined {
     if (!journey.FareInfo || journey.FareInfo.length === 0) return undefined;

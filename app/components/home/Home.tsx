@@ -76,6 +76,7 @@ function formatAirportSummary(airport: Airport | null, fallbackCode: string) {
 }
 
 const MAX_DATE = addDays(new Date(), 350);
+const TODAY = new Date();
 export default function Hero() {
     const router = useRouter();
     const [tripType, setTripType] = useState<TripType>("oneway");
@@ -117,33 +118,54 @@ export default function Hero() {
     const [searchError, setSearchError] = useState<string | null>(null);
 
     useEffect(() => {
-        const cached = readCachedSearch();
-        if (!cached) return;
+        function applyCachedSearch() {
+            const cached = readCachedSearch();
+            if (!cached) return;
 
-        setTripType(cached.tripType);
-        setFlightType(cached.flightType);
-        setSpecialFare(cached.specialFare);
-        setFromCode(cached.from);
-        setToCode(cached.to);
-        setFromAirport(cached.fromAirport);
-        setToAirport(cached.toAirport);
-        setAdults(cached.adults);
-        setChildren(cached.children);
-        setInfants(cached.infants);
-        setCabinClass(cached.cabinClass);
+            setTripType(cached.tripType);
+            setFlightType(cached.flightType);
+            setSpecialFare(cached.specialFare);
+            setFromCode(cached.from);
+            setToCode(cached.to);
+            setFromAirport(cached.fromAirport);
+            setToAirport(cached.toAirport);
+            setAdults(cached.adults);
+            setChildren(cached.children);
+            setInfants(cached.infants);
+            setCabinClass(cached.cabinClass);
 
-        const cachedDeparture = new Date(cached.departureDate);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        if (!Number.isNaN(cachedDeparture.getTime()) && cachedDeparture >= today) {
-            setDepartureDate(cachedDeparture);
-        }
-        if (cached.returnDate) {
-            const cachedReturn = new Date(cached.returnDate);
-            if (!Number.isNaN(cachedReturn.getTime()) && cachedReturn >= today) {
-                setReturnDate(cachedReturn);
+            const cachedDeparture = new Date(cached.departureDate);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            if (!Number.isNaN(cachedDeparture.getTime()) && cachedDeparture >= today) {
+                setDepartureDate(cachedDeparture);
+            }
+            if (cached.returnDate) {
+                const cachedReturn = new Date(cached.returnDate);
+                if (!Number.isNaN(cachedReturn.getTime()) && cachedReturn >= today) {
+                    setReturnDate(cachedReturn);
+                }
             }
         }
+
+        // Normal case: apply whatever was last searched when this component
+        // first mounts.
+        applyCachedSearch();
+
+        // Edge case that caused the stale-home-page bug: the browser can
+        // restore this exact page from bfcache (back/forward navigation)
+        // without re-running any React code, since nothing actually
+        // remounts. That snapshot reflects whatever state Home had *before*
+        // the user left it — e.g. before they modified the search on the
+        // results page and it wrote a newer value to localStorage. `pageshow`
+        // fires even on a bfcache restore, so re-applying the cache there
+        // keeps the form in sync with the latest search instead of quietly
+        // reverting to an outdated one.
+        function handlePageShow(e: PageTransitionEvent) {
+            if (e.persisted) applyCachedSearch();
+        }
+        window.addEventListener("pageshow", handlePageShow);
+        return () => window.removeEventListener("pageshow", handlePageShow);
     }, []);
 
     useEffect(() => {
@@ -342,7 +364,7 @@ export default function Hero() {
                         <div className="relative w-full lg:flex-1 lg:min-w-0" ref={fromRef}>
                             <Field label="From" onClick={() => setFromOpen(true)} active={fromOpen}>
                                 <input
-                                    value={fromOpen ? fromQuery : formatAirportSummary(fromAirport, "")}
+                                    value={fromOpen ? fromQuery : formatAirportSummary(fromAirport, fromCode)}
                                     onChange={(e) => {
                                         setFromQuery(e.target.value.toUpperCase());
                                         setFromOpen(true);
@@ -379,7 +401,7 @@ export default function Hero() {
                         <div className="relative w-full lg:flex-1 lg:min-w-0" ref={toRef}>
                             <Field label="To" onClick={() => setToOpen(true)} active={toOpen}>
                                 <input
-                                    value={toOpen ? toQuery : formatAirportSummary(toAirport, "")}
+                                    value={toOpen ? toQuery : formatAirportSummary(toAirport, toCode)}
                                     onChange={(e) => {
                                         setToQuery(e.target.value.toUpperCase());
                                         setToOpen(true);
@@ -417,6 +439,7 @@ export default function Hero() {
                                 monthsShown={2}
                                 popperPlacement="bottom-start"
                                 wrapperClassName="block w-full"
+                                openToDate={TODAY}
                                 customInput={
                                     <Field label="Departure">
                                         <div className="flex items-center justify-between">
@@ -442,6 +465,7 @@ export default function Hero() {
                                 monthsShown={2}
                                 popperPlacement="bottom-start"
                                 wrapperClassName="block w-full"
+                                openToDate={TODAY}
                                 customInput={
                                     <Field label="Return">
                                         <div className="flex items-center justify-between">

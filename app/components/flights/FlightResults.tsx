@@ -14,6 +14,7 @@ import {
 import { getAirlineToken, pollAvailability } from "@/app/lib/flightsapi";
 import { DatePickerBrandStyles } from "../shared/DatePickerBrandStyles";
 import {
+    type Airport,
     type CabinClass,
     type TripType,
     type SpecialFare,
@@ -31,6 +32,7 @@ import {
     PROMOS,
     EMPTY_FILTERS,
     toApiDate,
+    formatAirportCodeLabel,
     formatDayLabel,
     formatPrice,
     primaryFareAmount,
@@ -78,6 +80,8 @@ export default function FlightResults({
     to: toProp,
     fromCity: fromCityProp,
     toCity: toCityProp,
+    fromAirport: fromAirportProp = null,
+    toAirport: toAirportProp = null,
     departureDate: departureDateProp,
     returnDate: returnDateProp = null,
     tripType: tripTypeProp,
@@ -96,6 +100,8 @@ export default function FlightResults({
         to: toProp,
         fromCity: fromCityProp || fromProp,
         toCity: toCityProp || toProp,
+        fromAirport: fromAirportProp,
+        toAirport: toAirportProp,
         tripType: tripTypeProp,
         adults: adultsProp,
         children: childrenProp,
@@ -105,6 +111,8 @@ export default function FlightResults({
         specialFare: specialFareProp,
     }));
     const { from, to, fromCity, toCity, tripType, adults, children, infants, cabinClass, directOnly } = criteria;
+    const fromLabel = formatAirportCodeLabel(from, fromCity);
+    const toLabel = formatAirportCodeLabel(to, toCity);
 
     const [selectedDate, setSelectedDate] = useState<Date>(departureDateProp);
     const [returnDate, setReturnDate] = useState<Date | null>(returnDateProp);
@@ -429,70 +437,94 @@ const travelersSummary = `${totalTravelers} Traveler${totalTravelers > 1 ? "s" :
 
     return (
         <div className="min-h-screen bg-gray-50 pb-24">
-            {/* Top bar */}
-            <div className="bg-white border-b border-gray-100">
-                <div className="max-w-8xl mx-auto px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex items-center gap-2 text-gray-900">
-                        <span className="text-[#1c8fc7] text-lg">&#9650;</span>
-                        <span className="font-bold text-lg">{from}</span>
-                        <span className="text-gray-400">&rarr;</span>
-                        <span className="font-bold text-lg">{to}</span>
-                    </div>
+{/* Top bar */}
+<div className="bg-white border-b border-gray-100">
+  <div className="max-w-8xl mx-auto px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+    <div className="flex items-center gap-2 text-gray-900">
+      <span className="text-[#1c8fc7] text-lg">&#9650;</span>
+      <span className="font-bold text-lg">{fromLabel}</span>
+      <span className="text-gray-400">&rarr;</span>
+      <span className="font-bold text-lg">{toLabel}</span>
+    </div>
 
-                    <div className="flex items-center gap-6">
-                        <div className="flex items-center gap-2 text-sm">
-                            <HiOutlineCalendar className="w-4 h-4 text-gray-400" />
-                            <div>
-                                <p className="text-gray-400 text-xs">Departure</p>
-                                <p className="font-semibold text-gray-900">
-                                    {selectedDate.toLocaleDateString("en-US", {
-                                        weekday: "short",
-                                        month: "short",
-                                        day: "numeric",
-                                        year: "numeric",
-                                    })}
-                                </p>
-                            </div>
-                        </div>
+    <div className="flex items-center gap-6">
+      {/* Departure */}
+      <div className="flex items-center gap-2 text-sm">
+        <HiOutlineCalendar className="w-4 h-4 text-gray-400" />
+        <div>
+          <p className="text-gray-400 text-xs">Departure</p>
+          <p className="font-semibold text-gray-900">
+            {selectedDate.toLocaleDateString("en-US", {
+              weekday: "short",
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            })}
+          </p>
+        </div>
+      </div>
 
-                        <div className="w-px h-8 bg-gray-200" />
-
-                        <div className="flex items-center gap-2 text-sm">
-                            <HiOutlineUserGroup className="w-4 h-4 text-gray-400" />
-                            <div>
-                                <p className="text-gray-400 text-xs">Travelers</p>
-                                <p className="font-semibold text-gray-900">{travelersSummary}</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <button
-                        type="button"
-                        onClick={() => setModifyOpen((v) => !v)}
-                        aria-expanded={modifyOpen}
-                        className={`inline-flex items-center gap-2 h-10 px-5 rounded-full text-white text-sm font-semibold transition-colors ${modifyOpen ? "bg-[#177aab]" : "bg-[#1c8fc7] hover:bg-[#177aab]"
-                            }`}
-                    >
-                        <HiOutlinePencil className="w-4 h-4" />
-                        Modify Search
-                        {modifyOpen ? (
-                            <HiOutlineChevronUp className="w-4 h-4" />
-                        ) : (
-                            <HiOutlineChevronDown className="w-4 h-4" />
-                        )}
-                    </button>
-                </div>
-
-                {modifyOpen && (
-                    <ModifySearchPanel
-                        criteria={criteria}
-                        departureDate={selectedDate}
-                        returnDate={returnDate}
-                        onCancel={() => setModifyOpen(false)}
-                        onApply={handleApplyModifiedSearch}
-                    />
-                )}
+      {/* Return — added */}
+      {tripType === "roundtrip" && returnDate && (
+        <>
+          <div className="w-px h-8 bg-gray-200" />
+          <div className="flex items-center gap-2 text-sm">
+            <HiOutlineCalendar className="w-4 h-4 text-gray-400" />
+            <div>
+              <p className="text-gray-400 text-xs">Return</p>
+              <p className="font-semibold text-gray-900">
+                {returnDate.toLocaleDateString("en-US", {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </p>
             </div>
+          </div>
+        </>
+      )}
+
+      <div className="w-px h-8 bg-gray-200" />
+
+      {/* Travelers */}
+      <div className="flex items-center gap-2 text-sm">
+        <HiOutlineUserGroup className="w-4 h-4 text-gray-400" />
+        <div>
+          <p className="text-gray-400 text-xs">Travelers</p>
+          <p className="font-semibold text-gray-900">{travelersSummary}</p>
+        </div>
+      </div>
+    </div>
+
+    <button
+      type="button"
+      onClick={() => setModifyOpen((v) => !v)}
+      aria-expanded={modifyOpen}
+      className={`inline-flex items-center gap-2 h-10 px-5 rounded-full text-white text-sm font-semibold transition-colors ${
+        modifyOpen ? "bg-[#177aab]" : "bg-[#1c8fc7] hover:bg-[#177aab]"
+      }`}
+    >
+      <HiOutlinePencil className="w-4 h-4" />
+      Modify Search
+      {modifyOpen ? (
+        <HiOutlineChevronUp className="w-4 h-4" />
+      ) : (
+        <HiOutlineChevronDown className="w-4 h-4" />
+      )}
+    </button>
+  </div>
+
+  {modifyOpen && (
+    <ModifySearchPanel
+      criteria={criteria}
+      departureDate={selectedDate}
+      returnDate={returnDate}
+      onCancel={() => setModifyOpen(false)}
+      onApply={handleApplyModifiedSearch}
+    />
+  )}
+</div>
 
             {/* Promo strip */}
             <div className="max-w-8xl mx-auto px-4 sm:px-6 py-4">
@@ -658,7 +690,7 @@ const travelersSummary = `${totalTravelers} Traveler${totalTravelers > 1 ? "s" :
                 <div className="fixed bottom-0 inset-x-0 bg-white border-t border-gray-100 px-4 sm:px-6 py-3 flex items-center justify-between gap-4 shadow-[0_-2px_10px_rgba(0,0,0,0.04)]">
                     <div className="flex items-center gap-6 min-w-0">
                         <p className="font-bold text-gray-900 text-lg shrink-0">
-                            {from} <span className="text-gray-400 font-normal">&rarr;</span> {to}
+                            {fromLabel} <span className="text-gray-400 font-normal">&rarr;</span> {toLabel}
                         </p>
 
                         <div className="hidden sm:block shrink-0">

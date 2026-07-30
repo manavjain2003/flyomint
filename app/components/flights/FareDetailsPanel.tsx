@@ -120,7 +120,8 @@ export default function FareDetailsPanel({
     const grandTotal = visiblePtcFares.reduce((sum, p) => {
         const key = PTC_COUNT_KEY[p.PTC];
         const count = key && travelerCounts ? travelerCounts[key] : 1;
-        return sum + p.GrossFare * count;
+        const amt = fare.FareDisplayType === "G" || fare.FareDisplayType === "P" ? p.GrossFare : p.NetFare;
+        return sum + amt * count;
     }, 0);
 
     const seats = fare.Seats;
@@ -208,6 +209,7 @@ export default function FareDetailsPanel({
                     {visiblePtcFares.map((p, idx) => {
                         const key = PTC_COUNT_KEY[p.PTC];
                         const count = key && travelerCounts ? travelerCounts[key] : 1;
+                        const lineTotal = fare.FareDisplayType === "G" || fare.FareDisplayType === "P" ? p.GrossFare : p.NetFare;
                         return (
                             <div
                                 key={`${p.PTC}-${idx}`}
@@ -217,7 +219,7 @@ export default function FareDetailsPanel({
                                     <span className="text-[11px] font-bold uppercase tracking-wide text-white bg-[#1c8fc7] rounded px-2 py-1">
                                         {PTC_LABEL[p.PTC] ?? p.PTC} {count > 1 ? `× ${count}` : ""}
                                     </span>
-                                    <span className="font-bold text-gray-900">{formatPrice(p.GrossFare)}</span>
+                                     <span className="font-bold text-gray-900">{formatPrice(lineTotal)}</span>
                                 </div>
                                 <div className="flex items-center justify-between py-2">
                                     <span className="text-gray-500">Base Fare</span>

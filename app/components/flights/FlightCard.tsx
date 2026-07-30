@@ -12,7 +12,7 @@ import { primaryFareAmount, formatTime, getDisplayFareValues, formatPrice } from
 import AirlineLogo from "./AirlineLogo";
 import FarePriceDisplay from "@/app/components/flights/FarePriceDisplay";
 import FareDetailsPanel from "@/app/components/flights/FareDetailsPanel";
-import FareDropdown from "@/app/components/flights/FareDropdown";
+import FareDropdown, { FareDropdownPanel } from "@/app/components/flights/FareDropdown";
 
 export default function FlightCard({
     journey,
@@ -43,10 +43,9 @@ export default function FlightCard({
         [journey]
     );
     const [selectedFareIdx, setSelectedFareIdx] = useState(0);
+    const [fareDropdownOpen, setFareDropdownOpen] = useState(false);
     const fare = fares[selectedFareIdx];
     const stopsLabel = journey.Stops === 0 ? "Non stop" : `${journey.Stops} stop${journey.Stops > 1 ? "s" : ""}`;
-    const isDepartureNearby = Boolean(firstSeg?.DepartureNearBy);
-    const isArrivalNearby = Boolean(lastSeg?.ArrivalNearBy);
 
     return (
         <div className="relative rounded-2xl border border-[#FF7626] overflow-hidden bg-white">
@@ -69,18 +68,16 @@ export default function FlightCard({
                 </div>
 
                 <div className="flex-1 flex items-start gap-4 min-w-0">
+                    {/* Departure */}
                     <div className="text-left shrink-0">
                         <p className="text-xl font-bold text-gray-900 leading-tight">{formatTime(journey.DepartureDateTime)}</p>
-                        {isDepartureNearby ? (
-                            <>
-                                <p className="text-xs text-red-600 font-semibold leading-tight">{journey.From}</p>
-                                <p className="text-[10px] text-red-600 leading-tight">(Nearby airport)</p>
-                            </>
-                        ) : (
-                            <p className="text-xs text-gray-400">{journey.From}</p>
+                        <p className="text-xs text-gray-400">{firstSeg?.DepartureAirportCode}</p>
+                        {journey.DepartureNearBy && (
+                            <p className="text-[10px] text-red-600 font-medium leading-tight">Nearby airport</p>
                         )}
                     </div>
 
+                    {/* Duration / Stops */}
                     <div className="flex-1 flex flex-col items-center text-gray-400 min-w-[80px] mt-1.5">
                         <span className="text-[11px] mb-0.5">{journey.Duration}</span>
                         <div className="w-full flex items-center">
@@ -93,15 +90,12 @@ export default function FlightCard({
                         <span className="text-[11px] mt-0.5">{stopsLabel}</span>
                     </div>
 
+                    {/* Arrival */}
                     <div className="text-right shrink-0">
                         <p className="text-xl font-bold text-gray-900 leading-tight">{formatTime(journey.ArrivalDateTime)}</p>
-                        {isArrivalNearby ? (
-                            <>
-                                <p className="text-xs text-red-600 font-semibold leading-tight">{journey.To}</p>
-                                <p className="text-[10px] text-red-600 leading-tight">(Nearby airport)</p>
-                            </>
-                        ) : (
-                            <p className="text-xs text-gray-400">{journey.To}</p>
+                        <p className="text-xs text-gray-400">{lastSeg?.ArrivalAirportCode}</p>
+                        {journey.ArrivalNearBy && (
+                            <p className="text-[10px] text-red-600 font-medium leading-tight">Nearby airport</p>
                         )}
                     </div>
                 </div>
@@ -111,6 +105,7 @@ export default function FlightCard({
                         <div className="flex items-center gap-4">
                             <FarePriceDisplay fare={fare} size="lg" subtitle="per adult" />
 
+                            {/* Select button (round-trip flow) */}
                             {!directBooking && (
                                 <button
                                     type="button"
@@ -124,6 +119,7 @@ export default function FlightCard({
                                 </button>
                             )}
 
+                            {/* Single fare direct booking */}
                             {directBooking && fares.length === 1 && (
                                 <button
                                     type="button"
@@ -133,22 +129,38 @@ export default function FlightCard({
                                     Book
                                 </button>
                             )}
+
+                            {directBooking && fares.length > 1 && (
+                                <FareDropdown
+                                    fares={fares}
+                                    onBook={(f) => onBookFare?.(journey, f)}
+                                    open={fareDropdownOpen}
+                                    onOpenChange={setFareDropdownOpen}
+                                    hidePanel
+                                />
+                            )}
                         </div>
                     </div>
                 )}
             </div>
 
-            {directBooking && fares.length > 1 && (
-                <div className="px-4 sm:px-5 pb-4">
-                    <FareDropdown fares={fares} onBook={(f) => onBookFare?.(journey, f)} />
-                </div>
-            )}
-
+     {directBooking && fares.length > 1 && fareDropdownOpen && (
+    <div className="px-4 sm:px-5 pb-4">
+        <FareDropdownPanel
+            fares={fares}
+            onBook={(f) => onBookFare?.(journey, f)}
+            journey={journey}
+            travelerCounts={travelerCounts}
+            tokenId={tokenId}
+        />
+    </div>
+)}
+            {/* Multiple fares dropdown (round-trip flow) */}
             {!directBooking && fares.length > 1 && (
                 <div className="px-4 sm:px-5 pb-3 flex flex-wrap gap-2">
                     {fares.map((f, idx) => {
                         const active = idx === selectedFareIdx;
-                        const { net: fNet } = getDisplayFareValues(f);
+                        const primaryAmt = primaryFareAmount(f);
                         return (
                             <button
                                 key={f.ConId || f.Index || idx}
@@ -167,7 +179,7 @@ export default function FlightCard({
                                     {f.Refundable === "Y" && <span className="text-green-600"> &middot; Refundable</span>}
                                 </p>
                                 <p className={`text-sm font-bold leading-tight ${active ? "text-[#1c8fc7]" : "text-gray-900"}`}>
-                                    {formatPrice(fNet)}
+                                   {formatPrice(primaryAmt)}
                                 </p>
                             </button>
                         );
@@ -176,26 +188,26 @@ export default function FlightCard({
             )}
 
             {/* Orange fare bar */}
-            {fare && (
-                <button
-                    type="button"
-                    onClick={onToggleExpand}
-                    className="w-full flex items-center justify-between px-4 sm:px-5 py-2.5 bg-[#FF7626] text-white"
-                >
-                    <span className="flex items-center gap-2 text-xs font-semibold">
-                        {fare.Refundable === "Y" && (
-                            <span className="bg-white/25 rounded-full px-2.5 py-0.5">Refundable</span>
-                        )}
-                        <span className="uppercase tracking-wide">{fare.FareType}</span>
-                    </span>
-                    <span className="flex items-center gap-1 text-xs font-bold uppercase tracking-wide">
-                        {isExpanded ? "Hide Details" : "View Details"}
-                        {isExpanded ? <HiOutlineChevronUp className="w-3.5 h-3.5" /> : <HiOutlineChevronDown className="w-3.5 h-3.5" />}
-                    </span>
-                </button>
+          {fare && !(directBooking && fares.length > 1) && (
+    <button
+        type="button"
+        onClick={onToggleExpand}
+        className="w-full flex items-center justify-between px-4 sm:px-5 py-2.5 bg-[#FF7626] text-white"
+    >
+        <span className="flex items-center gap-2 text-xs font-semibold">
+            {fare.Refundable === "Y" && (
+                <span className="bg-white/25 rounded-full px-2.5 py-0.5">Refundable</span>
             )}
+            <span className="uppercase tracking-wide">{fare.FareType}</span>
+        </span>
+        <span className="flex items-center gap-1 text-xs font-bold uppercase tracking-wide">
+            {isExpanded ? "Hide Details" : "View Details"}
+            {isExpanded ? <HiOutlineChevronUp className="w-3.5 h-3.5" /> : <HiOutlineChevronDown className="w-3.5 h-3.5" />}
+        </span>
+    </button>
+)}
 
-           {isExpanded && fare && (
+{isExpanded && fare && !(directBooking && fares.length > 1) && (
     <FareDetailsPanel journey={journey} fare={fare} travelerCounts={travelerCounts} tokenId={tokenId} />
 )}
         </div>

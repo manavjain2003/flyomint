@@ -1,61 +1,91 @@
 "use client";
 
-import { HiOutlineChevronRight } from "react-icons/hi";
+import { HiOutlinePaperAirplane } from "react-icons/hi2";
 import { type Segment } from "@/app/components/flights/types";
-import { formatTime } from "@/app/components/flights/utils";
+import AirlineLogo from "./AirlineLogo";
+
+/** Formats an ISO datetime into e.g. "Fri, 21 Aug". */
+function formatDateLabel(iso?: string): string {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleDateString("en-US", { weekday: "short", day: "2-digit", month: "short" });
+}
+
+/** Formats an ISO datetime into e.g. "10:40". */
+function formatTimeLabel(iso?: string): string {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+}
 
 export default function SegmentRouteCard({ seg }: { seg: Segment }) {
-    const depTerminal = seg.DepartureTerminal?.replace("Terminal ", "");
-    const arrTerminal = seg.ArrivalTerminal?.replace("Terminal ", "");
+    // DepartureCityName / ArrivalCityName aren't declared on the shared Segment
+    // type but are present on the live API payload — read them defensively so
+    // this still compiles/renders cleanly if a caller's data omits them.
+    const depCity = (seg as unknown as { DepartureCityName?: string }).DepartureCityName;
+    const arrCity = (seg as unknown as { ArrivalCityName?: string }).ArrivalCityName;
 
     return (
-        <div className="py-3">
-            <div className="flex items-center justify-between mb-3">
-                <span className="flex items-center gap-2 text-sm font-bold text-gray-900">
-                    <span className="w-2.5 h-2.5 rounded-full border-2 border-[#FF7626]" />
-                    {seg.DepartureAirportCode} <HiOutlineChevronRight className="w-3 h-3 text-gray-400" /> {seg.ArrivalAirportCode}
-                </span>
-                <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                    {seg.AirlineName} &bull; {seg.AirlineCode}-{seg.FlightNo}
-                </span>
+        <div className="py-4">
+            {/* Airline header */}
+            <div className="flex items-center gap-2.5 mb-4">
+                <AirlineLogo seg={seg} code={seg.AirlineCode} className="w-7 h-7" />
+                <p className="text-sm font-semibold text-gray-800">
+                    {seg.AirlineName}
+                    <span className="text-gray-400 font-normal"> | {seg.AirlineCode} {seg.FlightNo}</span>
+                </p>
             </div>
 
-            <div className="flex items-center justify-between pl-1">
-                <div>
-                    <p className="text-lg font-bold text-gray-900 leading-tight">{formatTime(seg.DepartureTime)}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                        {new Date(seg.DepartureTime).toLocaleDateString("en-US", {
-                            weekday: "short",
-                            month: "short",
-                            day: "2-digit",
-                            year: "numeric",
-                        })}
+            {/* Route */}
+            <div className="flex items-start gap-4">
+                {/* Departure */}
+                <div className="flex-1 min-w-0">
+                    <p className="text-xs text-gray-400 mb-0.5">{formatDateLabel(seg.DepartureTime)}</p>
+                    <p className="text-2xl font-bold text-gray-900 leading-tight">{formatTimeLabel(seg.DepartureTime)}</p>
+                    <p className="text-sm font-semibold text-gray-800 mt-1">
+                        {seg.DepartureAirportCode}
+                        {depCity ? ` - ${depCity}` : ""}
                     </p>
-                    <p className="text-xs text-gray-400">
-                        {depTerminal && `${depTerminal}, `}
-                        {seg.DepartureAirportName ?? seg.DepartureAirportCode}
-                    </p>
+                    {seg.DepartureAirportName && (
+                        <p className="text-xs text-gray-400 leading-snug mt-0.5">{seg.DepartureAirportName}</p>
+                    )}
+                    {seg.DepartureTerminal && (
+                        <p className="text-xs text-gray-400 leading-snug">{seg.DepartureTerminal}</p>
+                    )}
+                    {seg.DepartureNearBy && (
+                        <p className="text-[10px] text-red-600 font-medium mt-0.5">Nearby airport</p>
+                    )}
                 </div>
 
-                <div className="flex-1 flex flex-col items-center text-gray-400 px-4">
-                    <span className="text-[11px] mb-1">{seg.Duration}</span>
-                    <span className="w-full border-t border-dashed border-gray-300" />
+                {/* Duration / dashed connector */}
+                <div className="flex flex-col items-center pt-1 shrink-0 w-24 sm:w-32">
+                    <span className="text-[11px] text-gray-400 mb-1 whitespace-nowrap">{seg.Duration}</span>
+                    <div className="w-full flex items-center">
+                        <span className="flex-1 border-t border-dashed border-gray-300" />
+                        <HiOutlinePaperAirplane className="w-3.5 h-3.5 text-gray-300 mx-1 rotate-90 shrink-0" />
+                        <span className="flex-1 border-t border-dashed border-gray-300" />
+                    </div>
                 </div>
 
-                <div className="text-right">
-                    <p className="text-lg font-bold text-gray-900 leading-tight">{formatTime(seg.ArrivalTime)}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                        {new Date(seg.ArrivalTime).toLocaleDateString("en-US", {
-                            weekday: "short",
-                            month: "short",
-                            day: "2-digit",
-                            year: "numeric",
-                        })}
+                {/* Arrival */}
+                <div className="flex-1 min-w-0 text-right">
+                    <p className="text-xs text-gray-400 mb-0.5">{formatDateLabel(seg.ArrivalTime)}</p>
+                    <p className="text-2xl font-bold text-gray-900 leading-tight">{formatTimeLabel(seg.ArrivalTime)}</p>
+                    <p className="text-sm font-semibold text-gray-800 mt-1">
+                        {seg.ArrivalAirportCode}
+                        {arrCity ? ` - ${arrCity}` : ""}
                     </p>
-                    <p className="text-xs text-gray-400">
-                        {arrTerminal && `${arrTerminal}, `}
-                        {seg.ArrivalAirportName ?? seg.ArrivalAirportCode}
-                    </p>
+                    {seg.ArrivalAirportName && (
+                        <p className="text-xs text-gray-400 leading-snug mt-0.5">{seg.ArrivalAirportName}</p>
+                    )}
+                    {seg.ArrivalTerminal && (
+                        <p className="text-xs text-gray-400 leading-snug">{seg.ArrivalTerminal}</p>
+                    )}
+                    {seg.ArrivalNearBy && (
+                        <p className="text-[10px] text-red-600 font-medium mt-0.5">Nearby airport</p>
+                    )}
                 </div>
             </div>
         </div>

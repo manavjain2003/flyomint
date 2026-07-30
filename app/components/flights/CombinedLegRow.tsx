@@ -19,6 +19,7 @@ export default function CombinedLegRow({
     onSelectFare: (idx: number) => void;
 }) {
     const firstSeg = journey.Segments[0];
+    const lastSeg = journey.Segments[journey.Segments.length - 1];
     const stopsLabel = journey.Stops === 0 ? "Non stop" : `${journey.Stops} stop${journey.Stops > 1 ? "s" : ""}`;
 
     const fare = fares[selectedIdx] ?? {
@@ -30,9 +31,6 @@ export default function CombinedLegRow({
         ConId: "",
         Index: "",
     };
-    const lastSeg = journey.Segments[journey.Segments.length - 1];
-    const isDepartureNearby = Boolean(firstSeg?.DepartureNearBy);
-    const isArrivalNearby = Boolean(lastSeg?.ArrivalNearBy);
 
     return (
         <div className="px-4 sm:px-5 py-3">
@@ -51,18 +49,16 @@ export default function CombinedLegRow({
                 </div>
 
                 <div className="flex-1 flex items-center gap-4 min-w-0">
+                    {/* Departure */}
                     <div className="text-left shrink-0">
                         <p className="text-xl font-bold text-gray-900 leading-tight">{formatTime(journey.DepartureDateTime)}</p>
-                        {isDepartureNearby ? (
-                            <>
-                                <p className="text-xs text-red-600 font-semibold leading-tight">{journey.From}</p>
-                                <p className="text-[10px] text-red-600 leading-tight">(Nearby airport)</p>
-                            </>
-                        ) : (
-                            <p className="text-xs text-gray-400">{journey.From}</p>
+                        <p className="text-xs text-gray-400">{firstSeg?.DepartureAirportCode}</p>
+                        {journey.DepartureNearBy && (
+                            <p className="text-[10px] text-red-600 font-medium leading-tight">Nearby airport</p>
                         )}
                     </div>
 
+                    {/* Duration / Stops */}
                     <div className="flex-1 flex flex-col items-center text-gray-400 min-w-[80px]">
                         <span className="text-[11px] mb-0.5">{journey.Duration}</span>
                         <div className="w-full flex items-center">
@@ -75,15 +71,12 @@ export default function CombinedLegRow({
                         <span className="text-[11px] mt-0.5">{stopsLabel}</span>
                     </div>
 
+                    {/* Arrival */}
                     <div className="text-right shrink-0">
                         <p className="text-xl font-bold text-gray-900 leading-tight">{formatTime(journey.ArrivalDateTime)}</p>
-                        {isArrivalNearby ? (
-                            <>
-                                <p className="text-xs text-red-600 font-semibold leading-tight">{journey.To}</p>
-                                <p className="text-[10px] text-red-600 leading-tight">(Nearby airport)</p>
-                            </>
-                        ) : (
-                            <p className="text-xs text-gray-400">{journey.To}</p>
+                        <p className="text-xs text-gray-400">{lastSeg?.ArrivalAirportCode}</p>
+                        {journey.ArrivalNearBy && (
+                            <p className="text-[10px] text-red-600 font-medium leading-tight">Nearby airport</p>
                         )}
                     </div>
                 </div>

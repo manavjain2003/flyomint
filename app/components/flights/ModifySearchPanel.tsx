@@ -14,7 +14,7 @@ import {
 import { searchAirports } from "@/app/lib/utilityapi";
 import { DatePickerBrandStyles } from "@/app/components/shared/DatePickerBrandStyles";
 import { type Airport, type CabinClass, type SearchCriteria, type TripType } from "@/app/components/flights/types";
-import { CABIN_LABEL, SPECIAL_FARE_LABEL, SPECIAL_FARE_SAVE, toApiDate } from "@/app/components/flights/utils";
+import { CABIN_LABEL, SPECIAL_FARE_LABEL, SPECIAL_FARE_SAVE, formatAirportCodeLabel, toApiDate } from "@/app/components/flights/utils";
 import CounterRow from "@/app/components/booking/CounterRow";
 import { writeCachedSearch } from "@/app/components/flights/searchCache";
 
@@ -117,12 +117,8 @@ export default function ModifySearchPanel({
         };
     }, [toQuery]);
 
-    function formatAirportField(code: string, city: string, detail: Airport | null) {
-        if (!code) return "";
-        if (detail?.StateName && detail.StateName !== detail.CityName) {
-            return `${code} - ${city}, ${detail.StateName}`;
-        }
-        return `${code} - ${city}`;
+    function formatAirportField(code: string, city: string) {
+        return formatAirportCodeLabel(code, city);
     }
 
     function selectFromAirport(airport: Airport) {
@@ -130,7 +126,6 @@ export default function ModifySearchPanel({
             ...d,
             from: airport.AirportCode,
             fromCity: airport.CityName,
-            fromAirport: airport,
         }));
         setFromAirportDetail(airport);
         setFromQuery("");
@@ -143,7 +138,6 @@ export default function ModifySearchPanel({
             ...d,
             to: airport.AirportCode,
             toCity: airport.CityName,
-            toAirport: airport,
         }));
         setToAirportDetail(airport);
         setToQuery("");
@@ -196,13 +190,29 @@ export default function ModifySearchPanel({
 
         writeCachedSearch({
             tripType: draft.tripType,
+            // Home stores this as the 3-way "all" | "direct" | "connecting"
+            // FlightType, while this panel only tracks a directOnly boolean.
+            // Map it through so a "Direct" choice made here is still
+            // reflected correctly if the user navigates back to Home —
+            // otherwise Home's cache kept whatever FlightType it last had,
+            // which could silently disagree with the search actually run.
+            flightType: draft.directOnly ? "direct" : "all",
             specialFare: draft.specialFare,
             from: draft.from,
             to: draft.to,
             fromCity: draft.fromCity,
             toCity: draft.toCity,
-            fromAirport: fromAirportDetail,
-            toAirport: toAirportDetail,
+            // Only overwrite the cached full Airport records when this panel
+            // actually has one (i.e. the user re-picked that field here).
+            // fromAirportDetail/toAirportDetail start out null whenever this
+            // page was reached without the full record being threaded
+            // through (e.g. arriving via the results-page URL, which only
+            // carries plain codes/city names). Writing `null` here for an
+            // untouched field used to blank out the good Airport object
+            // Home had originally cached — which is exactly what emptied
+            // out the From/To fields when navigating back to Home.
+            ...(fromAirportDetail ? { fromAirport: fromAirportDetail } : {}),
+            ...(toAirportDetail ? { toAirport: toAirportDetail } : {}),
             departureDate: toApiDate(draftDeparture),
             returnDate: finalReturn ? toApiDate(finalReturn) : null,
             adults: draft.adults,
@@ -280,7 +290,7 @@ export default function ModifySearchPanel({
                                     }`}
                             >
                                 <input
-                                    value={fromOpen ? fromQuery : formatAirportField(draft.from, draft.fromCity, fromAirportDetail)}
+                                    value={fromOpen ? fromQuery : formatAirportField(draft.from, draft.fromCity)}
                                     onChange={(e) => {
                                         setFromQuery(e.target.value.toUpperCase());
                                         setFromOpen(true);

@@ -46,10 +46,11 @@ export default function FarePriceDisplay({
         );
     }
 
+    /* P — Published fare: Gross + "Extra X Off" */
     const offLabel = formatOffMessage(message);
     return (
         <div className="text-right">
-            <p className={`${priceClass} text-[#1c8fc7] whitespace-nowrap leading-tight`}>{formatPrice(net)}</p>
+            <p className={`${priceClass} text-[#1c8fc7] whitespace-nowrap leading-tight`}>{formatPrice(gross)}</p>
             {offLabel && (
                 <span className="inline-block text-[10px] font-semibold text-green-600 bg-green-50 rounded-full px-2 py-0.5 whitespace-nowrap mt-0.5">
                     {offLabel}

@@ -46,8 +46,8 @@ export type PassengerDetails = {
 
 const TITLE_OPTIONS: Record<PTC, string[]> = {
     ADT: ["Mr", "Mrs", "Ms"],
-    CHD: ["Mr", "Miss"],
-    INF: ["Mr", "Miss"],
+    CHD: ["Mstr", "Miss"],
+    INF: ["Mstr", "Miss"],
 };
 
 const PTC_LABEL: Record<PTC, string> = { ADT: "Adult", CHD: "Child", INF: "Infant" };

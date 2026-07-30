@@ -66,6 +66,8 @@ export type Journey = {
     DepartureDateTime: string;
     ArrivalDateTime: string;
     GroupId: string;
+      DepartureNearBy?: string;
+  ArrivalNearBy?: string;
     ReturnIdentifier?: number;
 };
 
@@ -101,12 +103,7 @@ export type SearchCriteria = {
     to: string;
     fromCity: string;
     toCity: string;
-    /** Full airport record for the origin, when known. Kept alongside the flat
-     *  from/fromCity strings so components that only need the code/city don't
-     *  have to unpack it, while components that need StateName/CountryName
-     *  (e.g. ModifySearchPanel) don't have to re-fetch it. */
     fromAirport?: Airport | null;
-    /** Full airport record for the destination, when known. See fromAirport. */
     toAirport?: Airport | null;
     tripType: TripType;
     adults: number;
