@@ -1,9 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { HiOutlineChevronRight } from "react-icons/hi";
-import { type Journey, type FareInfo } from "@/app/components/flights/types";
-import { formatTime, getDisplayFareValues, formatPrice } from "@/app/components/flights/utils";
+import { type Journey, type FareInfo, type TravelerCounts } from "@/app/components/flights/types";
+import { formatTime } from "@/app/components/flights/utils";
 import AirlineLogo from "@/app/components/flights/AirlineLogo";
+import FareDropdown, { FareDropdownPanel } from "@/app/components/flights/FareDropdown";
+import { HiOutlineLocationMarker } from "react-icons/hi";
 
 export default function CombinedLegRow({
     label,
@@ -11,16 +14,21 @@ export default function CombinedLegRow({
     fares,
     selectedIdx,
     onSelectFare,
+    travelerCounts,
+    tokenId,
 }: {
     label: string;
     journey: Journey;
     fares: FareInfo[];
     selectedIdx: number;
     onSelectFare: (idx: number) => void;
+    travelerCounts?: TravelerCounts;
+    tokenId?: string;
 }) {
     const firstSeg = journey.Segments[0];
     const lastSeg = journey.Segments[journey.Segments.length - 1];
     const stopsLabel = journey.Stops === 0 ? "Non stop" : `${journey.Stops} stop${journey.Stops > 1 ? "s" : ""}`;
+    const [fareDropdownOpen, setFareDropdownOpen] = useState(false);
 
     const fare = fares[selectedIdx] ?? {
         FareType: "Combined Fare",
@@ -35,32 +43,39 @@ export default function CombinedLegRow({
     return (
         <div className="px-4 sm:px-5 py-3">
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                <span className="text-[10px] font-bold uppercase tracking-wide text-[#FF7626] bg-orange-50 rounded px-2 py-1 w-fit shrink-0">
+                {/* Fixed-width label column so ONWARD/RETURN don't push things around */}
+                <span className="w-[68px] shrink-0 text-center text-[10px] font-bold uppercase tracking-wide text-[#FF7626] bg-orange-50 rounded px-2 py-1">
                     {label}
                 </span>
 
-                <AirlineLogo seg={firstSeg} code={firstSeg?.AirlineCode} className="w-9 h-9" />
+                <AirlineLogo seg={firstSeg} code={firstSeg?.AirlineCode} className="w-9 h-9 shrink-0" />
 
-                <div className="min-w-[20px]">
-                    <p className="text-sm font-bold text-gray-900 leading-tight">{firstSeg?.AirlineName}</p>
-                    <p className="text-xs text-gray-400 leading-tight">
+                {/* Fixed-width airline/flight-no column */}
+                <div className="w-[140px] shrink-0">
+                    <p className="text-sm font-bold text-gray-900 leading-tight truncate" title={firstSeg?.AirlineName}>
+                        {firstSeg?.AirlineName}
+                    </p>
+                    <p className="text-xs text-gray-400 leading-tight truncate">
                         {journey.Segments.map((s) => `${s.AirlineCode}-${s.FlightNo}`).join(", ")}
                     </p>
                 </div>
 
                 <div className="flex-1 flex items-center gap-4 min-w-0">
-                    {/* Departure */}
-                    <div className="text-left shrink-0">
+                    {/* Departure — fixed width */}
+                    <div className="w-[70px] shrink-0 text-left">
                         <p className="text-xl font-bold text-gray-900 leading-tight">{formatTime(journey.DepartureDateTime)}</p>
-                        <p className="text-xs text-gray-400">{firstSeg?.DepartureAirportCode}</p>
+                        <p className="text-sm text-gray-400">{firstSeg?.DepartureAirportCode}</p>
                         {journey.DepartureNearBy && (
-                            <p className="text-[10px] text-red-600 font-medium leading-tight">Nearby airport</p>
+                            <span className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 text-[10px] font-semibold whitespace-nowrap">
+                                <HiOutlineLocationMarker className="w-3 h-3 shrink-0" />
+                                Nearby airport
+                            </span>
                         )}
                     </div>
 
                     {/* Duration / Stops */}
                     <div className="flex-1 flex flex-col items-center text-gray-400 min-w-[80px]">
-                        <span className="text-[11px] mb-0.5">{journey.Duration}</span>
+                        <span className="text-[11px] mb-0.5 whitespace-nowrap">{journey.Duration}</span>
                         <div className="w-full flex items-center">
                             <span className="flex-1 border-t border-gray-300" />
                             <span className="w-4 h-4 rounded-full bg-[#1c8fc7] text-white flex items-center justify-center shrink-0 mx-1">
@@ -68,50 +83,54 @@ export default function CombinedLegRow({
                             </span>
                             <span className="flex-1 border-t border-gray-300" />
                         </div>
-                        <span className="text-[11px] mt-0.5">{stopsLabel}</span>
+                        <span className="text-[11px] mt-0.5 whitespace-nowrap">{stopsLabel}</span>
                     </div>
 
-                    {/* Arrival */}
-                    <div className="text-right shrink-0">
+                    {/* Arrival — fixed width */}
+                    <div className="w-[70px] shrink-0 text-right">
                         <p className="text-xl font-bold text-gray-900 leading-tight">{formatTime(journey.ArrivalDateTime)}</p>
-                        <p className="text-xs text-gray-400">{lastSeg?.ArrivalAirportCode}</p>
+                        <p className="text-sm text-gray-400">{lastSeg?.ArrivalAirportCode}</p>
                         {journey.ArrivalNearBy && (
-                            <p className="text-[10px] text-red-600 font-medium leading-tight">Nearby airport</p>
+                            <span className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 text-[10px] font-semibold whitespace-nowrap">
+                                <HiOutlineLocationMarker className="w-3 h-3 shrink-0" />
+                                Nearby airport
+                            </span>
                         )}
                     </div>
                 </div>
 
-                <span className="text-xs font-semibold text-gray-500 shrink-0">{fare.FareType}</span>
+                {/* Fixed-width right column so the dropdown/fare-type lines up across every card */}
+                <div className="w-[190px] shrink-0 flex flex-col items-end gap-1">
+                    {fares.length > 1 ? (
+                        <FareDropdown
+                            fares={fares}
+                            onBook={(f, idx) => onSelectFare(idx)}
+                            open={fareDropdownOpen}
+                            onOpenChange={setFareDropdownOpen}
+                            hidePanel
+                            showBookButton={false}
+                            selectedIndex={selectedIdx}
+                        />
+                    ) : (
+                        <span className="text-xs font-semibold text-gray-500">{fare.FareType}</span>
+                    )}
+                </div>
             </div>
 
-            {fares.length > 1 && (
-                <div className="flex flex-wrap gap-2 mt-2 pl-0 sm:pl-[52px]">
-                    {fares.map((f, idx) => {
-                        const active = idx === selectedIdx;
-                        const { net: fNet } = getDisplayFareValues(f);
-                        return (
-                            <button
-                                key={f.ConId || f.Index || idx}
-                                type="button"
-                                onClick={() => onSelectFare(idx)}
-                                className={`rounded-lg border px-2.5 py-1 text-left transition-colors ${active
-                                    ? "bg-[#e8f4fb] border-[#1c8fc7]"
-                                    : "bg-white border-gray-200 hover:border-gray-300"
-                                    }`}
-                            >
-                                <p
-                                    className={`text-[10px] font-semibold uppercase tracking-wide leading-tight ${active ? "text-[#1c8fc7]" : "text-gray-600"
-                                        }`}
-                                >
-                                    {f.FareType}
-                                    {f.Refundable === "Y" && <span className="text-green-600"> &middot; Refundable</span>}
-                                </p>
-                                <p className={`text-xs font-bold leading-tight ${active ? "text-[#1c8fc7]" : "text-gray-900"}`}>
-                                    {formatPrice(fNet)}
-                                </p>
-                            </button>
-                        );
-                    })}
+            {fares.length > 1 && fareDropdownOpen && (
+                <div className="mt-3">
+                    <FareDropdownPanel
+                        fares={fares}
+                        onBook={(f, idx) => {
+                            onSelectFare(idx);
+                            setFareDropdownOpen(false);
+                        }}
+                        journey={journey}
+                        travelerCounts={travelerCounts}
+                        tokenId={tokenId}
+                        showBookButton={true}
+                        selectedIndex={null}
+                    />
                 </div>
             )}
         </div>

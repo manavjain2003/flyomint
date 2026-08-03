@@ -340,11 +340,16 @@ export default function FlightResults({
             const onwardFare = cheapestFare(onward);
             if (!onwardFare) continue;
 
-            const retFare = cheapestFare(ret) ?? {
-                ...onwardFare,
-                GrossFare: 0,
-                NetFare: 0,
-            };
+           const retFare = cheapestFare(ret) ?? {
+    ...onwardFare,
+    GrossFare: 0,
+    NetFare: 0,
+    PTCFare: onwardFare.PTCFare?.map((p) => ({
+        ...p,
+        GrossFare: 0,
+        NetFare: 0,
+    })) ?? [],
+};
 
             pairs.push({ onward, onwardFare, ret, retFare });
         }
@@ -373,8 +378,12 @@ export default function FlightResults({
                 : bothViewsLoaded && combinedHasResults && !splitHasResults
                     ? "combined"
                     : "split";
+                    const noResultsAtAll =
+    tripType === "roundtrip"
+        ? bothViewsLoaded && !error && !combinedError && !splitHasResults && !combinedHasResults
+        : !loading && !error && !splitHasResults;
     const showFooter = tripType === "roundtrip" && effectiveView === "split";
-
+const overallLoading = tripType === "roundtrip" ? (loading || combinedLoading) : loading;
     function clearFilters() {
         setFilters({ ...EMPTY_FILTERS, maxPrice: filterOptions.maxPrice });
         setPriceTouched(false);
@@ -632,56 +641,63 @@ const travelersSummary = `${totalTravelers} Traveler${totalTravelers > 1 ? "s" :
                         </div>
                     )}
 
-                    {tripType === "roundtrip" && effectiveView === "combined" ? (
-                    <CombinedJourneyList
-    fromCity={fromCity || from}
-    toCity={toCity || to}
-    loading={combinedLoading}
-    error={combinedError}
-    pairs={filteredCombinedPairs}
-    expandedGroupId={expandedGroupId}
-    setExpandedGroupId={setExpandedGroupId}
-    onBookPair={handleBookPair}
-    travelerCounts={{ adults, children, infants }}
-    tokenId={combinedTokenId}
-/>
-                    ) : (
-                        <div className={tripType === "roundtrip" ? "grid grid-cols-1 lg:grid-cols-2 gap-6" : undefined}>
-                        <JourneyList
-    title="Departing"
-    from={fromCity || from}
-    to={toCity || to}
-    loading={loading}
-    error={error}
-    journeys={filteredOnward}
-    selectedGroupId={selectedOnward?.journey.GroupId ?? null}
-    expandedGroupId={expandedGroupId}
-    setExpandedGroupId={setExpandedGroupId}
-    onSelectFlight={(j, f) => handleSelect("onward", j, f)}
-    onBookFare={handleBookFare}
-    directBooking={tripType === "oneway"}
-    travelerCounts={{ adults, children, infants }}
-    tokenId={searchTokenId}
-/>
-
-{tripType === "roundtrip" && (
-    <JourneyList
-        title="Returning"
-        from={toCity || to}
-        to={fromCity || from}
-        loading={loading}
-        error={error}
-        journeys={filteredReturn}
-        selectedGroupId={selectedReturn?.journey.GroupId ?? null}
+{noResultsAtAll ? (
+    <div className="flex flex-col items-center justify-center text-center py-24 bg-white rounded-2xl border border-gray-100">
+        <p className="text-lg font-semibold text-gray-900 mb-1">No flights found</p>
+        <p className="text-sm text-gray-400">
+            Try changing your travel dates, route, or search filters.
+        </p>
+    </div>
+) : tripType === "roundtrip" && effectiveView === "combined" ? (
+    <CombinedJourneyList
+        fromCity={fromCity || from}
+        toCity={toCity || to}
+        loading={overallLoading}
+        error={combinedError}
+        pairs={filteredCombinedPairs}
         expandedGroupId={expandedGroupId}
         setExpandedGroupId={setExpandedGroupId}
-        onSelectFlight={(j, f) => handleSelect("return", j, f)}
+        onBookPair={handleBookPair}
         travelerCounts={{ adults, children, infants }}
-        tokenId={searchTokenId}
+        tokenId={combinedTokenId}
     />
+) : (
+    <div className={tripType === "roundtrip" ? "grid grid-cols-1 lg:grid-cols-2 gap-6" : undefined}>
+        <JourneyList
+            title="Departing"
+            from={fromCity || from}
+            to={toCity || to}
+            loading={overallLoading}
+            error={error}
+            journeys={filteredOnward}
+            selectedGroupId={selectedOnward?.journey.GroupId ?? null}
+            expandedGroupId={expandedGroupId}
+            setExpandedGroupId={setExpandedGroupId}
+            onSelectFlight={(j, f) => handleSelect("onward", j, f)}
+            onBookFare={handleBookFare}
+            directBooking={tripType === "oneway"}
+            travelerCounts={{ adults, children, infants }}
+            tokenId={searchTokenId}
+        />
+
+        {tripType === "roundtrip" && (
+            <JourneyList
+                title="Returning"
+                from={toCity || to}
+                to={fromCity || from}
+                loading={loading}
+                error={error}
+                journeys={filteredReturn}
+                selectedGroupId={selectedReturn?.journey.GroupId ?? null}
+                expandedGroupId={expandedGroupId}
+                setExpandedGroupId={setExpandedGroupId}
+                onSelectFlight={(j, f) => handleSelect("return", j, f)}
+                travelerCounts={{ adults, children, infants }}
+                tokenId={searchTokenId}
+            />
+        )}
+    </div>
 )}
-                        </div>
-                    )}
                 </div>
             </div>
 
@@ -699,7 +715,14 @@ const travelersSummary = `${totalTravelers} Traveler${totalTravelers > 1 ? "s" :
                                 {selectedDate.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" })}
                             </p>
                         </div>
-
+{tripType === "roundtrip" && returnDate && (
+    <div className="hidden sm:block shrink-0">
+        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide leading-tight">Return</p>
+        <p className="text-sm font-semibold text-gray-900 leading-tight">
+            {returnDate.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" })}
+        </p>
+    </div>
+)}
                         <div className="hidden sm:block shrink-0">
                             <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide leading-tight">Travelers</p>
                             <p className="text-sm font-semibold text-gray-900 leading-tight">

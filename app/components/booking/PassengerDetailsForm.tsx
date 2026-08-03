@@ -66,12 +66,21 @@ function emptyPassenger(ptc: PTC): PassengerDetails {
     };
 }
 
-function buildInitialPassengers(adults: number, children: number, infants: number): PassengerDetails[] {
-    return [
-        ...Array.from({ length: adults }, () => emptyPassenger("ADT")),
-        ...Array.from({ length: children }, () => emptyPassenger("CHD")),
-        ...Array.from({ length: infants }, () => emptyPassenger("INF")),
-    ];
+function buildInitialPassengers(
+    adults: number,
+    children: number,
+    infants: number,
+    saved: SavedByPTC = {}
+): PassengerDetails[] {
+    function build(ptc: PTC, count: number): PassengerDetails[] {
+        const savedForPtc = saved[ptc] ?? [];
+        return Array.from({ length: count }, (_, i) => {
+            const base = emptyPassenger(ptc);
+            const savedEntry = savedForPtc[i];
+            return savedEntry ? { ...base, ...savedEntry, ptc } : base;
+        });
+    }
+    return [...build("ADT", adults), ...build("CHD", children), ...build("INF", infants)];
 }
 
 function dobRequired(ptc: PTC, checklist: TravellerCheckList) {
@@ -90,6 +99,59 @@ function dobRange(ptc: PTC, checklist: TravellerCheckList): { min?: string; max?
     if (ptc === "ADT") return { min: checklist.AdultDOBStartRange, max: checklist.AdultDOBEndRange };
     if (ptc === "CHD") return { min: checklist.ChildDOBStartRange, max: checklist.ChildDOBEndRange };
     return { min: checklist.InfantDOBStartRange, max: checklist.InfantDOBEndRange };
+}
+
+const STORAGE_KEY = "flyomint:savedPassengers";
+
+type SavedPassenger = Omit<PassengerDetails, "passportNo" | "passportExpiry">;
+type SavedByPTC = Partial<Record<PTC, SavedPassenger[]>>;
+
+function loadSavedByPTC(): SavedByPTC {
+    if (typeof window === "undefined") return {};
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : {};
+    } catch {
+        return {};
+    }
+}
+
+function stripSensitive(p: PassengerDetails): SavedPassenger {
+    const { passportNo, passportExpiry, ...safe } = p;
+    return safe;
+}
+
+function saveByPTC(passengers: PassengerDetails[]) {
+    if (typeof window === "undefined") return;
+
+    const existing = loadSavedByPTC();
+    const byPtc: Record<PTC, PassengerDetails[]> = { ADT: [], CHD: [], INF: [] };
+    passengers.forEach((p) => byPtc[p.ptc].push(p));
+
+    const grouped: SavedByPTC = { ...existing };
+    (Object.keys(byPtc) as PTC[]).forEach((ptc) => {
+        const arr = byPtc[ptc];
+        if (arr.length === 0) return;
+        grouped[ptc] = arr.map((p, i) =>
+            // Don't overwrite a good saved entry with a still-blank one
+            p.firstName.trim() ? stripSensitive(p) : existing[ptc]?.[i] ?? stripSensitive(p)
+        );
+    });
+
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(grouped));
+    } catch {
+        // storage full or unavailable — safe to ignore
+    }
+}
+
+function clearSavedPassengers() {
+    if (typeof window === "undefined") return;
+    try {
+        localStorage.removeItem(STORAGE_KEY);
+    } catch {
+        // ignore
+    }
 }
 
 export function passengerFormIsValid(passengers: PassengerDetails[], checklist: TravellerCheckList): boolean {
@@ -216,20 +278,37 @@ export default function PassengerDetailsForm({
     checklist,
     onChange,
 }: PassengerDetailsFormProps) {
-    const [passengers, setPassengers] = useState<PassengerDetails[]>(() =>
-        buildInitialPassengers(adults, children, infants)
-    );
+    const [hasSaved, setHasSaved] = useState(false);
+
+    const [passengers, setPassengers] = useState<PassengerDetails[]>(() => {
+        const saved = loadSavedByPTC();
+        setHasSaved(Object.keys(saved).length > 0);
+        return buildInitialPassengers(adults, children, infants, saved);
+    });
 
     useEffect(() => {
-        setPassengers(buildInitialPassengers(adults, children, infants));
+        setPassengers(buildInitialPassengers(adults, children, infants, loadSavedByPTC()));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [adults, children, infants]);
 
     useEffect(() => {
         onChange(passengers);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [passengers]);
+
+    // Persist to localStorage, debounced so we're not writing on every keystroke
+    useEffect(() => {
+        const handle = setTimeout(() => saveByPTC(passengers), 500);
+        return () => clearTimeout(handle);
     }, [passengers]);
 
     function updatePassenger(index: number, patch: Partial<PassengerDetails>) {
         setPassengers((prev) => prev.map((p, i) => (i === index ? { ...p, ...patch } : p)));
+    }
+
+    function handleClearSaved() {
+        clearSavedPassengers();
+        setHasSaved(false);
     }
 
     const fnMax = checklist.FNMaxLen ?? 50;
@@ -239,12 +318,23 @@ export default function PassengerDetailsForm({
 
     return (
         <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6">
-            <div className="flex items-center gap-2 mb-5">
-                <span className="grid place-items-center w-8 h-8 rounded-full bg-[#e8f4fb] text-[#1c8fc7] shrink-0">
-                    <HiOutlineUser className="w-4 h-4" />
-                </span>
-                <h3 className="text-base font-bold text-gray-900">Passenger Details</h3>
-            </div>
+<div className="flex items-center gap-2 mb-5 justify-between">
+    <div className="flex items-center gap-2">
+        <span className="grid place-items-center w-8 h-8 rounded-full bg-[#e8f4fb] text-[#1c8fc7] shrink-0">
+            <HiOutlineUser className="w-4 h-4" />
+        </span>
+        <h3 className="text-base font-bold text-gray-900">Passenger Details</h3>
+    </div>
+    {hasSaved && (
+        <button
+            type="button"
+            onClick={handleClearSaved}
+            className="text-xs font-semibold text-gray-400 hover:text-red-500 transition-colors"
+        >
+            Clear saved details
+        </button>
+    )}
+</div>
 
             <div className="space-y-6">
                 {passengers.map((p, idx) => {

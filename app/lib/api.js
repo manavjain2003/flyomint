@@ -1,6 +1,8 @@
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL;
+const SIGNATURE_CODE = process.env.NEXT_PUBLIC_SIGNATURE_CODE;
 
-const SIGNATURE_CODE = process.env.NEXT_PUBLIC_SIGNATURE_CODE ;
+const UNIQUE_KEY_STORAGE = "uniqueKey";
+const VALIDITY_STORAGE = "loginValidity";
 
 export class ApiError extends Error {
     constructor(status, statusText, data, message) {
@@ -12,8 +14,9 @@ export class ApiError extends Error {
     }
 }
 
-let cachedKey = null;       
-let inFlightRequest = null; 
+let cachedKey = null;        // { uniqueKey, validity, isLoginKey }
+let inFlightRequest = null;
+let refreshTimer = null;
 
 function isKeyStillValid(cached) {
     if (!cached?.uniqueKey || !cached?.validity) return false;
@@ -21,6 +24,20 @@ function isKeyStillValid(cached) {
     if (Number.isNaN(expiresAt)) return false;
     return expiresAt - Date.now() > 60_000;
 }
+
+function persistLoginKey(uniqueKey, validity) {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(UNIQUE_KEY_STORAGE, uniqueKey || "");
+    if (validity) localStorage.setItem(VALIDITY_STORAGE, validity);
+}
+
+function clearPersistedLoginKey() {
+    if (typeof window === "undefined") return;
+    localStorage.removeItem(UNIQUE_KEY_STORAGE);
+    localStorage.removeItem(VALIDITY_STORAGE);
+}
+
+// Guest key (Auth/Signature)
 
 async function fetchSignatureKey() {
     const response = await fetch(`${BASE_URL}/Auth/Signature`, {
@@ -41,12 +58,132 @@ async function fetchSignatureKey() {
     }
 
     const { UniqueKey, Validity } = data.ServiceResponse;
-    cachedKey = { uniqueKey: UniqueKey?.trim(), validity: Validity };
+    cachedKey = { uniqueKey: UniqueKey?.trim(), validity: Validity, isLoginKey: false };
+    clearScheduledRefresh(); // guest keys aren't proactively refreshed
     return cachedKey;
 }
 
-export function setUniqueKey(uniqueKey, validity) {
-  cachedKey = { uniqueKey: uniqueKey?.trim(), validity };
+// Login key refresh (Auth/ResetToken)
+
+async function fetchResetToken(uniqueKey) {
+    const response = await fetch(`${BASE_URL}/Auth/ResetToken`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json", UniqueKey: uniqueKey },
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok || data?.ServiceResponse?.ErrorCode) {
+        throw new ApiError(
+            response.status,
+            response.statusText,
+            data,
+            data?.ServiceResponse?.Message || "Failed to reset token"
+        );
+    }
+
+    const { UniqueKey, Validity } = data.ServiceResponse;
+    cachedKey = { uniqueKey: UniqueKey?.trim(), validity: Validity, isLoginKey: true };
+    persistLoginKey(cachedKey.uniqueKey, cachedKey.validity);
+    return cachedKey;
+}
+
+// Proactive refresh scheduling for login keys
+
+function clearScheduledRefresh() {
+    if (refreshTimer) {
+        clearTimeout(refreshTimer);
+        refreshTimer = null;
+    }
+}
+
+function scheduleRefresh() {
+    clearScheduledRefresh();
+    if (!cachedKey?.validity || !cachedKey?.isLoginKey) return;
+
+    const expiresAt = new Date(cachedKey.validity).getTime();
+    if (Number.isNaN(expiresAt)) return;
+
+    const fireAt = expiresAt - Date.now() - 60_000;
+
+    if (fireAt <= 0) {
+        // Don't call handleExpiry() synchronously/recursively from here — schedule
+        // it on the next tick so this can never become a tight synchronous loop.
+        refreshTimer = setTimeout(handleExpiry, 0);
+        return;
+    }
+
+    refreshTimer = setTimeout(handleExpiry, fireAt);
+}
+
+// Terminal failure: give up on the login session entirely. Clears everything,
+// including localStorage, and tells the rest of the app to log the UI out.
+// This never re-reads localStorage or re-schedules — it's a hard stop.
+function forceLogout() {
+    cachedKey = null;
+    clearScheduledRefresh();
+    clearPersistedLoginKey();
+    if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("flyomint:sessionExpired"));
+    }
+}
+
+async function handleExpiry() {
+    const isVisible = typeof document !== "undefined" && document.visibilityState === "visible";
+
+    if (isVisible && cachedKey?.isLoginKey) {
+        try {
+            await fetchResetToken(cachedKey.uniqueKey);
+            scheduleRefresh(); // reschedule against the new validity
+            return;
+        } catch (e) {
+            console.error("ResetToken failed:", e);
+        }
+    } else if (!isVisible) {
+        // Tab isn't visible — don't spend a network call now. The
+        // visibilitychange listener below will re-check as soon as it's
+        // foregrounded again.
+        return;
+    }
+
+    // ResetToken genuinely failed (or there's no login key to refresh at all).
+    // Do not fall back to re-reading the same expired localStorage values —
+    // that would recreate the exact same expired state and loop forever.
+    forceLogout();
+}
+
+// On tab focus, re-validate whatever is cached. If it's stale, try exactly one
+// refresh via the same handleExpiry() path (which itself won't loop).
+if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible" && cachedKey?.isLoginKey) {
+            if (!isKeyStillValid(cachedKey)) {
+                handleExpiry();
+            }
+        }
+    });
+}
+
+// Hydrate cachedKey from localStorage once, on module init (covers page
+// reloads / reopened tabs, where in-memory state starts as null but a login
+// session may still exist in storage).
+if (typeof window !== "undefined") {
+    const storedKey = localStorage.getItem(UNIQUE_KEY_STORAGE);
+    const storedValidity = localStorage.getItem(VALIDITY_STORAGE);
+    if (storedKey) {
+        cachedKey = { uniqueKey: storedKey.trim(), validity: storedValidity, isLoginKey: true };
+        // If already expired, scheduleRefresh() will queue a single
+        // handleExpiry() on the next tick rather than recursing synchronously.
+        scheduleRefresh();
+    }
+}
+
+// Public key accessors
+
+export function setUniqueKey(uniqueKey, validity, isLoginKey = true) {
+    cachedKey = { uniqueKey: uniqueKey?.trim(), validity, isLoginKey };
+    if (isLoginKey) persistLoginKey(cachedKey.uniqueKey, cachedKey.validity);
+    scheduleRefresh();
 }
 
 export async function getUniqueKey({ forceRefresh = false } = {}) {
@@ -55,14 +192,33 @@ export async function getUniqueKey({ forceRefresh = false } = {}) {
     }
 
     if (!inFlightRequest) {
-        inFlightRequest = fetchSignatureKey().finally(() => {
-            inFlightRequest = null;
-        });
+        if (cachedKey?.isLoginKey && cachedKey?.uniqueKey) {
+            inFlightRequest = fetchResetToken(cachedKey.uniqueKey)
+                .catch((e) => {
+                    // A login key failing to refresh should end the session, not
+                    // silently downgrade to a guest key — otherwise the app keeps
+                    // working as "guest" while localStorage/UI still claim the
+                    // user is logged in, and no future call will ever retry
+                    // fetchResetToken again since isLoginKey becomes false.
+                    forceLogout();
+                    throw e;
+                })
+                .finally(() => {
+                    inFlightRequest = null;
+                });
+        } else {
+            inFlightRequest = fetchSignatureKey().finally(() => {
+                inFlightRequest = null;
+            });
+        }
     }
 
     const key = await inFlightRequest;
+    scheduleRefresh();
     return key.uniqueKey;
 }
+
+// Core fetch/request logic
 
 async function doFetch(endpoint, { method, body, headers, authHeader }) {
     const config = {
@@ -104,7 +260,9 @@ export async function apiRequest(endpoint, options = {}) {
 
     let { response, data } = await doFetch(endpoint, { method, body, headers, authHeader });
 
-    if (needsAuth && !token && response.status === 401) {
+    if (needsAuth && response.status === 401) {
+        // Always try a forced refresh on 401, even if an explicit token was
+        // passed in — an explicit (possibly stale) token shouldn't skip retry.
         const freshKey = await getUniqueKey({ forceRefresh: true });
         ({ response, data } = await doFetch(endpoint, {
             method,

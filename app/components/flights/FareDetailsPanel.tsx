@@ -36,7 +36,16 @@ type RuleEntry = {
     sections: RuleSection[];
 };
 
-/** Picks an icon + accent tint for a rule section based on its heading text. */
+/** A single priced leg to show in the panel. For a one-way/single-flight card
+ * this array will have exactly one entry (no label shown). For a combined
+ * (onward+return) fare it will have two, labeled so all tabs stay unified
+ * instead of rendering two separate panels. */
+export type FareLeg = {
+    label?: string; // e.g. "Onward" / "Return" — omit for single-leg usage
+    journey: Journey;
+    fare: FareInfo;
+};
+
 function getSectionVisual(head: string) {
     const h = head.toLowerCase();
     if (h.includes("cancel") || h.includes("refund")) {
@@ -52,22 +61,17 @@ function getSectionVisual(head: string) {
 }
 
 export default function FareDetailsPanel({
-    journey,
-    fare,
+    legs,
     travelerCounts,
     tokenId,
-    ruleIndex,
 }: {
-    journey: Journey;
-    fare: FareInfo;
+    legs: FareLeg[];
     travelerCounts?: TravelerCounts;
-    /** Needed to fetch AirlineFareRule. If omitted, the RULES tab just shows the static fallback copy. */
     tokenId?: string;
-    /** Override which Index values to send (e.g. CombinedFlightCard sends both onward+return together). Defaults to [fare.Index]. */
-    ruleIndex?: string[];
 }) {
     const [tab, setTab] = useState<DetailTab>("FLIGHT");
     const tabs: DetailTab[] = ["FLIGHT", "BAGGAGE", "FARE", "RULES"];
+    const multiLeg = legs.length > 1;
 
     const [ruleLoading, setRuleLoading] = useState(false);
     const [ruleError, setRuleError] = useState<string | null>(null);
@@ -75,7 +79,10 @@ export default function FareDetailsPanel({
     const [ruleFetchedFor, setRuleFetchedFor] = useState<string | null>(null);
     const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
 
-    const effectiveIndex = ruleIndex ?? (fare.Index ? [fare.Index] : []);
+    // Combine rule indices across all legs so RULES fetches once for the whole fare.
+    const effectiveIndex = legs
+        .flatMap((l) => (l.fare.Index ? [l.fare.Index] : []))
+        .filter(Boolean);
     const indexKey = effectiveIndex.join(",");
 
     async function fetchRules() {
@@ -103,28 +110,43 @@ export default function FareDetailsPanel({
         setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
     }
 
-    const visibleBaggage = (fare.Baggage ?? []).filter((b) => {
-        if (!travelerCounts) return true;
-        if (b.PTC === "A") return travelerCounts.adults > 0;
-        if (b.PTC === "C") return travelerCounts.children > 0;
-        if (b.PTC === "I") return travelerCounts.infants > 0;
-        return true;
-    });
+    function visibleBaggageFor(fare: FareInfo) {
+        return (fare.Baggage ?? []).filter((b) => {
+            if (!travelerCounts) return true;
+            if (b.PTC === "A") return travelerCounts.adults > 0;
+            if (b.PTC === "C") return travelerCounts.children > 0;
+            if (b.PTC === "I") return travelerCounts.infants > 0;
+            return true;
+        });
+    }
 
-    const visiblePtcFares = (fare.PTCFare ?? []).filter((p) => {
-        if (!travelerCounts) return true;
-        const key = PTC_COUNT_KEY[p.PTC];
-        return key ? travelerCounts[key] > 0 : true;
-    });
+    function visiblePtcFaresFor(fare: FareInfo) {
+        return (fare.PTCFare ?? []).filter((p) => {
+            if (!travelerCounts) return true;
+            const key = PTC_COUNT_KEY[p.PTC];
+            return key ? travelerCounts[key] > 0 : true;
+        });
+    }
 
-    const grandTotal = visiblePtcFares.reduce((sum, p) => {
+    function lineTotalFor(fare: FareInfo, p: FareInfo["PTCFare"][number]) {
         const key = PTC_COUNT_KEY[p.PTC];
         const count = key && travelerCounts ? travelerCounts[key] : 1;
         const amt = fare.FareDisplayType === "G" || fare.FareDisplayType === "P" ? p.GrossFare : p.NetFare;
-        return sum + amt * count;
-    }, 0);
+        return amt * count;
+    }
 
-    const seats = fare.Seats;
+    const grandTotal = legs.reduce(
+        (sum, l) => sum + visiblePtcFaresFor(l.fare).reduce((s, p) => s + lineTotalFor(l.fare, p), 0),
+        0
+    );
+
+    // Refundable summary: worst-case across legs (if either leg is non-refundable, show that).
+    const refundableValue = legs.some((l) => l.fare.Refundable === "N")
+        ? "N"
+        : legs.every((l) => l.fare.Refundable === "Y")
+        ? "Y"
+        : "P";
+    const fareTypeLabel = legs.map((l) => l.fare.FareType).join(" + ");
 
     return (
         <div className="bg-[#f4f6f8] px-4 sm:px-6 py-5">
@@ -134,10 +156,9 @@ export default function FareDetailsPanel({
                         key={t}
                         type="button"
                         onClick={() => handleTabClick(t)}
-                        className={`h-8 px-5 rounded-full text-xs font-bold uppercase tracking-wide transition-colors ${tab === t
-                            ? "bg-[#FF7626] text-white"
-                            : "bg-white text-[#FF7626] border border-[#FF7626]"
-                            }`}
+                        className={`h-8 px-5 rounded-full text-xs font-bold uppercase tracking-wide transition-colors ${
+                            tab === t ? "bg-[#FF7626] text-white" : "bg-white text-[#FF7626] border border-[#FF7626]"
+                        }`}
                     >
                         {t}
                     </button>
@@ -145,25 +166,34 @@ export default function FareDetailsPanel({
             </div>
 
             {tab === "FLIGHT" && (
-                <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 divide-y divide-gray-100">
-                    {journey.Segments.map((seg, idx) => (
-                        <div key={seg.SID}>
-                            <SegmentRouteCard seg={seg} />
-                            {idx < journey.Segments.length - 1 && seg.Layover && (
-                                <div className="flex items-center gap-3 py-3 px-1">
-                                    <span className="flex-1 border-t border-dashed border-gray-300" />
-                                    <span className="inline-flex items-center gap-2 bg-[#e8f4fb] text-[#1c8fc7] rounded-lg px-3 py-2 text-xs whitespace-nowrap">
-                                        <HiOutlineClock className="w-4 h-4 shrink-0 text-orange-500" />
-                                        <span>
-                                            <span className="font-bold">Plane Change</span>
-                                            <span className="font-normal">
-                                                {" "}&middot; {seg.Layover} Layover in {seg.ArrivalAirportCode}
-                                            </span>
-                                        </span>
-                                    </span>
-                                    <span className="flex-1 border-t border-dashed border-gray-300" />
-                                </div>
+                <div className="space-y-4">
+                    {legs.map((leg, li) => (
+                        <div key={li}>
+                            {multiLeg && leg.label && (
+                                <p className="text-[11px] font-bold uppercase tracking-wide text-[#FF7626] bg-orange-50 rounded px-2 py-1 inline-block mb-2">
+                                    {leg.label}
+                                </p>
                             )}
+                            <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 divide-y divide-gray-100">
+                                {leg.journey.Segments.map((seg, idx) => (
+                                    <div key={seg.SID}>
+                                        <SegmentRouteCard seg={seg} />
+                                        {idx < leg.journey.Segments.length - 1 && seg.Layover && (
+                                            <div className="flex items-center gap-3 py-3 px-1">
+                                                <span className="flex-1 border-t border-dashed border-gray-300" />
+                                                <span className="inline-flex items-center gap-2 bg-[#e8f4fb] text-[#1c8fc7] rounded-lg px-3 py-2 text-xs whitespace-nowrap">
+                                                    <HiOutlineClock className="w-4 h-4 shrink-0 text-orange-500" />
+                                                    <span>
+                                                        <span className="font-bold">Plane Change</span>
+                                                        <span className="font-normal"> &middot; {seg.Layover} Layover in {seg.ArrivalAirportCode}</span>
+                                                    </span>
+                                                </span>
+                                                <span className="flex-1 border-t border-dashed border-gray-300" />
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     ))}
                 </div>
@@ -171,105 +201,129 @@ export default function FareDetailsPanel({
 
             {tab === "BAGGAGE" && (
                 <div className="space-y-3">
-                    {visibleBaggage.length === 0 && (
+                    {legs.every((l) => visibleBaggageFor(l.fare).length === 0) && (
                         <div className="bg-white rounded-xl border border-gray-200 p-4 text-sm text-gray-400 text-center">
                             No baggage information available.
                         </div>
                     )}
-                    {visibleBaggage.map((b, idx) => (
-                        <div
-                            key={`${b.PTC}-${idx}`}
-                            className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-4 sm:gap-8 text-sm"
-                        >
-                            <span className="text-[11px] font-bold uppercase tracking-wide text-white bg-[#1c8fc7] rounded px-2 py-1 shrink-0 w-16 text-center">
-                                {(b.PTC === "A" ? "Adult" : b.PTC === "C" ? "Child" : b.PTC === "I" ? "Infant" : b.PTC) ?? "—"}
-                            </span>
-                            <div>
-                                <p className="text-xs text-gray-400 mb-1">Cabin Baggage</p>
-                                <p className="font-semibold text-gray-900">{b.CabinBag ?? "—"}</p>
+                    {legs.map((leg, li) => {
+                        const baggage = visibleBaggageFor(leg.fare);
+                        if (baggage.length === 0) return null;
+                        return (
+                            <div key={li} className="space-y-2">
+                                {multiLeg && leg.label && (
+                                    <p className="text-[11px] font-bold uppercase tracking-wide text-[#FF7626] bg-orange-50 rounded px-2 py-1 inline-block">
+                                        {leg.label}
+                                    </p>
+                                )}
+                                {baggage.map((b, idx) => (
+                                    <div
+                                        key={`${li}-${b.PTC}-${idx}`}
+                                        className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-4 sm:gap-8 text-sm"
+                                    >
+                                        <span className="text-[11px] font-bold uppercase tracking-wide text-white bg-[#1c8fc7] rounded px-2 py-1 shrink-0 w-16 text-center">
+                                            {(b.PTC === "A" ? "Adult" : b.PTC === "C" ? "Child" : b.PTC === "I" ? "Infant" : b.PTC) ?? "—"}
+                                        </span>
+                                        <div>
+                                            <p className="text-xs text-gray-400 mb-1">Cabin Baggage</p>
+                                            <p className="font-semibold text-gray-900">{b.CabinBag ?? "—"}</p>
+                                        </div>
+                                        <div className="w-px h-8 bg-gray-200 shrink-0" />
+                                        <div>
+                                            <p className="text-xs text-gray-400 mb-1">Check-in Baggage</p>
+                                            <p className="font-semibold text-gray-900">{b.CheckinBaggage ?? "—"}</p>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
-                            <div className="w-px h-8 bg-gray-200 shrink-0" />
-                            <div>
-                                <p className="text-xs text-gray-400 mb-1">Check-in Baggage</p>
-                                <p className="font-semibold text-gray-900">{b.CheckinBaggage ?? "—"}</p>
-                            </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
 
             {tab === "FARE" && (
                 <div className="space-y-3">
-                    {visiblePtcFares.length === 0 && (
-                        <div className="bg-white rounded-xl border border-gray-200 p-4 text-sm text-gray-400 text-center">
-                            No fare breakdown available.
-                        </div>
-                    )}
-
-                    {visiblePtcFares.map((p, idx) => {
-                        const key = PTC_COUNT_KEY[p.PTC];
-                        const count = key && travelerCounts ? travelerCounts[key] : 1;
-                        const lineTotal = fare.FareDisplayType === "G" || fare.FareDisplayType === "P" ? p.GrossFare : p.NetFare;
+                    {legs.map((leg, li) => {
+                        const ptcFares = visiblePtcFaresFor(leg.fare);
+                        if (ptcFares.length === 0) return null;
                         return (
-                            <div
-                                key={`${p.PTC}-${idx}`}
-                                className="bg-white rounded-xl border border-gray-200 p-4 text-sm divide-y divide-gray-100"
-                            >
-                                <div className="flex items-center justify-between pb-2">
-                                    <span className="text-[11px] font-bold uppercase tracking-wide text-white bg-[#1c8fc7] rounded px-2 py-1">
-                                        {PTC_LABEL[p.PTC] ?? p.PTC} {count > 1 ? `× ${count}` : ""}
-                                    </span>
-                                     <span className="font-bold text-gray-900">{formatPrice(lineTotal)}</span>
-                                </div>
-                                <div className="flex items-center justify-between py-2">
-                                    <span className="text-gray-500">Base Fare</span>
-                                    <span className="font-semibold text-gray-900">{formatPrice(p.Fare)}</span>
-                                </div>
-                                <div className="flex items-center justify-between py-2">
-                                    <span className="text-gray-500">Taxes &amp; Fees</span>
-                                    <span className="font-semibold text-gray-900">{formatPrice(p.Tax)}</span>
-                                </div>
-                               {p.FareMessage && (
-    <div className="flex items-center justify-between py-2">
-        <span className="text-gray-500">Discount</span>
-        <span className="font-semibold text-green-600">{formatOffMessage(p.FareMessage)}</span>
-    </div>
-)}
+                            <div key={li} className="space-y-2">
+                                {multiLeg && leg.label && (
+                                    <p className="text-[11px] font-bold uppercase tracking-wide text-[#FF7626] bg-orange-50 rounded px-2 py-1 inline-block">
+                                        {leg.label}
+                                    </p>
+                                )}
+                                {ptcFares.map((p, idx) => {
+                                    const key = PTC_COUNT_KEY[p.PTC];
+                                    const count = key && travelerCounts ? travelerCounts[key] : 1;
+                                    const lineTotal = lineTotalFor(leg.fare, p);
+                                    return (
+                                        <div
+                                            key={`${li}-${p.PTC}-${idx}`}
+                                            className="bg-white rounded-xl border border-gray-200 p-4 text-sm divide-y divide-gray-100"
+                                        >
+                                            <div className="flex items-center justify-between pb-2">
+                                                <span className="text-[11px] font-bold uppercase tracking-wide text-white bg-[#1c8fc7] rounded px-2 py-1">
+                                                    {PTC_LABEL[p.PTC] ?? p.PTC} {count > 1 ? `× ${count}` : ""}
+                                                </span>
+                                                <span className="font-bold text-gray-900">{formatPrice(lineTotal)}</span>
+                                            </div>
+                                            <div className="flex items-center justify-between py-2">
+                                                <span className="text-gray-500">Base Fare</span>
+                                                <span className="font-semibold text-gray-900">{formatPrice(p.Fare)}</span>
+                                            </div>
+                                            <div className="flex items-center justify-between py-2">
+                                                <span className="text-gray-500">Taxes &amp; Fees</span>
+                                                <span className="font-semibold text-gray-900">{formatPrice(p.Tax)}</span>
+                                            </div>
+                                            {p.FareMessage && (
+                                                <div className="flex items-center justify-between py-2">
+                                                    <span className="text-gray-500">Discount</span>
+                                                    <span className="font-semibold text-green-600">{formatOffMessage(p.FareMessage)}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         );
                     })}
 
                     <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between text-sm">
-                        <span className="text-gray-700 font-semibold">Grand Total</span>
+                        <span className="text-gray-700 font-semibold">Grand Total{multiLeg ? " (Both Legs)" : ""}</span>
                         <span className="font-bold text-gray-900">{formatPrice(grandTotal)}</span>
                     </div>
 
-                    <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between text-sm">
-                        <span className="text-gray-500">Seats Left</span>
-                        <span className="font-semibold text-gray-900">{seats}</span>
-                    </div>
+                    {legs.map((leg, li) => (
+                        <div key={li} className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between text-sm">
+                            <span className="text-gray-500">
+                                {multiLeg && leg.label ? `${leg.label} Seats Left` : "Seats Left"}
+                            </span>
+                            <span className="font-semibold text-gray-900">{leg.fare.Seats}</span>
+                        </div>
+                    ))}
                 </div>
             )}
 
             {tab === "RULES" && (
                 <div className="space-y-3">
-                    {/* Summary strip */}
                     <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-6 flex-wrap text-sm">
                         <div>
                             <p className="text-[11px] uppercase tracking-wide text-gray-400 mb-0.5">Fare Type</p>
-                            <p className="font-semibold text-gray-900">{fare.FareType}</p>
+                            <p className="font-semibold text-gray-900">{fareTypeLabel}</p>
                         </div>
                         <div className="w-px h-8 bg-gray-100 hidden sm:block" />
                         <div className="flex items-center gap-2">
                             <span
-                                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${fare.Refundable === "Y"
+                                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${
+                                    refundableValue === "Y"
                                         ? "bg-emerald-50 text-emerald-600"
-                                        : fare.Refundable === "P"
-                                            ? "bg-amber-50 text-amber-600"
-                                            : "bg-rose-50 text-rose-600"
-                                    }`}
+                                        : refundableValue === "P"
+                                        ? "bg-amber-50 text-amber-600"
+                                        : "bg-rose-50 text-rose-600"
+                                }`}
                             >
-                                {fare.Refundable === "Y" ? "Refundable" : fare.Refundable === "P" ? "Partially Refundable" : "Non-Refundable"}
+                                {refundableValue === "Y" ? "Refundable" : refundableValue === "P" ? "Partially Refundable" : "Non-Refundable"}
                             </span>
                         </div>
                     </div>
@@ -301,14 +355,15 @@ export default function FareDetailsPanel({
                         </div>
                     )}
 
-                    {!ruleLoading && !ruleError && ruleData && ruleData.length > 0 && (
+                    {!ruleLoading &&
+                        !ruleError &&
+                        ruleData &&
+                        ruleData.length > 0 &&
                         ruleData.map((entry, i) => (
                             <div key={i} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                                 {entry.originDestination && (
                                     <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100">
-                                        <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
-                                            {entry.originDestination}
-                                        </p>
+                                        <p className="text-xs font-bold uppercase tracking-wide text-gray-500">{entry.originDestination}</p>
                                     </div>
                                 )}
 
@@ -335,9 +390,7 @@ export default function FareDetailsPanel({
                                                         <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full ${chip} ${tint} shrink-0`}>
                                                             <Icon className="w-4 h-4" />
                                                         </span>
-                                                        <span className="text-xs font-bold uppercase tracking-wide text-gray-700 text-left">
-                                                            {s.head}
-                                                        </span>
+                                                        <span className="text-xs font-bold uppercase tracking-wide text-gray-700 text-left">{s.head}</span>
                                                     </span>
                                                     <HiOutlineChevronDown
                                                         className={`w-4 h-4 text-gray-400 shrink-0 transition-transform ${isCollapsed ? "-rotate-90" : ""}`}
@@ -399,8 +452,7 @@ export default function FareDetailsPanel({
                                     )}
                                 </div>
                             </div>
-                        ))
-                    )}
+                        ))}
 
                     {!ruleLoading && !ruleError && ruleData && ruleData.length === 0 && (
                         <div className="bg-white rounded-xl border border-gray-200 p-4 text-xs text-gray-400 text-center">

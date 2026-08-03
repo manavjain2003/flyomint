@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import FlightResults from "@/app/components/flights/FlightResults";
 import ReviewBooking from "@/app/components/booking/ReviewBooking";
+import FlightAddOns, { type AddOnPassenger } from "@/app/components/booking/FlightAddOns";
 import { readCachedSearch } from "@/app/components/flights/searchCache";
 
 function toApiDate(d: Date) {
@@ -16,7 +17,10 @@ function toApiDate(d: Date) {
 export default function FlightResultsPage() {
     const router = useRouter();
     const params = useSearchParams();
+
+    const [step, setStep] = useState<"results" | "review" | "addons">("results");
     const [reviewPayload, setReviewPayload] = useState<any>(null);
+    const [bookingData, setBookingData] = useState<any>(null);
 
     const from = params.get("from") || "";
     const to = params.get("to") || "";
@@ -29,17 +33,56 @@ export default function FlightResultsPage() {
     const cabinClass = (params.get("cabinClass") as any) || "economy";
     const specialFare = (params.get("specialFare") as any) || "regular";
 
-    // The URL only carries plain codes/city names (kept short and
-    // shareable). The full Airport record — which is what has StateName —
-    // lives in the search cache Home/ModifySearchPanel already write to.
-    // Pull it from there for display purposes, but only trust it when the
-    // cached from/to codes still match the URL, so a stale or unrelated
-    // cache entry never gets attributed to a different route.
     const cachedSearch = readCachedSearch();
     const fromAirport = cachedSearch && cachedSearch.from === from ? cachedSearch.fromAirport : null;
     const toAirport = cachedSearch && cachedSearch.to === to ? cachedSearch.toAirport : null;
 
-    if (reviewPayload) {
+    // ─── Add-Ons step ───
+    if (step === "addons" && reviewPayload && bookingData) {
+        const passengersForAddOns: AddOnPassenger[] = bookingData.passengers.map(
+            (p: any, i: number) => {
+                const type: "ADT" | "CHD" | "INF" =
+                    p.type ||
+                    p.passengerType ||
+                    (i >= adults + childrenCount ? "INF" : i >= adults ? "CHD" : "ADT");
+                return {
+                    id: p.id || `${type}-${i}`,
+                    label:
+                        [p.title, p.firstName, p.lastName].filter(Boolean).join(" ") ||
+                        `${type === "INF" ? "Infant" : type === "CHD" ? "Child" : "Adult"} ${i + 1}`,
+                    type,
+                };
+            }
+        );
+
+        return (
+          <FlightAddOns
+    tokenId={reviewPayload.tokenId}
+    bookingId={bookingData.bookingId ?? reviewPayload.bookingId}
+                passengers={passengersForAddOns}
+                tripSummary={{
+                    from,
+                    to,
+                    date: departureDate.toLocaleDateString("en-US", {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                    }),
+                    isRoundtrip: tripType === "roundtrip",
+                }}
+                baseFareTotal={bookingData.totalAmount}
+                onBack={() => setStep("review")}
+                onContinue={(addOnData) => {
+                    // TODO: wire to payment / PNR creation
+                    console.log("Proceed to payment", { bookingData, addOnData });
+                }}
+            />
+        );
+    }
+
+    // ─── Review step ───
+    if (step === "review" && reviewPayload) {
         return (
             <ReviewBooking
                 from={from}
@@ -54,26 +97,21 @@ export default function FlightResultsPage() {
                 tokenId={reviewPayload.tokenId}
                 bookingId={reviewPayload.bookingId}
                 index={reviewPayload.index}
-                onBack={() => setReviewPayload(null)}
-                onContinueToPayment={(data) => {
-                    console.log("Proceeding to payment with", data);
+                onBack={() => {
+                    setReviewPayload(null);
+                    setStep("results");
                 }}
+              onContinue={(data) => {
+    setBookingData(data);
+    setStep("addons");
+}}
             />
         );
     }
 
+    // ─── Search results step ───
     return (
         <FlightResults
-            // Remounting on every distinct search (instead of letting React
-            // reuse the previous instance) is what guarantees the results
-            // page always reflects exactly one search. Without this key,
-            // FlightResults' internal `criteria`/`selectedDate`/`returnDate`
-            // state (seeded from props via useState(() => ...) only once)
-            // never re-derives when new query params arrive for the same
-            // route — e.g. after Next.js reuses the page instance on
-            // back/forward navigation or a repeated push to /flights-results.
-            // That's what produced the "mixed" results (some parts showing
-            // the new search, some parts still showing the previous one).
             key={params.toString()}
             from={from}
             to={to}
@@ -109,7 +147,10 @@ export default function FlightResultsPage() {
                 router.replace(`/flights-results?${p.toString()}`);
             }}
             onReviewBooking={(payload) => {
-                if (payload.onward) setReviewPayload(payload);
+                if (payload.onward) {
+                    setReviewPayload(payload);
+                    setStep("review");
+                }
             }}
         />
     );

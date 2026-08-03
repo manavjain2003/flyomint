@@ -8,6 +8,7 @@ import { FaFacebookF } from "react-icons/fa";
 import { FcGoogle } from "react-icons/fc";
 import { AiOutlineLoading3Quarters } from "react-icons/ai";
 import { requestLoginOtp, verifyLoginOtp } from "@/app/lib/authApi";
+import { setUniqueKey } from "@/app/lib/api";
 
 type Step = "mobile" | "otp";
 
@@ -24,6 +25,8 @@ export type LoginDrawerProps = {
 export function saveLoginSession({ uniqueKey, validity }: { uniqueKey: string; validity?: string }) {
     localStorage.setItem(UNIQUE_KEY, uniqueKey);
     if (validity) localStorage.setItem(LOGIN_VALIDITY_KEY, validity);
+    // Keep api.js's in-memory cache and refresh timer in sync with what we just saved
+    setUniqueKey(uniqueKey, validity, true);
 }
 
 export function getStoredUniqueKey(): string | null {
@@ -63,6 +66,20 @@ export default function LoginDrawer({ open, onClose, onLoginSuccess }: LoginDraw
             document.body.style.overflow = "";
         };
     }, [open]);
+
+    // React to session expiry raised from api.js (tab was hidden/closed past
+    // token validity, or ResetToken failed) by clearing local session state.
+    useEffect(() => {
+        function handleSessionExpired() {
+            clearLoginSession();
+            window.dispatchEvent(new CustomEvent("flyomint:logout"));
+        }
+
+        window.addEventListener("flyomint:sessionExpired", handleSessionExpired);
+        return () => {
+            window.removeEventListener("flyomint:sessionExpired", handleSessionExpired);
+        };
+    }, []);
 
     if (!open) return null;
 
@@ -185,12 +202,12 @@ export default function LoginDrawer({ open, onClose, onLoginSuccess }: LoginDraw
             return;
         }
 
-       try {
-        saveLoginSession({ uniqueKey: res.uniqueKey, validity: res.validity });
-        window.dispatchEvent(new CustomEvent("flyomint:login"));
-    } catch (err) {
-        console.error("Failed to persist login session:", err);
-    }
+        try {
+            saveLoginSession({ uniqueKey: res.uniqueKey, validity: res.validity });
+            window.dispatchEvent(new CustomEvent("flyomint:login"));
+        } catch (err) {
+            console.error("Failed to persist login session:", err);
+        }
 
         setInfo("Login successful!");
         onLoginSuccess(res.uniqueKey);

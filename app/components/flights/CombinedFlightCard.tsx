@@ -87,24 +87,18 @@ const ruleIndex = [onwardFare?.Index, returnFare?.Index].filter(Boolean) as stri
                 </span>
             </button>
 
-                   {isExpanded && (
-            <div className="divide-y divide-gray-100 border-t border-gray-100">
-                <FareDetailsPanel
-                    journey={pair.onward}
-                    fare={onwardFare as FareInfo}
-                    travelerCounts={travelerCounts}
-                    tokenId={tokenId}
-                    ruleIndex={ruleIndex}
-                />
-                <FareDetailsPanel
-                    journey={pair.ret}
-                    fare={returnFare as FareInfo}
-                    travelerCounts={travelerCounts}
-                    tokenId={tokenId}
-                    ruleIndex={ruleIndex}
-                />
-            </div>
-        )}
+                 {isExpanded && (
+    <div className="divide-y divide-gray-100 border-t border-gray-100">
+        <FareDetailsPanel
+            legs={[
+                { label: "Onward", journey: pair.onward, fare: onwardFare as FareInfo },
+                { label: "Return", journey: pair.ret, fare: returnFare as FareInfo },
+            ]}
+            travelerCounts={travelerCounts}
+            tokenId={tokenId}
+        />
+    </div>
+)}
         </div>
     );
 }

@@ -13,10 +13,16 @@ import {
 } from "react-icons/hi";
 import { searchAirports } from "@/app/lib/utilityapi";
 import { DatePickerBrandStyles } from "@/app/components/shared/DatePickerBrandStyles";
-import { type Airport, type CabinClass, type SearchCriteria, type TripType } from "@/app/components/flights/types";
+import { type Airport, type CabinClass, type SearchCriteria, type TripType, type SpecialFare } from "@/app/components/flights/types";
 import { CABIN_LABEL, SPECIAL_FARE_LABEL, SPECIAL_FARE_SAVE, formatAirportCodeLabel, toApiDate } from "@/app/components/flights/utils";
 import CounterRow from "@/app/components/booking/CounterRow";
 import { writeCachedSearch } from "@/app/components/flights/searchCache";
+
+const SPECIAL_FARE_INFO: Record<Exclude<SpecialFare, "regular">, string> = {
+    student: "Student fares are not applicable for children/infants",
+    senior: "Applicable only for passengers aged 60 years and above",
+    armed: "Valid defence ID card required at airport check-in",
+};
 
 export default function ModifySearchPanel({
     criteria,
@@ -47,11 +53,7 @@ export default function ModifySearchPanel({
     const [toLoading, setToLoading] = useState(false);
     const [fromError, setFromError] = useState<string | null>(null);
     const [toError, setToError] = useState<string | null>(null);
-
-    // Seed from whatever the caller already knew about the airports (e.g. the
-    // full record cached from Home) rather than always starting null. This is
-    // what makes StateName/CountryName show up immediately instead of only
-    // after the user re-picks an airport inside this panel.
+const [hoveredFare, setHoveredFare] = useState<Exclude<SpecialFare, "regular"> | null>(null);
     const [fromAirportDetail, setFromAirportDetail] = useState<Airport | null>(criteria.fromAirport ?? null);
     const [toAirportDetail, setToAirportDetail] = useState<Airport | null>(criteria.toAirport ?? null);
 
@@ -202,15 +204,6 @@ export default function ModifySearchPanel({
             to: draft.to,
             fromCity: draft.fromCity,
             toCity: draft.toCity,
-            // Only overwrite the cached full Airport records when this panel
-            // actually has one (i.e. the user re-picked that field here).
-            // fromAirportDetail/toAirportDetail start out null whenever this
-            // page was reached without the full record being threaded
-            // through (e.g. arriving via the results-page URL, which only
-            // carries plain codes/city names). Writing `null` here for an
-            // untouched field used to blank out the good Airport object
-            // Home had originally cached — which is exactly what emptied
-            // out the From/To fields when navigating back to Home.
             ...(fromAirportDetail ? { fromAirport: fromAirportDetail } : {}),
             ...(toAirportDetail ? { toAirport: toAirportDetail } : {}),
             departureDate: toApiDate(draftDeparture),
@@ -235,47 +228,22 @@ export default function ModifySearchPanel({
             <DatePickerBrandStyles />
             <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-4 sm:p-5">
                 <div className="flex flex-wrap items-center gap-3 mb-4">
-                    <div className="inline-flex rounded-full border border-gray-200 p-1 gap-1">
-                        {(["oneway", "roundtrip"] as TripType[]).map((t) => (
-                            <button
-                                key={t}
-                                type="button"
-                                onClick={() => setDraft((d) => ({ ...d, tripType: t }))}
-                                className={`px-4 h-8 rounded-full text-xs font-semibold transition-colors ${draft.tripType === t
-                                    ? "bg-[#1c8fc7] text-white"
-                                    : "text-gray-600 hover:bg-gray-50"
-                                    }`}
-                            >
-                                {t === "oneway" ? "One Way" : "Round Trip"}
-                            </button>
-                        ))}
-                    </div>
-                    <div className="flex items-center flex-wrap gap-x-5 gap-y-2">
-                        <span className="text-xs font-medium text-gray-500">Special fare:</span>
-                        {(Object.keys(SPECIAL_FARE_LABEL) as Array<keyof typeof SPECIAL_FARE_LABEL>).map((key) => (
-                            <button
-                                key={key}
-                                type="button"
-                                onClick={() => setDraft((d) => ({ ...d, specialFare: key }))}
-                                className="flex items-center gap-1.5"
-                            >
-                                <span
-                                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${draft.specialFare === key ? "border-[#1c8fc7]" : "border-gray-300"
-                                        }`}
-                                >
-                                    {draft.specialFare === key && <span className="w-2 h-2 rounded-full bg-[#1c8fc7]" />}
-                                </span>
-                                <span className="text-sm text-gray-700">
-                                    {SPECIAL_FARE_LABEL[key]}
-                                    {SPECIAL_FARE_SAVE[key] && (
-                                        <span className="block text-[11px] text-green-600 leading-tight -mt-0.5">
-                                            {SPECIAL_FARE_SAVE[key]}
-                                        </span>
-                                    )}
-                                </span>
-                            </button>
-                        ))}
-                    </div>
+<div className="inline-flex items-center gap-3">
+    {(["oneway", "roundtrip"] as TripType[]).map((t) => (
+        <button
+            key={t}
+            type="button"
+            onClick={() => setDraft((d) => ({ ...d, tripType: t }))}
+            className={`px-4 h-8 rounded-full border text-xs font-semibold transition-colors ${
+                draft.tripType === t
+                    ? "border-[#1c8fc7] text-[#1c8fc7] bg-[#1c8fc7]/5"
+                    : "border-gray-200 text-gray-500 hover:border-gray-300"
+            }`}
+        >
+            {t === "oneway" ? "One Way" : "Round Trip"}
+        </button>
+    ))}
+</div>
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-6 gap-3 items-end">
@@ -390,7 +358,15 @@ export default function ModifySearchPanel({
                             portalId="flight-search-datepicker-portal"
                             wrapperClassName="block w-full"
                             disabled={draft.tripType !== "roundtrip"}
-                            customInput={<ModifyDateInput placeholder="Add return" />}
+                             customInput={
+                                <ModifyDateInput
+                                    placeholder="Add return"
+                                    onClear={() => {
+                                        setDraftReturn(null);
+                                        setDraft((d) => ({ ...d, tripType: "oneway" }));
+                                    }}
+                                />
+                            }
                         />
                     </div>
 
@@ -499,7 +475,7 @@ export default function ModifySearchPanel({
                         )}
                     </div>
 
-                    <div className="flex items-center justify-end gap-3 mt-4">
+                    <div className="col-span-2 md:col-span-6 flex items-center justify-end gap-3 mt-4">
                         <button
                             type="button"
                             onClick={onCancel}
@@ -515,6 +491,49 @@ export default function ModifySearchPanel({
                             Search
                         </button>
                     </div>
+    <div className="col-span-2 md:col-span-6 flex items-center flex-nowrap gap-2 mt-2">
+    <span className="text-xs font-medium text-gray-500 mr-1">Special fare:</span>
+   {(Object.keys(SPECIAL_FARE_INFO) as Array<keyof typeof SPECIAL_FARE_INFO>).map((key) => {
+        const selected = draft.specialFare === key;
+        const label = SPECIAL_FARE_LABEL[key];
+        return (
+            <div
+                key={key}
+                className="relative"
+                onMouseEnter={() => setHoveredFare(key)}
+                onMouseLeave={() => setHoveredFare(null)}
+            >
+                <button
+                    type="button"
+                    onClick={() =>
+                        setDraft((d) => ({ ...d, specialFare: selected ? "regular" : key }))
+                    }
+                    className={`px-3.5 py-1.5 rounded-full border text-xs font-medium transition-colors ${
+                        selected
+                            ? "border-[#1c8fc7] text-[#1c8fc7] bg-[#1c8fc7]/5"
+                            : "border-gray-200 text-gray-500 hover:border-gray-300"
+                    }`}
+                >
+                    {label}
+                </button>
+
+                {hoveredFare === key && (
+                    <div className="absolute left-0 top-full mt-2 z-50 w-64">
+                        <div className="relative bg-white rounded-2xl shadow-xl border border-gray-100 px-4 py-3 flex items-start gap-2">
+                            <span className="absolute -top-1.5 left-6 w-3 h-3 bg-white border-l border-t border-gray-100 rotate-45" />
+                            <span className="w-5 h-5 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                                i
+                            </span>
+                            <p className="text-sm font-medium text-red-500 leading-snug">
+                                {SPECIAL_FARE_INFO[key]}
+                            </p>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    })}
+</div>
                 </div>
             </div>
         </div>
@@ -523,8 +542,8 @@ export default function ModifySearchPanel({
 
 const ModifyDateInput = forwardRef<
     HTMLButtonElement,
-    { value?: string; onClick?: () => void; placeholder?: string }
->(function ModifyDateInput({ value, onClick, placeholder }, ref) {
+    { value?: string; onClick?: () => void; placeholder?: string; onClear?: () => void }
+>(function ModifyDateInput({ value, onClick, placeholder, onClear }, ref) {
     return (
         <button
             type="button"
@@ -535,7 +554,21 @@ const ModifyDateInput = forwardRef<
             <span className={value ? "text-gray-900" : "text-gray-400"}>
                 {value || placeholder || "Select date"}
             </span>
-            <HiOutlineCalendar className="w-4 h-4 text-gray-400 shrink-0" />
+             <div className="flex items-center gap-1">
+                {value && onClear && (
+                    <span
+                        onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onClear();
+                        }}
+                        className="p-0.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 cursor-pointer"
+                    >
+                        <HiOutlineX className="w-3.5 h-3.5" />
+                    </span>
+                )}
+                <HiOutlineCalendar className="w-4 h-4 text-gray-400 shrink-0" />
+            </div>
         </button>
     );
 });

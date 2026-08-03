@@ -143,11 +143,18 @@ export async function pollAvailability(
 }
 
 // Index values come from the FareInfo.Index field of the chosen fare in the
-// CollectAvailability response:
-//   ON search - pass the single onward Index
-//   RS search - pass the single combined-fare Index
-//   RT search - pass BOTH the onward and return Index values
-export async function getAirlinePricing({ tokenId, bookingId = "", index }) {
+
+//   Oneway (Domestic or International)
+//     SearchType: "ON" 
+//
+//   Roundtrip International
+//     SearchType: "RS"   
+
+//   Roundtrip Domestic
+//     Called TWICE - once per leg, each with its own SearchType/Index:
+//     SearchType: "ON"  
+//     SearchType: "RT" 
+export async function getAirlinePricing({ tokenId, bookingId = "", index, searchType }) {
     try {
         const res = await apiRequest("/Flights/AirlinePricing", {
             method: "POST",
@@ -155,6 +162,7 @@ export async function getAirlinePricing({ tokenId, bookingId = "", index }) {
                 TokenID: tokenId,
                 BookingID: bookingId,
                 Index: Array.isArray(index) ? index : [index],
+                SearchType: searchType,
             },
         });
 
@@ -276,5 +284,73 @@ export async function getCountryDetails({ searchText }) {
             return { success: false, message: error.message, countries: [] };
         }
         return { success: false, message: "Network error. Please try again.", countries: [] };
+    }
+}
+
+
+//  (baggage, meals)
+export async function getAirlineSSR({ tokenId, bookingId }) {
+    try {
+        const res = await apiRequest("/Flights/AirlineSSR", {
+            method: "POST",
+            body: { TokenID: tokenId, BookingID: bookingId },
+        });
+
+        const payload = res?.ServiceResponse ?? {};
+
+        if (payload.ErrorCode) {
+            return { success: false, message: payload.Message || "Could not fetch add-ons", tokenId, legs: [] };
+        }
+
+        const legs = (payload.Journey || []).map((journey) => ({
+            from: journey.From,
+            to: journey.To,
+            fromName: journey.FromName,
+            toName: journey.ToName,
+            duration: journey.Duration,
+            baggageOptions: (journey.SSRList || []).map((s) => ({
+                code: s.SSRCode,
+                desc: s.SSRDesc,
+                charge: s.SSRCharge,
+                paxType: s.SSRPaxType,
+                type: s.SSRType,
+            })),
+            segments: (journey.Segments || []).map((seg) => ({
+                sid: seg.SID,
+                flightNo: seg.FlightNo,
+                airlineCode: seg.AirlineCode,
+                airlineName: seg.AirlineName,
+                from: seg.DepartureAirportCode,
+                to: seg.ArrivalAirportCode,
+                fromCity: seg.DepartureCityName,
+                toCity: seg.ArrivalCityName,
+                departureTime: seg.DepartureTime,
+                arrivalTime: seg.ArrivalTime,
+                mealOptions: (seg.SSRList || []).map((s) => ({
+                    code: s.SSRCode,
+                    desc: s.SSRDesc,
+                    charge: s.SSRCharge,
+                    paxType: s.SSRPaxType,
+                    type: s.SSRType,
+                })),
+            })),
+        }));
+
+        return {
+            success: true,
+            message: payload.Message || null,
+            tokenId: payload.TokenID || tokenId,
+            from: payload.From,
+            to: payload.To,
+            adt: payload.ADT,
+            chd: payload.CHD,
+            inf: payload.INF,
+            legs,
+        };
+    } catch (error) {
+        if (error instanceof ApiError) {
+            return { success: false, message: error.message, tokenId, legs: [] };
+        }
+        return { success: false, message: "Network error. Please try again.", tokenId, legs: [] };
     }
 }

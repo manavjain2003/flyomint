@@ -22,7 +22,8 @@ import GSTDetailsForm, { gstFormIsValid, type GSTDetails } from "@/app/component
 import LoginDrawer, { isLoggedInSession } from "@/app/components/booking/LoginDrawer";
 import AirlineLogo from "@/app/components/flights/AirlineLogo";
 import type { CabinClass, TripType } from "@/app/components/flights/FlightResults";
-
+import ContactDetailsForm, { contactFormIsValid, type ContactDetails } from "@/app/components/booking/ContactDetailsForm";
+import { getUserProfile } from "@/app/lib/authApi";
 
 type Baggage = { PTC?: string; CabinBag?: string; CheckinBaggage?: string };
 type PTCFareEntry = { PTC: string; Fare: number; Tax: number; GrossFare: number; NetFare: number };
@@ -71,17 +72,19 @@ export type ReviewBookingProps = {
     adults: number;
     children: number;
     infants: number;
+    searchType: string;  
     cabinClass: CabinClass;
     tokenId: string;
     bookingId: string;
     index: string[];
     onBack: () => void;
-    onContinueToPayment: (data: {
-        passengers: PassengerDetails[];
-        gst: GSTDetails | null;
-        totalAmount: number;
-        pricing: { onward: LegSelection | null; ret: LegSelection | null };
-    }) => void;
+   onContinue: (data: {
+    passengers: PassengerDetails[];
+    gst: GSTDetails | null;
+    contact: ContactDetails | null;
+    totalAmount: number;
+    pricing: { onward: LegSelection | null; ret: LegSelection | null };
+}) => void;
 };
 
 const CABIN_LABEL: Record<CabinClass, string> = {
@@ -327,15 +330,14 @@ export default function ReviewBooking({
     children,
     infants,
     cabinClass,
-    tokenId,
-    bookingId,
-    index,
-    onBack,
-    onContinueToPayment,
+    tokenId, bookingId, index, searchType, onBack, onContinue
 }: ReviewBookingProps) {
     const [isLoggedIn, setIsLoggedIn] = useState(false);
 const [loginOpen, setLoginOpen] = useState(false);
-
+const [contact, setContact] = useState<ContactDetails | null>(null);
+const [contactInitial, setContactInitial] = useState<Partial<ContactDetails>>({});
+const [contactLoading, setContactLoading] = useState(false);
+const [profileName, setProfileName] = useState("");
     const [pricingLoading, setPricingLoading] = useState(false);
     const [pricingError, setPricingError] = useState<string | null>(null);
     const [pricedOnward, setPricedOnward] = useState<LegSelection | null>(null);
@@ -344,6 +346,7 @@ const [loginOpen, setLoginOpen] = useState(false);
     const [expirySeconds, setExpirySeconds] = useState<number | null>(null);
 const [ruleLoading, setRuleLoading] = useState(false);
 const [ruleError, setRuleError] = useState<string | null>(null);
+const [pricedBookingId, setPricedBookingId] = useState<string>(bookingId);
 const [ruleData, setRuleData] = useState<any[] | null>(null);
     const [passengers, setPassengers] = useState<PassengerDetails[]>([]);
     const [gst, setGst] = useState<GSTDetails | null>(null);
@@ -352,11 +355,33 @@ useEffect(() => {
     setIsLoggedIn(isLoggedInSession());
 }, []);
 
+async function fetchContactProfile() {
+    setContactLoading(true);
+    const res = await getUserProfile();
+    setContactLoading(false);
+
+    if (!res.success) return;
+
+    setProfileName(res.name || "");
+    setContactInitial({
+        email: res.email || "",
+        mobile: res.mobile || "",
+        countryCode: res.countryCode || "+91",
+    });
+}
+
+useEffect(() => {
+    if (isLoggedIn) {
+        fetchPricing();
+        fetchContactProfile();
+    }
+}, [isLoggedIn]);
+
 async function fetchPricing() {
     setPricingLoading(true);
     setPricingError(null);
 
-    const res = await getAirlinePricing({ tokenId, bookingId, index });
+    const res = await getAirlinePricing({ tokenId, bookingId, index, searchType });
     setPricingLoading(false);
 
     if (!res.success || !res.pricing) {
@@ -382,10 +407,11 @@ async function fetchPricing() {
         return;
     }
 
-    setPricedOnward(onwardLeg);
-    setPricedReturn(returnLeg);
-    setChecklist(res.pricing.fnuLnuSettings?.TravellerCheckList ?? null);
-    setExpirySeconds(parseExpiryToSeconds(res.pricing.bookingExpiryTime));
+setPricedOnward(onwardLeg);
+setPricedReturn(returnLeg);
+setChecklist(res.pricing.fnuLnuSettings?.TravellerCheckList ?? null);
+setExpirySeconds(parseExpiryToSeconds(res.pricing.bookingExpiryTime));
+setPricedBookingId(res.pricing.bookingId || bookingId); 
 }
 async function fetchFareRule() {
     setRuleLoading(true);
@@ -438,20 +464,23 @@ useEffect(() => {
     const gstMandatory = Boolean(checklist?.GSTMandate);
     const showTravellerForms = isPriced && checklist;
 
-    const readyToPay = showTravellerForms
-        ? passengerFormIsValid(passengers, checklist!) && (!gst || gstFormIsValid(gst, gstMandatory))
-        : false;
+  const readyToPay = showTravellerForms
+    ? passengerFormIsValid(passengers, checklist!) &&
+      contactFormIsValid(contact) &&
+      (!gst || gstFormIsValid(gst, gstMandatory))
+    : false;
 
     const travellerCount = adults + children + infants;
 
-    function handleContinueToPayment() {
-        onContinueToPayment({
-            passengers,
-            gst,
-            totalAmount,
-            pricing: { onward: displayOnward, ret: isRoundtrip ? displayReturn : null },
-        });
-    }
+function handleContinueToPayment() {
+    onContinue({
+        passengers,
+        gst,
+        contact,
+        totalAmount,
+        pricing: { onward: displayOnward, ret: isRoundtrip ? displayReturn : null },
+    });
+}
 
 
  
@@ -520,18 +549,24 @@ function handleContinueClick() {
 
                     {legs.length > 0 && <RulesCard legs={legs} />}
 
-                    {showTravellerForms && (
-                        <div className="space-y-5 mt-5">
-                            <PassengerDetailsForm
-                                adults={adults}
-                                children={children}
-                                infants={infants}
-                                checklist={checklist!}
-                                onChange={setPassengers}
-                            />
-                            {checklist!.GST_Accepted && <GSTDetailsForm mandatory={gstMandatory} onChange={setGst} />}
-                        </div>
-                    )}
+                 {showTravellerForms && (
+    <div className="space-y-5 mt-5">
+        <ContactDetailsForm
+            initial={contactInitial}
+            fetchedName={profileName}
+            loading={contactLoading}
+            onChange={setContact}
+        />
+        <PassengerDetailsForm
+            adults={adults}
+            children={children}
+            infants={infants}
+            checklist={checklist!}
+            onChange={setPassengers}
+        />
+        {checklist!.GST_Accepted && <GSTDetailsForm mandatory={gstMandatory} onChange={setGst} />}
+    </div>
+)}
                 </div>
 
                 <div className="bg-white rounded-2xl border border-gray-200 p-5 sticky top-6">
@@ -589,7 +624,7 @@ function handleContinueClick() {
                                     : "bg-gray-100 text-gray-400 cursor-not-allowed"
                             }`}
                         >
-                            Continue to Payment <HiOutlineArrowRight className="w-4 h-4" />
+                            Continue <HiOutlineArrowRight className="w-4 h-4" />
                         </button>
                     ) : (
                         <button

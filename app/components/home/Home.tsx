@@ -26,20 +26,22 @@ const FLIGHT_TYPES: { key: FlightType; label: string }[] = [
     { key: "connecting", label: "Connecting" },
 ];
 
-const SPECIAL_FARES: { key: SpecialFare; label: string; save?: string }[] = [
-    { key: "regular", label: "Regular" },
-    { key: "student", label: "Student", save: "Save 10%" },
-    { key: "senior", label: "Senior Citizen", save: "Save 10%" },
-    { key: "armed", label: "Armed Forces", save: "Save 10%" },
+const SPECIAL_FARES: { key: Exclude<SpecialFare, "regular">; label: string }[] = [
+    { key: "student", label: "Student" },
+    { key: "senior", label: "Senior Citizen" },
+    { key: "armed", label: "Armed Forces" },
 ];
-
 const CABIN_CLASSES: { key: CabinClass; label: string; desc: string }[] = [
     { key: "economy", label: "Economy", desc: "Standard seating" },
     { key: "premium", label: "Premium Economy", desc: "Extra legroom & perks" },
     { key: "business", label: "Business", desc: "Premium comfort" },
     { key: "first", label: "First Class", desc: "Luxury experience" },
 ];
-
+const SPECIAL_FARE_INFO: Record<Exclude<SpecialFare, "regular">, string> = {
+    student: "Student fares are not applicable for children/infants",
+    senior: "Applicable only for passengers aged 60 years and above",
+    armed: "Valid defence ID card required at airport check-in",
+};
 const HERO_IMAGE_URL =
     "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?q=80&w=2400";
 
@@ -97,7 +99,7 @@ export default function Hero() {
     const [toLoading, setToLoading] = useState(false);
     const [fromError, setFromError] = useState<string | null>(null);
     const [toError, setToError] = useState<string | null>(null);
-
+const [hoveredFare, setHoveredFare] = useState<SpecialFare | null>(null);
     const fromRef = useRef<HTMLDivElement>(null);
     const toRef = useRef<HTMLDivElement>(null);
     const fromDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -339,25 +341,37 @@ export default function Hero() {
                 </svg>
             </div>
 
-            <div className="relative max-w-7xl mx-auto px-4 sm:px-6 pt-16 pb-40 sm:pt-20 sm:pb-48">
+            <div className="relative max-w-7xl mx-auto px-4 sm:px-6 pt-16 pb-40 sm:pt-10 sm:pb-40">
                 <div className="max-w-2xl" />
             </div>
 
             <div className="relative max-w-7xl mx-auto px-4 sm:px-6 -mt-28 sm:-mt-32 pb-16">
                 <div className="bg-white rounded-3xl shadow-xl p-8 sm:p-10 lg:p-14 min-h-[420px]">
                     <div className="flex items-center gap-8 mb-8">
-                        <RadioPill
-                            label="One Way"
-                            checked={tripType === "oneway"}
-                            onClick={() => {
-                                setTripType("oneway");
-                            }}
-                        />
-                        <RadioPill
-                            label="Round Trip"
-                            checked={tripType === "roundtrip"}
-                            onClick={() => setTripType("roundtrip")}
-                        />
+                        <div className="flex items-center gap-3">
+    <button
+        type="button"
+        onClick={() => setTripType("oneway")}
+        className={`px-5 py-2 rounded-full border text-sm font-medium transition-colors ${
+            tripType === "oneway"
+                ? "border-[#1c8fc7] text-[#1c8fc7] bg-[#1c8fc7]/5"
+                : "border-gray-200 text-gray-500 hover:border-gray-300"
+        }`}
+    >
+        One Way
+    </button>
+    <button
+        type="button"
+        onClick={() => setTripType("roundtrip")}
+        className={`px-5 py-2 rounded-full border text-sm font-medium transition-colors ${
+            tripType === "roundtrip"
+                ? "border-[#1c8fc7] text-[#1c8fc7] bg-[#1c8fc7]/5"
+                : "border-gray-200 text-gray-500 hover:border-gray-300"
+        }`}
+    >
+        Round Trip
+    </button>
+</div>
                     </div>
 
                     <div className="flex flex-col lg:flex-row lg:items-end gap-5">
@@ -454,32 +468,47 @@ export default function Hero() {
                         </div>
 
                         <div className="w-full lg:flex-1 lg:min-w-0">
-                            <DatePicker
-                                selected={returnDate}
-                                onChange={(date) => {
-                                    setReturnDate(date);
-                                    if (date) setTripType("roundtrip");
-                                }}
-                                minDate={departureDate}
-                                maxDate={MAX_DATE}
-                                monthsShown={2}
-                                popperPlacement="bottom-start"
-                                wrapperClassName="block w-full"
-                                openToDate={TODAY}
-                                customInput={
-                                    <Field label="Return">
-                                        <div className="flex items-center justify-between">
-                                            <span
-                                                className={`text-base ${returnDate ? "font-semibold text-gray-900" : "font-medium text-gray-400"
-                                                    }`}
-                                            >
-                                                {returnDate ? formatShort(returnDate) : "Add return"}
-                                            </span>
-                                            <HiOutlineCalendar className="w-5 h-5 text-gray-400" />
-                                        </div>
-                                    </Field>
-                                }
-                            />
+   <DatePicker
+    selected={returnDate}
+    onChange={(date) => {
+        setReturnDate(date);
+        if (date) setTripType("roundtrip");
+    }}
+    minDate={departureDate}
+    maxDate={MAX_DATE}
+    monthsShown={2}
+    popperPlacement="bottom-start"
+    wrapperClassName="block w-full"
+    openToDate={TODAY}
+    customInput={
+        <Field label="Return">
+            <div className="flex items-center justify-between">
+                <span
+                    className={`text-base ${returnDate ? "font-semibold text-gray-900" : "font-medium text-gray-400"
+                        }`}
+                >
+                    {returnDate ? formatShort(returnDate) : "Add return"}
+                </span>
+                {returnDate ? (
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setReturnDate(null);
+                            setTripType("oneway");
+                        }}
+                        aria-label="Remove return date"
+                        className="text-gray-400 hover:text-gray-600 transition-colors shrink-0"
+                    >
+                        <HiX className="w-4 h-4" />
+                    </button>
+                ) : (
+                    <HiOutlineCalendar className="w-5 h-5 text-gray-400 shrink-0" />
+                )}
+            </div>
+        </Field>
+    }
+/>
                         </div>
 
                         <div className="relative w-full lg:flex-[1.2] lg:min-w-0" ref={travelersRef}>
@@ -622,34 +651,47 @@ export default function Hero() {
                                 </div>
                             </div>
 
-                            <div className="flex items-center flex-wrap gap-x-5 gap-y-2">
-                                <span className="text-xs font-medium text-gray-500">Special fare:</span>
-                                {SPECIAL_FARES.map((f) => (
-                                    <button
-                                        key={f.key}
-                                        type="button"
-                                        onClick={() => setSpecialFare(f.key)}
-                                        className="flex items-center gap-1.5"
-                                    >
-                                        <span
-                                            className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${specialFare === f.key ? "border-[#FF7626]" : "border-gray-300"
-                                                }`}
-                                        >
-                                            {specialFare === f.key && (
-                                                <span className="w-2 h-2 rounded-full bg-[#FF7626]" />
-                                            )}
-                                        </span>
-                                        <span className="text-sm text-gray-700">
-                                            {f.label}
-                                            {f.save && (
-                                                <span className="block text-[11px] text-green-600 leading-tight -mt-0.5">
-                                                    {f.save}
-                                                </span>
-                                            )}
-                                        </span>
-                                    </button>
-                                ))}
-                            </div>
+ <div className="flex items-center flex-wrap gap-2">
+    <span className="text-sm font-semibold text-gray-900">Special Fares</span>
+    <span className="text-xs text-gray-400 mr-1">(Optional)</span>
+    {SPECIAL_FARES.map((f) => {
+        const selected = specialFare === f.key;
+        return (
+            <div
+                key={f.key}
+                className="relative"
+                onMouseEnter={() => setHoveredFare(f.key)}
+                onMouseLeave={() => setHoveredFare(null)}
+            >
+                <button
+                    type="button"
+                    onClick={() => setSpecialFare(selected ? "regular" : f.key)}
+                    className={`px-4 py-1.5 rounded-full border text-sm font-medium transition-colors ${
+                        selected
+                            ? "border-[#FF7626] text-[#FF7626] bg-[#FF7626]/5"
+                            : "border-gray-200 text-gray-500 hover:border-gray-300"
+                    }`}
+                >
+                    {f.label}
+                </button>
+
+                {hoveredFare === f.key && (
+                    <div className="absolute left-0 top-full mt-2 z-50 w-64 animate-in fade-in duration-150">
+                        <div className="relative bg-white rounded-2xl shadow-xl border border-gray-100 px-4 py-3 flex items-start gap-2">
+                            <span className="absolute -top-1.5 left-6 w-3 h-3 bg-white border-l border-t border-gray-100 rotate-45" />
+                            <span className="w-5 h-5 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                                i
+                            </span>
+                            <p className="text-sm font-medium text-red-500 leading-snug">
+                                {SPECIAL_FARE_INFO[f.key]}
+                            </p>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    })}
+</div>
                         </div>
 
                         <div className="flex flex-col items-end gap-2 shrink-0">

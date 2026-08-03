@@ -11,7 +11,7 @@ export async function requestLoginOtp(mobile) {
 
         const payload = res?.ServiceResponse ?? {};
 
-        console.log("Raw payload:", payload); 
+        console.log("Raw payload:", payload);
         console.log("Raw OTP value:", payload.OTP);
 
         if (payload.ErrorCode) {
@@ -71,16 +71,23 @@ export async function verifyLoginOtp({ mobile, userKey, otp }) {
 
 // ---------------------------------------------------------------------------
 // Logged-in user profile
+//
+// NOTE: these calls used to pass `token: getStoredUniqueKey()` directly, which
+// bypassed getUniqueKey()'s validity check AND apiRequest's 401-retry-with-
+// refresh logic entirely (a raw localStorage read of a possibly-expired key
+// would just be sent as-is, fail, and never trigger a refresh). Now they let
+// apiRequest resolve the key itself via getUniqueKey(), so a stale/expiring
+// key gets refreshed automatically before or after the call.
+// getStoredUniqueKey() is still used as a cheap early guard so we don't fire
+// a network call when there's clearly no session at all.
 // ---------------------------------------------------------------------------
 
 export async function getUserProfile() {
     try {
-        const token = getStoredUniqueKey();
-        if (!token) return { success: false, message: "Not logged in." };
+        if (!getStoredUniqueKey()) return { success: false, message: "Not logged in." };
 
         const res = await apiRequest("/Auth/UserProfile", {
             method: "GET",
-            token,
         });
 
         const payload = res?.ServiceResponse ?? {};
@@ -108,12 +115,10 @@ export async function getUserProfile() {
 
 export async function requestProfileOtp({ mobile, email } = {}) {
     try {
-        const token = getStoredUniqueKey();
-        if (!token) return { success: false, message: "Not logged in." };
+        if (!getStoredUniqueKey()) return { success: false, message: "Not logged in." };
 
         const res = await apiRequest("/Auth/GenerateVerifyOTP", {
             method: "POST",
-            token,
             body: { Mobile: mobile || "", Email: email || "" },
         });
 
@@ -145,14 +150,12 @@ export async function requestProfileOtp({ mobile, email } = {}) {
 
 export async function verifyProfileOtp({ mobile, email, otp }) {
     try {
-        const token = getStoredUniqueKey();
-        if (!token) return { success: false, message: "Not logged in." };
+        if (!getStoredUniqueKey()) return { success: false, message: "Not logged in." };
 
         const encryptedOtp = encryptOtp(otp);
 
         const res = await apiRequest("/Auth/VerifyOTP", {
             method: "POST",
-            token,
             body: { Mobile: mobile || "", Email: email || "", OTP: encryptedOtp },
         });
 
@@ -180,12 +183,10 @@ export async function verifyProfileOtp({ mobile, email, otp }) {
 
 export async function updateProfile({ name, emailVerificationCode = "", mobileVerificationCode = "" }) {
     try {
-        const token = getStoredUniqueKey();
-        if (!token) return { success: false, message: "Not logged in." };
+        if (!getStoredUniqueKey()) return { success: false, message: "Not logged in." };
 
         const res = await apiRequest("/Auth/UpdateProfile", {
             method: "POST",
-            token,
             body: {
                 Name: name,
                 EmailVerificationCode: emailVerificationCode,
@@ -209,15 +210,13 @@ export async function updateProfile({ name, emailVerificationCode = "", mobileVe
 
 export async function logoutUser() {
     try {
-        const token = getStoredUniqueKey();
-        if (!token) {
+        if (!getStoredUniqueKey()) {
             clearLoginSession();
             return { success: true, message: "Logged out." };
         }
 
         const res = await apiRequest("/Auth/Logout", {
             method: "POST",
-            token,
         });
 
         const payload = res?.ServiceResponse ?? {};
@@ -234,8 +233,6 @@ export async function logoutUser() {
 
         return { success: true, message: payload.Message || "Logged out successfully." };
     } catch (error) {
-        // Even if the network call fails, clear the local session so the UI
-        // doesn't get stuck showing the user as logged in.
         clearLoginSession();
         if (error instanceof ApiError) return { success: false, message: error.message };
         return { success: false, message: "Network error. Please try again." };
