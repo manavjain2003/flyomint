@@ -53,3 +53,11 @@ html::-webkit-scrollbar {
 .animate-shake {
   animation: shake 0.4s ease-in-out;
 }
+
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none;    /* Firefox */
+}

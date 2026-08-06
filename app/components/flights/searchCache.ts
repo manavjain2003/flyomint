@@ -3,7 +3,7 @@
 import type { Airport, CabinClass, FlightType, SearchCriteria, TripType } from "@/app/components/flights/types";
 
 const LAST_SEARCH_STORAGE_KEY = "flights:lastSearch";
-const LAST_SEARCH_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours — flight dates go stale fast
+const LAST_SEARCH_MAX_AGE_MS = 24 * 60 * 60 * 1000; 
 
 export type CachedSearch = {
     tripType: TripType;

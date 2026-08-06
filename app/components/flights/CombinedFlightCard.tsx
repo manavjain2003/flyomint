@@ -14,6 +14,7 @@ export default function CombinedFlightCard({
     onBookPair,
     travelerCounts,
     tokenId,
+    searchType,   
 }: {
     pair: JourneyPair;
     isExpanded: boolean;
@@ -21,6 +22,7 @@ export default function CombinedFlightCard({
     onBookPair: (pair: JourneyPair) => void;
     travelerCounts?: TravelerCounts;
     tokenId?: string;
+    searchType?: string;
 }) {
     const onwardFares = useMemo(
         () => [...(pair.onward.FareInfo ?? [])].sort((a, b) => primaryFareAmount(a) - primaryFareAmount(b)),
@@ -96,6 +98,7 @@ const ruleIndex = [onwardFare?.Index, returnFare?.Index].filter(Boolean) as stri
             ]}
             travelerCounts={travelerCounts}
             tokenId={tokenId}
+            searchType={searchType}
         />
     </div>
 )}

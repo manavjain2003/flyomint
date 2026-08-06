@@ -16,6 +16,7 @@ export default function CombinedLegRow({
     onSelectFare,
     travelerCounts,
     tokenId,
+    searchType     
 }: {
     label: string;
     journey: Journey;
@@ -24,6 +25,7 @@ export default function CombinedLegRow({
     onSelectFare: (idx: number) => void;
     travelerCounts?: TravelerCounts;
     tokenId?: string;
+    searchType?: string;
 }) {
     const firstSeg = journey.Segments[0];
     const lastSeg = journey.Segments[journey.Segments.length - 1];
@@ -130,6 +132,7 @@ export default function CombinedLegRow({
                         tokenId={tokenId}
                         showBookButton={true}
                         selectedIndex={null}
+                        searchType={searchType}     
                     />
                 </div>
             )}

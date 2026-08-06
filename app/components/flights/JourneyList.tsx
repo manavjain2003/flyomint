@@ -20,7 +20,8 @@ export default function JourneyList({
     onBookFare,
     directBooking = false,
     travelerCounts,
-    tokenId, // add this
+    tokenId, 
+    searchType,
 }: {
     title: string;
     from: string;
@@ -33,10 +34,10 @@ export default function JourneyList({
     setExpandedGroupId: (id: string | null) => void;
     onSelectFlight?: (journey: Journey, fare: FareInfo) => void;
     onBookFare?: (journey: Journey, fare: FareInfo) => void;
-    /** true for oneway results — skips Select+footer and books straight through */
     directBooking?: boolean;
     travelerCounts?: TravelerCounts;
-    tokenId?: string; // add this
+    tokenId?: string; 
+    searchType?: string
 }) {
     const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
     const sentinelRef = useRef<HTMLDivElement>(null);
@@ -108,19 +109,20 @@ export default function JourneyList({
                 <div className="flex flex-col gap-3 p-4">
                     {visibleJourneys.map((journey, idx) => (
                         <FlightCard
-                            key={journey.GroupId + idx}
-                            journey={journey}
-                            isSelected={journey.GroupId === selectedGroupId}
-                            isExpanded={journey.GroupId === expandedGroupId}
-                            onToggleExpand={() =>
-                                setExpandedGroupId(journey.GroupId === expandedGroupId ? null : journey.GroupId)
-                            }
-                            onSelectFlight={onSelectFlight}
-                            onBookFare={onBookFare}
-                            directBooking={directBooking}
-                            travelerCounts={travelerCounts}
-                            tokenId={tokenId}
-                        />
+    key={journey.GroupId + idx}
+    journey={journey}
+    isSelected={journey.GroupId === selectedGroupId}
+    isExpanded={journey.GroupId === expandedGroupId}
+    onToggleExpand={() =>
+        setExpandedGroupId(journey.GroupId === expandedGroupId ? null : journey.GroupId)
+    }
+    onSelectFlight={onSelectFlight}
+    onBookFare={onBookFare}
+    directBooking={directBooking}
+    travelerCounts={travelerCounts}
+    tokenId={tokenId}
+    searchType={searchType}   
+/>
                     ))}
 
                     {hasMore && (

@@ -116,9 +116,6 @@ function scheduleRefresh() {
     refreshTimer = setTimeout(handleExpiry, fireAt);
 }
 
-// Terminal failure: give up on the login session entirely. Clears everything,
-// including localStorage, and tells the rest of the app to log the UI out.
-// This never re-reads localStorage or re-schedules — it's a hard stop.
 function forceLogout() {
     cachedKey = null;
     clearScheduledRefresh();
@@ -140,20 +137,12 @@ async function handleExpiry() {
             console.error("ResetToken failed:", e);
         }
     } else if (!isVisible) {
-        // Tab isn't visible — don't spend a network call now. The
-        // visibilitychange listener below will re-check as soon as it's
-        // foregrounded again.
         return;
     }
 
-    // ResetToken genuinely failed (or there's no login key to refresh at all).
-    // Do not fall back to re-reading the same expired localStorage values —
-    // that would recreate the exact same expired state and loop forever.
     forceLogout();
 }
 
-// On tab focus, re-validate whatever is cached. If it's stale, try exactly one
-// refresh via the same handleExpiry() path (which itself won't loop).
 if (typeof document !== "undefined") {
     document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible" && cachedKey?.isLoginKey) {
@@ -195,11 +184,6 @@ export async function getUniqueKey({ forceRefresh = false } = {}) {
         if (cachedKey?.isLoginKey && cachedKey?.uniqueKey) {
             inFlightRequest = fetchResetToken(cachedKey.uniqueKey)
                 .catch((e) => {
-                    // A login key failing to refresh should end the session, not
-                    // silently downgrade to a guest key — otherwise the app keeps
-                    // working as "guest" while localStorage/UI still claim the
-                    // user is logged in, and no future call will ever retry
-                    // fetchResetToken again since isLoginKey becomes false.
                     forceLogout();
                     throw e;
                 })
@@ -261,8 +245,6 @@ export async function apiRequest(endpoint, options = {}) {
     let { response, data } = await doFetch(endpoint, { method, body, headers, authHeader });
 
     if (needsAuth && response.status === 401) {
-        // Always try a forced refresh on 401, even if an explicit token was
-        // passed in — an explicit (possibly stale) token shouldn't skip retry.
         const freshKey = await getUniqueKey({ forceRefresh: true });
         ({ response, data } = await doFetch(endpoint, {
             method,

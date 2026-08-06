@@ -11,8 +11,8 @@ export type TravellerCheckList = {
     GST_Accepted?: boolean;
     GSTMandate?: boolean;
     PassportNo?: boolean;
-    PDOE?: boolean; // Passport Date Of Expiry
-    PIC?: boolean; // Passport Issuing Country
+    PDOE?: boolean;
+    PIC?: boolean;
     Nationality?: boolean;
     FNMaxLen?: number;
     LNMaxLen?: number;
@@ -28,6 +28,8 @@ export type TravellerCheckList = {
     ChildDOBEndRange?: string;
     InfantDOBStartRange?: string;
     InfantDOBEndRange?: string;
+    FnuMessage?: string; // "required" | "optional" | etc.
+    LnuMessage?: string;
 };
 
 export type PTC = "ADT" | "CHD" | "INF";
@@ -88,7 +90,14 @@ function dobRequired(ptc: PTC, checklist: TravellerCheckList) {
     if (ptc === "CHD") return Boolean(checklist.ChildDOBMandate);
     return Boolean(checklist.InfantDOBMandate);
 }
+function firstNameRequired(checklist: TravellerCheckList) {
+    // Default to required if the API omits it, to preserve current safe behavior.
+    return (checklist.FnuMessage ?? "required").toLowerCase() === "required";
+}
 
+function lastNameRequired(checklist: TravellerCheckList) {
+    return (checklist.LnuMessage ?? "required").toLowerCase() === "required";
+}
 function titleRequired(ptc: PTC, checklist: TravellerCheckList) {
     if (ptc === "ADT") return Boolean(checklist.AdultTitleMandate);
     if (ptc === "CHD") return Boolean(checklist.ChildTitleMandate);
@@ -157,14 +166,23 @@ function clearSavedPassengers() {
 export function passengerFormIsValid(passengers: PassengerDetails[], checklist: TravellerCheckList): boolean {
     const fnMin = checklist.FNMinLen ?? 1;
     const lnMin = checklist.LNMinLen ?? 1;
+    const fnRequired = firstNameRequired(checklist);
+    const lnRequired = lastNameRequired(checklist);
 
     return passengers.every((p) => {
         if (titleRequired(p.ptc, checklist) && !p.title) return false;
-        if (p.firstName.trim().length < fnMin) return false;
-        if (p.lastName.trim().length < lnMin) return false;
+
+        const firstName = p.firstName.trim();
+        const lastName = p.lastName.trim();
+
+        if (fnRequired && firstName.length < fnMin) return false;
+        if (!fnRequired && firstName.length > 0 && firstName.length < fnMin) return false;
+
+        if (lnRequired && lastName.length < lnMin) return false;
+        if (!lnRequired && lastName.length > 0 && lastName.length < lnMin) return false;
+
         if (dobRequired(p.ptc, checklist) && !p.dob) return false;
 
-        //  if a DOB is present, it must fall inside the allowed range for that PTC
         if (p.dob) {
             const { min, max } = dobRange(p.ptc, checklist);
             if (min && p.dob < min) return false;
@@ -365,29 +383,29 @@ export default function PassengerDetailsForm({
                                     </select>
                                 </div>
 
-                                <div className="col-span-1 sm:col-span-1">
-                                    <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1 block">
-                                        First Name *
-                                    </label>
-                                    <input
-                                        value={p.firstName}
-                                        maxLength={fnMax}
-                                        onChange={(e) => updatePassenger(idx, { firstName: e.target.value })}
-                                        className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm text-gray-900 outline-none focus:border-[#1c8fc7]"
-                                    />
-                                </div>
+<div className="col-span-1 sm:col-span-1">
+    <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1 block">
+        First Name{firstNameRequired(checklist) ? " *" : ""}
+    </label>
+    <input
+        value={p.firstName}
+        maxLength={fnMax}
+        onChange={(e) => updatePassenger(idx, { firstName: e.target.value })}
+        className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm text-gray-900 outline-none focus:border-[#1c8fc7]"
+    />
+</div>
 
-                                <div>
-                                    <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1 block">
-                                        Last Name *
-                                    </label>
-                                    <input
-                                        value={p.lastName}
-                                        maxLength={lnMax}
-                                        onChange={(e) => updatePassenger(idx, { lastName: e.target.value })}
-                                        className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm text-gray-900 outline-none focus:border-[#1c8fc7]"
-                                    />
-                                </div>
+<div>
+    <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1 block">
+        Last Name{lastNameRequired(checklist) ? " *" : ""}
+    </label>
+    <input
+        value={p.lastName}
+        maxLength={lnMax}
+        onChange={(e) => updatePassenger(idx, { lastName: e.target.value })}
+        className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm text-gray-900 outline-none focus:border-[#1c8fc7]"
+    />
+</div>
 
                                 <div>
                                     <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1 block">

@@ -192,12 +192,6 @@ const [hoveredFare, setHoveredFare] = useState<Exclude<SpecialFare, "regular"> |
 
         writeCachedSearch({
             tripType: draft.tripType,
-            // Home stores this as the 3-way "all" | "direct" | "connecting"
-            // FlightType, while this panel only tracks a directOnly boolean.
-            // Map it through so a "Direct" choice made here is still
-            // reflected correctly if the user navigates back to Home —
-            // otherwise Home's cache kept whatever FlightType it last had,
-            // which could silently disagree with the search actually run.
             flightType: draft.directOnly ? "direct" : "all",
             specialFare: draft.specialFare,
             from: draft.from,
@@ -514,7 +508,10 @@ const [hoveredFare, setHoveredFare] = useState<Exclude<SpecialFare, "regular"> |
                             : "border-gray-200 text-gray-500 hover:border-gray-300"
                     }`}
                 >
-                    {label}
+                          <span className="flex items-center gap-1">
+                       {label}
+                       {selected && <HiOutlineX className="w-3 h-3" />}
+                   </span>
                 </button>
 
                 {hoveredFare === key && (

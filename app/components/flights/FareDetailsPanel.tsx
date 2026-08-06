@@ -36,10 +36,6 @@ type RuleEntry = {
     sections: RuleSection[];
 };
 
-/** A single priced leg to show in the panel. For a one-way/single-flight card
- * this array will have exactly one entry (no label shown). For a combined
- * (onward+return) fare it will have two, labeled so all tabs stay unified
- * instead of rendering two separate panels. */
 export type FareLeg = {
     label?: string; // e.g. "Onward" / "Return" — omit for single-leg usage
     journey: Journey;
@@ -64,10 +60,13 @@ export default function FareDetailsPanel({
     legs,
     travelerCounts,
     tokenId,
+    searchType,
 }: {
     legs: FareLeg[];
     travelerCounts?: TravelerCounts;
     tokenId?: string;
+    searchType?: string;
+
 }) {
     const [tab, setTab] = useState<DetailTab>("FLIGHT");
     const tabs: DetailTab[] = ["FLIGHT", "BAGGAGE", "FARE", "RULES"];
@@ -79,7 +78,6 @@ export default function FareDetailsPanel({
     const [ruleFetchedFor, setRuleFetchedFor] = useState<string | null>(null);
     const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
 
-    // Combine rule indices across all legs so RULES fetches once for the whole fare.
     const effectiveIndex = legs
         .flatMap((l) => (l.fare.Index ? [l.fare.Index] : []))
         .filter(Boolean);
@@ -89,7 +87,7 @@ export default function FareDetailsPanel({
         if (!tokenId || effectiveIndex.length === 0) return;
         setRuleLoading(true);
         setRuleError(null);
-        const res = await getAirlineFareRule({ tokenId, index: effectiveIndex });
+        const res = await getAirlineFareRule({ tokenId, index: effectiveIndex, searchType });
         setRuleLoading(false);
         if (!res.success) {
             setRuleError(res.message || "Could not fetch fare rules.");

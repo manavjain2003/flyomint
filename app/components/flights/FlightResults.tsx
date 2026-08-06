@@ -57,7 +57,7 @@ export type FlightResultsProps = {
     returnDate?: Date | null;
     tripType: TripType;
     fromAirport?: Airport | null;
-toAirport?: Airport | null;
+    toAirport?: Airport | null;
     adults: number;
     children: number;
     infants: number;
@@ -72,8 +72,40 @@ toAirport?: Airport | null;
         tokenId: string;
         bookingId: string;
         index: string[];
+        searchType: string;
     }) => void;
 };
+
+
+function FlightSearchSkeleton({ fromLabel, toLabel }: { fromLabel: string; toLabel: string }) {
+    return (
+        <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                <div className="flex items-center gap-3">
+                    <span className="text-[11px] font-bold tracking-wide text-white bg-[#1c8fc7] rounded px-2 py-1 uppercase">
+                        Searching
+                    </span>
+                    <span className="text-sm text-gray-400">...</span>
+                </div>
+                <p className="text-sm font-semibold text-gray-900">
+                    {fromLabel} <span className="text-gray-400">&harr;</span> {toLabel}
+                </p>
+            </div>
+            <div className="divide-y divide-gray-100">
+                {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="px-5 py-4 flex items-center gap-4 animate-pulse">
+                        <div className="w-10 h-10 rounded-full bg-gray-100 shrink-0" />
+                        <div className="flex-1 space-y-2">
+                            <div className="h-3 w-1/3 bg-gray-100 rounded" />
+                            <div className="h-3 w-1/2 bg-gray-100 rounded" />
+                        </div>
+                        <div className="h-8 w-24 bg-gray-100 rounded-full shrink-0" />
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
 
 export default function FlightResults({
     from: fromProp,
@@ -110,9 +142,38 @@ export default function FlightResults({
         directOnly: directOnlyProp,
         specialFare: specialFareProp,
     }));
+
+
+    useEffect(() => {
+        setCriteria((prev) => {
+            if (prev.from !== fromProp || prev.to !== toProp) return prev;
+
+            const resolvedFromCity = fromCityProp || prev.fromCity;
+            const resolvedToCity = toCityProp || prev.toCity;
+            const resolvedFromAirport = fromAirportProp ?? prev.fromAirport;
+            const resolvedToAirport = toAirportProp ?? prev.toAirport;
+
+            const unchanged =
+                resolvedFromCity === prev.fromCity &&
+                resolvedToCity === prev.toCity &&
+                resolvedFromAirport === prev.fromAirport &&
+                resolvedToAirport === prev.toAirport;
+
+            if (unchanged) return prev;
+
+            return {
+                ...prev,
+                fromCity: resolvedFromCity,
+                toCity: resolvedToCity,
+                fromAirport: resolvedFromAirport,
+                toAirport: resolvedToAirport,
+            };
+        });
+    }, [fromProp, toProp, fromCityProp, toCityProp, fromAirportProp, toAirportProp]);
+
     const { from, to, fromCity, toCity, tripType, adults, children, infants, cabinClass, directOnly } = criteria;
-    const fromLabel = formatAirportCodeLabel(from, fromCity);
-    const toLabel = formatAirportCodeLabel(to, toCity);
+    const fromLabel = formatAirportCodeLabel(from, fromAirportProp?.CityName || fromCity);
+    const toLabel = formatAirportCodeLabel(to, toAirportProp?.CityName || toCity);
 
     const [selectedDate, setSelectedDate] = useState<Date>(departureDateProp);
     const [returnDate, setReturnDate] = useState<Date | null>(returnDateProp);
@@ -178,6 +239,9 @@ export default function FlightResults({
                 },
             ],
             directFlight: directOnly,
+            student: criteria.specialFare === "student",
+            srCitizen: criteria.specialFare === "senior",
+            armForce: criteria.specialFare === "armed",
         });
 
         if (seq !== requestSeq.current) return;
@@ -222,6 +286,9 @@ export default function FlightResults({
                 },
             ],
             directFlight: directOnly,
+            student: criteria.specialFare === "student",
+            srCitizen: criteria.specialFare === "senior",
+            armForce: criteria.specialFare === "armed",
         });
 
         if (seq !== combinedRequestSeq.current) return;
@@ -246,20 +313,18 @@ export default function FlightResults({
         setCombinedLoading(false);
     }
 
-    useEffect(() => {
-        let ignore = false;
-
-        async function run() {
-            if (ignore) return;
-            await runSearch(selectedDate);
-            if (!ignore && tripType === "roundtrip") {
-                await runCombinedSearch(selectedDate);
-            }
+useEffect(() => {
+    let ignore = false;
+    async function run() {
+        if (ignore) return;
+        await runSearch(selectedDate);
+        if (!ignore && tripType === "roundtrip") {
+            await runCombinedSearch(selectedDate);
         }
-        run();
-
-        return () => { ignore = true; };
-    }, [selectedDate, returnDate, tripType, adults, children, infants, cabinClass, directOnly, from, to]);
+    }
+    run();
+    return () => { ignore = true; };
+}, [selectedDate, returnDate, tripType, adults, children, infants, cabinClass, directOnly, from, to]);
 
     const onwardJourneys = trips[0]?.Journey ?? [];
     const returnJourneys = trips[1]?.Journey ?? [];
@@ -340,16 +405,16 @@ export default function FlightResults({
             const onwardFare = cheapestFare(onward);
             if (!onwardFare) continue;
 
-           const retFare = cheapestFare(ret) ?? {
-    ...onwardFare,
-    GrossFare: 0,
-    NetFare: 0,
-    PTCFare: onwardFare.PTCFare?.map((p) => ({
-        ...p,
-        GrossFare: 0,
-        NetFare: 0,
-    })) ?? [],
-};
+            const retFare = cheapestFare(ret) ?? {
+                ...onwardFare,
+                GrossFare: 0,
+                NetFare: 0,
+                PTCFare: onwardFare.PTCFare?.map((p) => ({
+                    ...p,
+                    GrossFare: 0,
+                    NetFare: 0,
+                })) ?? [],
+            };
 
             pairs.push({ onward, onwardFare, ret, retFare });
         }
@@ -378,19 +443,19 @@ export default function FlightResults({
                 : bothViewsLoaded && combinedHasResults && !splitHasResults
                     ? "combined"
                     : "split";
-                    const noResultsAtAll =
-    tripType === "roundtrip"
-        ? bothViewsLoaded && !error && !combinedError && !splitHasResults && !combinedHasResults
-        : !loading && !error && !splitHasResults;
+    const noResultsAtAll =
+        tripType === "roundtrip"
+            ? bothViewsLoaded && !error && !combinedError && !splitHasResults && !combinedHasResults
+            : !loading && !error && !splitHasResults;
     const showFooter = tripType === "roundtrip" && effectiveView === "split";
-const overallLoading = tripType === "roundtrip" ? (loading || combinedLoading) : loading;
+    const overallLoading = tripType === "roundtrip" ? (loading || combinedLoading) : loading;
     function clearFilters() {
         setFilters({ ...EMPTY_FILTERS, maxPrice: filterOptions.maxPrice });
         setPriceTouched(false);
     }
 
-const totalTravelers = adults + children + infants;
-const travelersSummary = `${totalTravelers} Traveler${totalTravelers > 1 ? "s" : ""}, ${CABIN_LABEL[cabinClass]}`;
+    const totalTravelers = adults + children + infants;
+    const travelersSummary = `${totalTravelers} Traveler${totalTravelers > 1 ? "s" : ""}, ${CABIN_LABEL[cabinClass]}`;
     const totalAmount =
         (selectedOnward ? totalFareForTravelers(selectedOnward.fare, { adults, children, infants }) : 0) +
         (selectedReturn ? totalFareForTravelers(selectedReturn.fare, { adults, children, infants }) : 0);
@@ -404,6 +469,7 @@ const travelersSummary = `${totalTravelers} Traveler${totalTravelers > 1 ? "s" :
             tokenId: searchTokenId,
             bookingId: searchBookingId,
             index: [fare.Index],
+            searchType: "ON",
         });
     }
 
@@ -413,7 +479,10 @@ const travelersSummary = `${totalTravelers} Traveler${totalTravelers > 1 ? "s" :
             ret: { journey: pair.ret, fare: pair.retFare },
             tokenId: combinedTokenId,
             bookingId: combinedBookingId,
-            index: [pair.onwardFare.Index, pair.retFare.Index],
+            index: [pair.onwardFare.Index, pair.retFare.Index].filter(
+               (v): v is string => Boolean(v)
+           ),
+           searchType: "RS",
         });
     }
     function handleSelect(kind: "onward" | "return", journey: Journey, fare: FareInfo) {
@@ -446,94 +515,93 @@ const travelersSummary = `${totalTravelers} Traveler${totalTravelers > 1 ? "s" :
 
     return (
         <div className="min-h-screen bg-gray-50 pb-24">
-{/* Top bar */}
-<div className="bg-white border-b border-gray-100">
-  <div className="max-w-8xl mx-auto px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-4">
-    <div className="flex items-center gap-2 text-gray-900">
-      <span className="text-[#1c8fc7] text-lg">&#9650;</span>
-      <span className="font-bold text-lg">{fromLabel}</span>
-      <span className="text-gray-400">&rarr;</span>
-      <span className="font-bold text-lg">{toLabel}</span>
-    </div>
+            {/* Top bar */}
+            <div className="bg-white border-b border-gray-100">
+                <div className="max-w-8xl mx-auto px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex items-center gap-2 text-gray-900">
+                        <span className="text-[#1c8fc7] text-lg">&#9650;</span>
+                        <span className="font-bold text-lg">{fromLabel}</span>
+                        <span className="text-gray-400">&rarr;</span>
+                        <span className="font-bold text-lg">{toLabel}</span>
+                    </div>
 
-    <div className="flex items-center gap-6">
-      {/* Departure */}
-      <div className="flex items-center gap-2 text-sm">
-        <HiOutlineCalendar className="w-4 h-4 text-gray-400" />
-        <div>
-          <p className="text-gray-400 text-xs">Departure</p>
-          <p className="font-semibold text-gray-900">
-            {selectedDate.toLocaleDateString("en-US", {
-              weekday: "short",
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-            })}
-          </p>
-        </div>
-      </div>
+                    <div className="flex items-center gap-6">
+                        {/* Departure */}
+                        <div className="flex items-center gap-2 text-sm">
+                            <HiOutlineCalendar className="w-4 h-4 text-gray-400" />
+                            <div>
+                                <p className="text-gray-400 text-xs">Departure</p>
+                                <p className="font-semibold text-gray-900">
+                                    {selectedDate.toLocaleDateString("en-US", {
+                                        weekday: "short",
+                                        month: "short",
+                                        day: "numeric",
+                                        year: "numeric",
+                                    })}
+                                </p>
+                            </div>
+                        </div>
 
-      {/* Return — added */}
-      {tripType === "roundtrip" && returnDate && (
-        <>
-          <div className="w-px h-8 bg-gray-200" />
-          <div className="flex items-center gap-2 text-sm">
-            <HiOutlineCalendar className="w-4 h-4 text-gray-400" />
-            <div>
-              <p className="text-gray-400 text-xs">Return</p>
-              <p className="font-semibold text-gray-900">
-                {returnDate.toLocaleDateString("en-US", {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                })}
-              </p>
+                        {/* Return — added */}
+                        {tripType === "roundtrip" && returnDate && (
+                            <>
+                                <div className="w-px h-8 bg-gray-200" />
+                                <div className="flex items-center gap-2 text-sm">
+                                    <HiOutlineCalendar className="w-4 h-4 text-gray-400" />
+                                    <div>
+                                        <p className="text-gray-400 text-xs">Return</p>
+                                        <p className="font-semibold text-gray-900">
+                                            {returnDate.toLocaleDateString("en-US", {
+                                                weekday: "short",
+                                                month: "short",
+                                                day: "numeric",
+                                                year: "numeric",
+                                            })}
+                                        </p>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        <div className="w-px h-8 bg-gray-200" />
+
+                        {/* Travelers */}
+                        <div className="flex items-center gap-2 text-sm">
+                            <HiOutlineUserGroup className="w-4 h-4 text-gray-400" />
+                            <div>
+                                <p className="text-gray-400 text-xs">Travelers</p>
+                                <p className="font-semibold text-gray-900">{travelersSummary}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={() => setModifyOpen((v) => !v)}
+                        aria-expanded={modifyOpen}
+                        className={`inline-flex items-center gap-2 h-10 px-5 rounded-full text-white text-sm font-semibold transition-colors ${modifyOpen ? "bg-[#177aab]" : "bg-[#1c8fc7] hover:bg-[#177aab]"
+                            }`}
+                    >
+                        <HiOutlinePencil className="w-4 h-4" />
+                        Modify Search
+                        {modifyOpen ? (
+                            <HiOutlineChevronUp className="w-4 h-4" />
+                        ) : (
+                            <HiOutlineChevronDown className="w-4 h-4" />
+                        )}
+                    </button>
+                </div>
+
+                {modifyOpen && (
+                    <ModifySearchPanel
+                        criteria={criteria}
+                        departureDate={selectedDate}
+                        returnDate={returnDate}
+                        onCancel={() => setModifyOpen(false)}
+                        onApply={handleApplyModifiedSearch}
+                    />
+                )}
             </div>
-          </div>
-        </>
-      )}
-
-      <div className="w-px h-8 bg-gray-200" />
-
-      {/* Travelers */}
-      <div className="flex items-center gap-2 text-sm">
-        <HiOutlineUserGroup className="w-4 h-4 text-gray-400" />
-        <div>
-          <p className="text-gray-400 text-xs">Travelers</p>
-          <p className="font-semibold text-gray-900">{travelersSummary}</p>
-        </div>
-      </div>
-    </div>
-
-    <button
-      type="button"
-      onClick={() => setModifyOpen((v) => !v)}
-      aria-expanded={modifyOpen}
-      className={`inline-flex items-center gap-2 h-10 px-5 rounded-full text-white text-sm font-semibold transition-colors ${
-        modifyOpen ? "bg-[#177aab]" : "bg-[#1c8fc7] hover:bg-[#177aab]"
-      }`}
-    >
-      <HiOutlinePencil className="w-4 h-4" />
-      Modify Search
-      {modifyOpen ? (
-        <HiOutlineChevronUp className="w-4 h-4" />
-      ) : (
-        <HiOutlineChevronDown className="w-4 h-4" />
-      )}
-    </button>
-  </div>
-
-  {modifyOpen && (
-    <ModifySearchPanel
-      criteria={criteria}
-      departureDate={selectedDate}
-      returnDate={returnDate}
-      onCancel={() => setModifyOpen(false)}
-      onApply={handleApplyModifiedSearch}
-    />
-  )}
-</div>
 
             {/* Promo strip */}
             <div className="max-w-8xl mx-auto px-4 sm:px-6 py-4">
@@ -582,21 +650,23 @@ const travelersSummary = `${totalTravelers} Traveler${totalTravelers > 1 ? "s" :
                             </button>
 
                             <div className="flex-1 flex gap-2 overflow-x-auto sm:overflow-x-visible min-w-0">
-                                {dateStrip.map((d) => {
-                                    const { dow, day, mon } = formatDayLabel(d);
-                                    const isSelected = toApiDate(d) === toApiDate(selectedDate);
-                                    return (
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setSelectedDate(d);
-                                                onModifySearch?.(criteria, d, null);
-                                            }}
-                                            className={`flex-1 min-w-[64px] rounded-xl border px-2 py-2 text-center transition-colors ${isSelected
-                                                ? "border-[#1c8fc7] bg-[#e8f4fb] text-[#1c8fc7]"
-                                                : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
-                                                }`}
-                                        >
+                               {dateStrip.map((d) => {
+    const { dow, day, mon } = formatDayLabel(d);
+    const isSelected = toApiDate(d) === toApiDate(selectedDate);
+    return (
+        <button
+            key={toApiDate(d)}
+            type="button"
+            onClick={() => {
+                setSelectedDate(d);
+                onModifySearch?.(criteria, d, null);
+            }}
+            className={`flex-1 min-w-[64px] rounded-xl border px-2 py-2 text-center transition-colors ${
+                isSelected
+                    ? "border-[#1c8fc7] bg-[#e8f4fb] text-[#1c8fc7]"
+                    : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+            }`}
+        >
                                             <p className="text-[11px] font-medium">{dow}</p>
                                             <p className="text-lg font-bold leading-tight">{day}</p>
                                             <p className="text-[11px]">{mon}</p>
@@ -648,6 +718,8 @@ const travelersSummary = `${totalTravelers} Traveler${totalTravelers > 1 ? "s" :
             Try changing your travel dates, route, or search filters.
         </p>
     </div>
+) : tripType === "roundtrip" && overallLoading && !splitHasResults && !combinedHasResults ? (
+    <FlightSearchSkeleton fromLabel={fromCity || from} toLabel={toCity || to} />
 ) : tripType === "roundtrip" && effectiveView === "combined" ? (
     <CombinedJourneyList
         fromCity={fromCity || from}
@@ -715,14 +787,14 @@ const travelersSummary = `${totalTravelers} Traveler${totalTravelers > 1 ? "s" :
                                 {selectedDate.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" })}
                             </p>
                         </div>
-{tripType === "roundtrip" && returnDate && (
-    <div className="hidden sm:block shrink-0">
-        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide leading-tight">Return</p>
-        <p className="text-sm font-semibold text-gray-900 leading-tight">
-            {returnDate.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" })}
-        </p>
-    </div>
-)}
+                        {tripType === "roundtrip" && returnDate && (
+                            <div className="hidden sm:block shrink-0">
+                                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide leading-tight">Return</p>
+                                <p className="text-sm font-semibold text-gray-900 leading-tight">
+                                    {returnDate.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" })}
+                                </p>
+                            </div>
+                        )}
                         <div className="hidden sm:block shrink-0">
                             <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide leading-tight">Travelers</p>
                             <p className="text-sm font-semibold text-gray-900 leading-tight">
@@ -750,6 +822,7 @@ const travelersSummary = `${totalTravelers} Traveler${totalTravelers > 1 ? "s" :
                                     index: [selectedOnward.fare.Index, selectedReturn?.fare.Index].filter(
                                         (v): v is string => Boolean(v)
                                     ),
+                                    searchType: tripType === "roundtrip" ? "RT" : "ON",
                                 });
                             }}
                             className={`h-10 px-6 rounded-full text-sm font-semibold whitespace-nowrap transition-colors ${readyToReview

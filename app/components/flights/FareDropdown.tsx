@@ -19,17 +19,17 @@ export function FareDropdownPanel({
     journey,
     travelerCounts,
     tokenId,
+    searchType,
     showBookButton = true,
     selectedIndex = null,
 }: {
     fares: FareInfo[];
-    /** idx is the fare's position in the sorted `fares` array — used by the caller to remember which fare was picked */
     onBook: (fare: FareInfo, idx: number) => void;
     journey?: Journey;
     travelerCounts?: TravelerCounts;
     tokenId?: string;
+    searchType?: string;  
     showBookButton?: boolean;
-    /** when showBookButton is false, marks this row as "Selected" and highlights it */
     selectedIndex?: number | null;
 }) {
     const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
@@ -130,12 +130,12 @@ export function FareDropdownPanel({
                                         </span>
                                     </button>
 
-                                    {isExpanded && (
+                                   {isExpanded && (
                                         <FareDetailsPanel
-                                            journey={journey}
-                                            fare={f}
+                                            legs={[{ journey, fare: f }]}
                                             travelerCounts={travelerCounts}
                                             tokenId={tokenId}
+                                            searchType={searchType} 
                                         />
                                     )}
                                 </>
@@ -194,6 +194,7 @@ export default function FareDropdown({
                         onBook={onBook}
                         showBookButton={showBookButton}
                         selectedIndex={selectedIndex}
+                        
                     />
                 </div>
             )}

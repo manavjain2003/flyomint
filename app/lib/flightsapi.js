@@ -203,13 +203,14 @@ export async function getAirlinePricing({ tokenId, bookingId = "", index, search
 
 
 
-export async function getAirlineFareRule({ tokenId, index }) {
+export async function getAirlineFareRule({ tokenId, index, searchType }) {
     try {
         const res = await apiRequest("/Flights/AirlineFareRule", {
             method: "POST",
             body: {
                 TokenID: tokenId,
                 Index: Array.isArray(index) ? index : [index],
+                SearchType: searchType,
             },
         });
 

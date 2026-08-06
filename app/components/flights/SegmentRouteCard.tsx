@@ -21,9 +21,6 @@ function formatTimeLabel(iso?: string): string {
 }
 
 export default function SegmentRouteCard({ seg }: { seg: Segment }) {
-    // DepartureCityName / ArrivalCityName aren't declared on the shared Segment
-    // type but are present on the live API payload — read them defensively so
-    // this still compiles/renders cleanly if a caller's data omits them.
     const depCity = (seg as unknown as { DepartureCityName?: string }).DepartureCityName;
     const arrCity = (seg as unknown as { ArrivalCityName?: string }).ArrivalCityName;
 

@@ -25,6 +25,7 @@ export default function FlightCard({
     directBooking = false,
     travelerCounts,
     tokenId,
+    searchType,     
 }: {
     journey: Journey;
     isSelected: boolean;
@@ -32,9 +33,9 @@ export default function FlightCard({
     onToggleExpand: () => void;
     onSelectFlight?: (journey: Journey, fare: FareInfo) => void;
     onBookFare?: (journey: Journey, fare: FareInfo) => void;
-    /** true for oneway / single-flight results — books straight through instead of just marking selected */
     directBooking?: boolean;
     tokenId?: string;
+    searchType?: string;  
     travelerCounts?: TravelerCounts;
 }) {
     const firstSeg = journey.Segments[0];
@@ -219,11 +220,12 @@ export default function FlightCard({
                 </button>
             )}
 
-          {isExpanded && fare && !fareDropdownOpen && (
+{isExpanded && fare && !fareDropdownOpen && (
     <FareDetailsPanel
         legs={[{ journey, fare }]}
         travelerCounts={travelerCounts}
         tokenId={tokenId}
+        searchType={searchType}
     />
 )}
         </div>

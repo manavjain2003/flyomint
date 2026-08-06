@@ -150,19 +150,8 @@ const [hoveredFare, setHoveredFare] = useState<SpecialFare | null>(null);
             }
         }
 
-        // Normal case: apply whatever was last searched when this component
-        // first mounts.
-        applyCachedSearch();
 
-        // Edge case that caused the stale-home-page bug: the browser can
-        // restore this exact page from bfcache (back/forward navigation)
-        // without re-running any React code, since nothing actually
-        // remounts. That snapshot reflects whatever state Home had *before*
-        // the user left it — e.g. before they modified the search on the
-        // results page and it wrote a newer value to localStorage. `pageshow`
-        // fires even on a bfcache restore, so re-applying the cache there
-        // keeps the form in sync with the latest search instead of quietly
-        // reverting to an outdated one.
+        applyCachedSearch();
         function handlePageShow(e: PageTransitionEvent) {
             if (e.persisted) applyCachedSearch();
         }
@@ -672,7 +661,10 @@ const [hoveredFare, setHoveredFare] = useState<SpecialFare | null>(null);
                             : "border-gray-200 text-gray-500 hover:border-gray-300"
                     }`}
                 >
-                    {f.label}
+                    <span className="flex items-center gap-1.5">
+                       {f.label}
+                       {selected && <HiX className="w-3.5 h-3.5" />}
+                   </span>
                 </button>
 
                 {hoveredFare === f.key && (
@@ -789,11 +781,11 @@ function AirportDropdown({ loading, results, query, error, onSelect }: AirportDr
 
             {!loading && (
                 <div className="divide-y divide-gray-100">
-                    {results.map((airport) => (
-                        <button
-                            key={`${airport.AirportCode}-${airport.CityCode}`}
-                            type="button"
-                            onClick={() => onSelect(airport)}
+                {results.map((airport, idx) => (
+    <button
+        key={`${airport.AirportCode}-${airport.CityCode}-${idx}`}
+        type="button"
+        onClick={() => onSelect(airport)}
                             className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
                         >
                             <span className="w-11 h-11 rounded-xl bg-gray-100 text-gray-700 text-sm font-bold flex items-center justify-center shrink-0">
