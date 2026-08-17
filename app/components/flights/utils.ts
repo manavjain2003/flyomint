@@ -8,6 +8,7 @@ import {
     type PTCFareEntry,
     type CabinClass,
     type SpecialFare,
+    type TravelerCounts,
 } from "./types";
 
 export const SPECIAL_FARE_LABEL: Record<SpecialFare, string> = {
@@ -136,13 +137,15 @@ export function formatOffMessage(message?: string) {
     return message.replace(/[\d,.]+/, (m) => formatPrice(Math.round(Number(m.replace(/,/g, "")))));
 }
 export function primaryFareAmount(fare: FareInfo): number {
-    const { gross, net } = getDisplayFareValues(fare);
-    // P = Published fare → show Gross
-    // G = Published fare without Discount → show Gross
-    // S = Strike Thru fare → show Net (with Gross struck through)
-    // N = Display fare with Discount → show Net
-   return fare.FareDisplayType === "G" || fare.FareDisplayType === "P" ? gross : net;
- }
+    // Flight result cards always display the gross price, regardless of FareDisplayType.
+    const { gross } = getDisplayFareValues(fare);
+    return gross;
+}
+
+export function netFareAmount(fare: FareInfo): number {
+    const { net } = getDisplayFareValues(fare);
+    return net;
+}
 
 export function cheapestFare(journey: Journey): FareInfo | undefined {
     if (!journey.FareInfo || journey.FareInfo.length === 0) return undefined;
@@ -159,8 +162,7 @@ export function totalFareForTravelers(fare: FareInfo, travelerCounts?: TravelerC
     };
     return fare.PTCFare.reduce((sum, p) => {
         const count = countFor[p.PTC] ?? 0;
-        const amount = fare.FareDisplayType === "G" ? p.GrossFare : p.NetFare;
-        return sum + amount * count;
+        return sum + p.GrossFare * count;
     }, 0);
 }
 export function getTimeSlot(iso: string): TimeSlot {

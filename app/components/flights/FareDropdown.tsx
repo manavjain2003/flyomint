@@ -158,6 +158,10 @@ export default function FareDropdown({
     hidePanel = false,
     showBookButton = true,
     selectedIndex = null,
+    journey,
+    travelerCounts,
+    tokenId,
+    searchType,
 }: {
     fares: FareInfo[];
     onBook: (fare: FareInfo, idx: number) => void;
@@ -168,6 +172,10 @@ export default function FareDropdown({
     hidePanel?: boolean;
     showBookButton?: boolean;
     selectedIndex?: number | null;
+    journey?: Journey;
+    travelerCounts?: TravelerCounts;
+   tokenId?: string;
+    searchType?: string;
 }) {
     const [internalOpen, setInternalOpen] = useState(false);
     const open = openProp !== undefined ? openProp : internalOpen;
@@ -194,7 +202,10 @@ export default function FareDropdown({
                         onBook={onBook}
                         showBookButton={showBookButton}
                         selectedIndex={selectedIndex}
-                        
+                         journey={journey}
+                        travelerCounts={travelerCounts}
+                        tokenId={tokenId}
+                        searchType={searchType}
                     />
                 </div>
             )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { HiOutlineUser, HiOutlineIdentification } from "react-icons/hi2";
 import { getCountryDetails } from "@/app/lib/flightsapi";
 
@@ -222,6 +222,263 @@ function NationalityField({
     );
 }
 
+function CustomSelect({
+    label,
+    value,
+    options,
+    onSelect,
+    isOpen,
+    onToggle,
+    displayValue,
+}: {
+    label: string;
+    value: string;
+    options: string[];
+    onSelect: (v: string) => void;
+    isOpen: boolean;
+    onToggle: () => void;
+    displayValue?: (v: string) => string;
+}) {
+    return (
+        <div className="relative">
+            <button
+                type="button"
+                onClick={onToggle}
+                className={`w-full h-10 rounded-lg border px-3 text-sm text-left flex items-center justify-between outline-none transition-colors
+                        ${isOpen ? "border-[#1c8fc7] ring-1 ring-[#1c8fc7]" : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"}
+                        bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100`}
+            >
+                <span className={value ? "" : "text-gray-400 dark:text-gray-500"}>
+                    {value ? (displayValue ? displayValue(value) : value) : label}
+                </span>
+                <svg
+                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
+
+            {isOpen && (
+                <div className="absolute z-20 mt-1 w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg overflow-hidden">
+                    <div className="max-h-[200px] overflow-y-auto overscroll-contain filter-scrollbar">
+                        {options.map((opt) => (
+                            <button
+                                key={opt}
+                                type="button"
+                                onClick={() => onSelect(opt)}
+                                className={`w-full text-left px-3 py-2 text-sm transition-colors
+        ${value === opt
+                                        ? "bg-[#e8f4fb] text-[#1c8fc7] font-medium"
+                                        : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                                    }`}
+                            >
+                                {displayValue ? displayValue(opt) : opt}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function DOBField({
+    value,
+    onChange,
+    min,
+    max,
+    required,
+}: {
+    value: string;
+    onChange: (v: string) => void;
+    min?: string;
+    max?: string;
+    required?: boolean;
+}) {
+    const [day, setDay] = useState("");
+    const [month, setMonth] = useState("");
+    const [year, setYear] = useState("");
+    const [openDropdown, setOpenDropdown] = useState<"day" | "month" | "year" | null>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        function onClickOutside(e: MouseEvent) {
+            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+                setOpenDropdown(null);
+            }
+        }
+        document.addEventListener("mousedown", onClickOutside);
+        return () => document.removeEventListener("mousedown", onClickOutside);
+    }, []);
+
+    useEffect(() => {
+        if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+            const [y, m, d] = value.split("-");
+            setYear(y);
+            setMonth(m);
+            setDay(d);
+        } else {
+            setYear("");
+            setMonth("");
+            setDay("");
+        }
+    }, [value]);
+
+    function parseParts(s?: string) {
+        if (!s) return null;
+        const [y, m, d] = s.split("-").map(Number);
+        if (!y || !m || !d) return null;
+        return { year: y, month: m, day: d };
+    }
+
+    const minParts = parseParts(min);
+    const maxParts = parseParts(max);
+    const currentYear = new Date().getFullYear();
+    const minYear = minParts?.year ?? currentYear - 100;
+    const maxYear = maxParts?.year ?? currentYear;
+
+    const daysInMonth = (y: number, m: number) => new Date(y, m, 0).getDate();
+
+    const yearOptions = Array.from(
+        { length: maxYear - minYear + 1 },
+        (_, i) => String(maxYear - i)
+    );
+
+    const monthOptions = Array.from({ length: 12 }, (_, i) =>
+        String(i + 1).padStart(2, "0")
+    ).filter((m) => {
+        if (!year) return true;
+        const mNum = parseInt(m);
+        const yNum = parseInt(year);
+        if (minParts && yNum === minParts.year && mNum < minParts.month) return false;
+        if (maxParts && yNum === maxParts.year && mNum > maxParts.month) return false;
+        return true;
+    });
+
+    const dayOptions = (() => {
+        if (!year || !month)
+            return Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, "0"));
+        const dim = daysInMonth(parseInt(year), parseInt(month));
+        return Array.from({ length: dim }, (_, i) => String(i + 1).padStart(2, "0")).filter((d) => {
+            const dNum = parseInt(d);
+            const yNum = parseInt(year);
+            const mNum = parseInt(month);
+            if (minParts && yNum === minParts.year && mNum === minParts.month && dNum < minParts.day) return false;
+            if (maxParts && yNum === maxParts.year && mNum === maxParts.month && dNum > maxParts.day) return false;
+            return true;
+        });
+    })();
+
+    function handleChange(newDay: string, newMonth: string, newYear: string) {
+        if (newDay && newMonth && newYear) {
+            onChange(`${newYear}-${newMonth}-${newDay}`);
+        } else {
+            onChange("");
+        }
+    }
+
+    useEffect(() => {
+        if (!year) return;
+        const yNum = parseInt(year);
+        let newMonth = month;
+        let changed = false;
+        if (minParts && yNum === minParts.year && month && parseInt(month) < minParts.month) {
+            newMonth = "";
+            changed = true;
+        }
+        if (maxParts && yNum === maxParts.year && month && parseInt(month) > maxParts.month) {
+            newMonth = "";
+            changed = true;
+        }
+        if (changed) {
+            setMonth(newMonth);
+            setDay("");
+            handleChange("", newMonth, year);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [year]);
+
+    useEffect(() => {
+        if (!year || !month) return;
+        const dim = daysInMonth(parseInt(year), parseInt(month));
+        let newDay = day;
+        let changed = false;
+        if (day && parseInt(day) > dim) {
+            newDay = "";
+            changed = true;
+        }
+        const yNum = parseInt(year);
+        const mNum = parseInt(month);
+        if (minParts && yNum === minParts.year && mNum === minParts.month && day && parseInt(day) < minParts.day) {
+            newDay = "";
+            changed = true;
+        }
+        if (maxParts && yNum === maxParts.year && mNum === maxParts.month && day && parseInt(day) > maxParts.day) {
+            newDay = "";
+            changed = true;
+        }
+        if (changed) {
+            setDay(newDay);
+            handleChange(newDay, month, year);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [month]);
+
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+
+
+    return (
+        <div ref={containerRef}>
+            <label className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1 block">
+                Date of Birth{required ? " *" : ""}
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+                <CustomSelect
+                    label="Date"
+                    value={day}
+                    options={dayOptions}
+                    onSelect={(d) => {
+                        setDay(d);
+                        handleChange(d, month, year);
+                        setOpenDropdown(null);
+                    }}
+                    isOpen={openDropdown === "day"}
+                    onToggle={() => setOpenDropdown(openDropdown === "day" ? null : "day")}
+                />
+                <CustomSelect
+                    label="Month"
+                    value={month}
+                    options={monthOptions}
+                    onSelect={(m) => {
+                        setMonth(m);
+                        handleChange(day, m, year);
+                        setOpenDropdown(null);
+                    }}
+                    isOpen={openDropdown === "month"}
+                    onToggle={() => setOpenDropdown(openDropdown === "month" ? null : "month")}
+                    displayValue={(m) => monthNames[parseInt(m) - 1]}
+                />
+                <CustomSelect
+                    label="Year"
+                    value={year}
+                    options={yearOptions}
+                    onSelect={(y) => {
+                        setYear(y);
+                        handleChange(day, month, y);
+                        setOpenDropdown(null);
+                    }}
+                    isOpen={openDropdown === "year"}
+                    onToggle={() => setOpenDropdown(openDropdown === "year" ? null : "year")}
+                />
+            </div>
+        </div>
+    );
+}
+
 export type PassengerDetailsFormProps = {
     adults: number;
     children: number;
@@ -288,21 +545,21 @@ export default function PassengerDetailsForm({
                                 {PTC_LABEL[p.ptc]} {paxNumber}
                             </p>
 
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                                 <div>
                                     <label className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1 block">
                                         Title{titleRequired(p.ptc, checklist) ? " *" : ""}
                                     </label>
                                     <select
-    value={p.title}
-    onChange={(e) => updatePassenger(idx, { title: e.target.value })}
-    className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-700 px-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 outline-none focus:border-[#1c8fc7] dark:[&>option]:bg-gray-900 dark:[&>option]:text-gray-100 [&>option]:bg-white [&>option]:text-gray-900"
->
-    <option value="">Select</option>
-    {TITLE_OPTIONS[p.ptc].map((t) => (
-        <option key={t} value={t}>{t}</option>
-    ))}
-</select>
+                                        value={p.title}
+                                        onChange={(e) => updatePassenger(idx, { title: e.target.value })}
+                                        className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-700 px-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 outline-none focus:border-[#1c8fc7] dark:[&>option]:bg-gray-900 dark:[&>option]:text-gray-100 [&>option]:bg-white [&>option]:text-gray-900"
+                                    >
+                                        <option value="">Select</option>
+                                        {TITLE_OPTIONS[p.ptc].map((t) => (
+                                            <option key={t} value={t}>{t}</option>
+                                        ))}
+                                    </select>
                                 </div>
 
                                 <div className="col-span-1 sm:col-span-1">
@@ -329,19 +586,13 @@ export default function PassengerDetailsForm({
                                     />
                                 </div>
 
-                                <div>
-                                    <label className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1 block">
-                                        Date of Birth{dobRequired(p.ptc, checklist) ? " *" : ""}
-                                    </label>
-                                    <input
-                                        type="date"
-                                        value={p.dob}
-                                        min={dobMin}
-                                        max={dobMax}
-                                        onChange={(e) => updatePassenger(idx, { dob: e.target.value })}
-                                        className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-700 px-2 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-[#1c8fc7]"
-                                    />
-                                </div>
+                                <DOBField
+                                    value={p.dob}
+                                    onChange={(v) => updatePassenger(idx, { dob: v })}
+                                    min={dobMin}
+                                    max={dobMax}
+                                    required={dobRequired(p.ptc, checklist)}
+                                />
 
                                 {checklist.Nationality && (
                                     <NationalityField

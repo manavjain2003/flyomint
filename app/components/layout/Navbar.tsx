@@ -116,7 +116,7 @@ export default function Navbar() {
             >
                 <div className="max-w-8xl mx-auto h-full px-4 sm:px-6 flex items-center justify-between gap-6">
                     {/* Logo */}
-                    <Link href="/" className="flex items-center gap-2 shrink-0" aria-label="Flyomint home">
+                    <Link href="/" className="flex items-center gap-2 shrink-0 bg-white rounded-full" aria-label="Flyomint home">
                         <Image src="/assets/logo.jpg" alt="Flyomint" width={180} height={52} className="h-9 w-auto" priority />
                     </Link>
 

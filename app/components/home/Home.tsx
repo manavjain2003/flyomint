@@ -42,11 +42,14 @@ const SPECIAL_FARE_INFO: Record<Exclude<SpecialFare, "regular">, string> = {
     senior: "Applicable only for passengers aged 60 years and above",
     armed: "Valid defence ID card required at airport check-in",
 };
-const HERO_IMAGE_URL =
-    "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?q=80&w=2400";
-const HERO_IMAGE_URL_DARK =
-    "https://images.stockcake.com/public/a/1/d/a1d4a18c-69bc-4e2e-a5e1-e689a2f67423_large/nighttime-aerial-view-stockcake.jpg";
+// const HERO_IMAGE_URL =
+//     "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?q=80&w=2400";
+// const HERO_IMAGE_URL_DARK =
+//     "https://images.stockcake.com/public/a/1/d/a1d4a18c-69bc-4e2e-a5e1-e689a2f67423_large/nighttime-aerial-view-stockcake.jpg";
     
+const HERO_IMAGE_URL = "/assets/15_thAug.jpeg";
+const HERO_IMAGE_URL_DARK = "/assets/15_thAug.jpeg";
+
 function formatShort(date: Date | null) {
     if (!date) return null;
     return date.toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" });
@@ -313,16 +316,16 @@ const [hoveredFare, setHoveredFare] = useState<SpecialFare | null>(null);
 
       <div className="absolute inset-0 overflow-hidden" aria-hidden>
     <div
-        className="absolute inset-0 bg-cover bg-center dark:hidden"
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat dark:hidden"
         style={{ backgroundImage: `url('${HERO_IMAGE_URL}')` }}
     />
     <div
-        className="absolute inset-0 bg-cover bg-center hidden dark:block"
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat hidden dark:block"
         style={{ backgroundImage: `url('${HERO_IMAGE_URL_DARK}')` }}
     />
 
-    <div className="absolute inset-x-0 top-0 h-[95%] bg-gradient-to-b from-[#03a4d2]/70 via-[#03a4d2]/40 to-transparent dark:from-[#03264a]/80 dark:via-[#03264a]/50" />
-    <div className="absolute inset-x-0 bottom-0 h-[35%]  bg-gradient-to-b from-white/0 dark:from-gray-900/0 via-white/60 dark:via-gray-900/60 to-white/85 dark:to-gray-900/85" />
+    <div className="absolute inset-x-0 top-0 h-[95%] bg-gradient-to-b from-[#03a4d2]/40 via-[#03a4d2]/20 to-transparent dark:from-[#03264a]/60 dark:via-[#03264a]/30" />
+    <div className="absolute inset-x-0 bottom-0 h-[35%]  bg-gradient-to-b from-white/0 dark:from-gray-900/0 via-white/30 dark:via-gray-900/30 to-white/70 dark:to-gray-900/70" />
    
 </div>
 

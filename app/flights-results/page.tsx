@@ -6,6 +6,7 @@ import FlightResults from "@/app/components/flights/FlightResults";
 import ReviewBooking from "@/app/components/booking/ReviewBooking";
 import FlightAddOns, { type AddOnPassenger } from "@/app/components/booking/FlightAddOns";
 import { readCachedSearch } from "@/app/components/flights/searchCache";
+import PaymentStep from "../components/booking/PaymentStep";
 
 function toApiDate(d: Date) {
   const y = d.getFullYear();
@@ -30,6 +31,7 @@ function getSearchKey(params: URLSearchParams) {
 
 const REVIEW_KEY = "flyomint_review_payload";
 const BOOKING_KEY = "flyomint_booking_data";
+const ADDONS_KEY = "flyomint_addons_data";
 
 export default function FlightResultsPage() {
   const router = useRouter();
@@ -47,26 +49,20 @@ export default function FlightResultsPage() {
   const infants = Number(params.get("infants") || 0);
   const cabinClass = (params.get("cabinClass") as any) || "economy";
   const specialFare = (params.get("specialFare") as any) || "regular";
+const directOnly = params.get("direct") === "1";
+ const urlStep = params.get("bookingStep") as "review" | "addons" | "payment" | null;
 
-  const urlStep = params.get("bookingStep") as "review" | "addons" | null;
 
   const searchKey = getSearchKey(params);
 
   const [cachedSearch, setCachedSearch] = useState<ReturnType<typeof readCachedSearch> | null>(null);
 
   useEffect(() => {
-    // Re-read on every new search (not just on mount) — otherwise, after
-    // "Modify Search" does a client-side navigation to a new `to`/`from`,
-    // this would keep showing the previous search's cached city names
-    // paired with the new airport codes.
+
     setCachedSearch(readCachedSearch());
   }, [searchKey]);
 
-  // Guard against a stale cached city name ever being paired with a
-  // different airport code (e.g. cache write hasn't landed yet). The URL
-  // params (set by both the home search and Modify Search) are always
-  // fresh, so prefer them; fall back to the cache only if a param is missing
-  // (e.g. someone opened a flights-results link without those params).
+
   const fromCity = fromCityParam || (cachedSearch && cachedSearch.from === from ? cachedSearch.fromCity : undefined);
   const toCity = toCityParam || (cachedSearch && cachedSearch.to === to ? cachedSearch.toCity : undefined);
   const fromAirport = cachedSearch && cachedSearch.from === from ? cachedSearch.fromAirport : null;
@@ -74,6 +70,7 @@ export default function FlightResultsPage() {
 
   const [reviewPayload, setReviewPayload] = useState<any>(null);
   const [bookingData, setBookingData] = useState<any>(null);
+const [addOnData, setAddOnData] = useState<any>(null);
 
   useEffect(() => {
     try {
@@ -81,12 +78,16 @@ export default function FlightResultsPage() {
       if (storedKey === searchKey) {
         const rp = sessionStorage.getItem(REVIEW_KEY);
         const bd = sessionStorage.getItem(BOOKING_KEY);
+        const ad = sessionStorage.getItem(ADDONS_KEY);
         if (rp) setReviewPayload(JSON.parse(rp));
         if (bd) setBookingData(JSON.parse(bd));
+        if (ad) setAddOnData(JSON.parse(ad));
+
       } else {
         sessionStorage.removeItem("flyomint_search_key");
         sessionStorage.removeItem(REVIEW_KEY);
         sessionStorage.removeItem(BOOKING_KEY);
+        sessionStorage.removeItem(ADDONS_KEY);
       }
     } catch {
       /* ignore */
@@ -104,6 +105,17 @@ export default function FlightResultsPage() {
     router.replace(`/flights-results?${p.toString()}`, { scroll: false });
   }
 
+   function goToPayment(data: any) {
+     setAddOnData(data);
+     try {
+       sessionStorage.setItem("flyomint_search_key", searchKey);
+       sessionStorage.setItem(ADDONS_KEY, JSON.stringify(data));
+     } catch { /* ignore */ }
+     const p = new URLSearchParams(params.toString());
+     p.set("bookingStep", "payment");
+     router.replace(`/flights-results?${p.toString()}`, { scroll: false });
+   }
+
   function goToAddons(data: any) {
     setBookingData(data);
     try {
@@ -118,10 +130,12 @@ export default function FlightResultsPage() {
   function goToResults() {
     setReviewPayload(null);
     setBookingData(null);
+    setAddOnData(null);
     try {
       sessionStorage.removeItem("flyomint_search_key");
       sessionStorage.removeItem(REVIEW_KEY);
       sessionStorage.removeItem(BOOKING_KEY);
+      sessionStorage.removeItem(ADDONS_KEY);
     } catch { /* ignore */ }
     const p = new URLSearchParams(params.toString());
     p.delete("bookingStep");
@@ -161,9 +175,7 @@ export default function FlightResultsPage() {
           (reviewPayload.ret?.fare?.GrossFare || 0)
         }
         onBack={goToResults}
-        onContinue={(addOnData) => {
-          console.log("Proceed to payment", { bookingData, addOnData });
-        }}
+        onContinue={goToPayment}
       />
     );
   }
@@ -189,7 +201,20 @@ export default function FlightResultsPage() {
       />
     );
   }
-
+  if (urlStep === "payment" && reviewPayload && bookingData) {
+    return (
+      <PaymentStep
+        reviewPayload={reviewPayload}
+        bookingData={bookingData}
+        addOnData={addOnData}
+        onBack={() => {
+          const p = new URLSearchParams(params.toString());
+          p.set("bookingStep", "addons");
+          router.replace(`/flights-results?${p.toString()}`, { scroll: false });
+        }}
+      />
+    );
+  }
   // ─── Search results step ───
   return (
     <FlightResults
@@ -207,6 +232,7 @@ export default function FlightResultsPage() {
       infants={infants}
       cabinClass={cabinClass}
       specialFare={specialFare}
+      directOnly={directOnly}
       onModifySearch={(newCriteria, newDeparture, newReturn) => {
         const p = new URLSearchParams({
           from: newCriteria.from,

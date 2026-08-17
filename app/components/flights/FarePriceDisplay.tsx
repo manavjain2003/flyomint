@@ -12,41 +12,10 @@ export default function FarePriceDisplay({
     size?: "lg" | "sm";
     subtitle?: string;
 }) {
-    const { gross, net, message } = getDisplayFareValues(fare);
-    const type = fare.FareDisplayType;
+    const { gross, message } = getDisplayFareValues(fare);
     const priceClass = size === "lg" ? "text-xl font-bold" : "text-sm font-bold";
 
-    if (type === "G") {
-        return (
-            <div className="text-right">
-                <p className={`${priceClass} text-[#1c8fc7] whitespace-nowrap leading-tight`}>{formatPrice(gross)}</p>
-                {subtitle && <p className="text-[11px] text-gray-400 dark:text-gray-500">{subtitle}</p>}
-            </div>
-        );
-    }
-
-    if (type === "N") {
-        return (
-            <div className="text-right">
-                <p className={`${priceClass} text-[#1c8fc7] whitespace-nowrap leading-tight`}>{formatPrice(net)}</p>
-                {subtitle && <p className="text-[11px] text-gray-400 dark:text-gray-500">{subtitle}</p>}
-            </div>
-        );
-    }
-
-    if (type === "S") {
-        return (
-            <div className="text-right">
-                <p className="text-xs text-gray-400 dark:text-gray-500 line-through whitespace-nowrap leading-tight">
-                    {formatPrice(gross)}
-                </p>
-                <p className={`${priceClass} text-[#1c8fc7] whitespace-nowrap leading-tight`}>{formatPrice(net)}</p>
-                {subtitle && <p className="text-[11px] text-gray-400 dark:text-gray-500">{subtitle}</p>}
-            </div>
-        );
-    }
-
-    /* P — Published fare: Gross + "Extra X Off" */
+    // Flight result cards always show the gross price, regardless of FareDisplayType.
     const offLabel = formatOffMessage(message);
     return (
         <div className="text-right">

@@ -17,6 +17,7 @@ export default function CombinedJourneyList({
     onBookPair,
     travelerCounts,
     tokenId,
+    searchType
 }: {
     fromCity: string;
     toCity: string;
@@ -28,6 +29,7 @@ export default function CombinedJourneyList({
     onBookPair: (pair: JourneyPair) => void;
     travelerCounts?: TravelerCounts;
     tokenId?: string; 
+    searchType?: string;
 }) {
     const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
     const sentinelRef = useRef<HTMLDivElement>(null);
@@ -108,6 +110,7 @@ export default function CombinedJourneyList({
                                 onBookPair={onBookPair}
                                 travelerCounts={travelerCounts}
                                 tokenId={tokenId}
+                                searchType={searchType}
                             />
                         );
                     })}

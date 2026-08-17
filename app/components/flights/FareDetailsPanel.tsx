@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { HiOutlineClock, HiOutlineCalendarDays, HiOutlineNoSymbol, HiOutlineUserGroup, HiOutlineDocumentText, HiOutlineChevronDown } from "react-icons/hi2";
 import { HiOutlineArrowPath } from "react-icons/hi2";
 import { AiOutlineLoading3Quarters } from "react-icons/ai";
@@ -37,7 +37,7 @@ type RuleEntry = {
 };
 
 export type FareLeg = {
-    label?: string; 
+    label?: string;
     journey: Journey;
     fare: FareInfo;
 };
@@ -56,6 +56,30 @@ function getSectionVisual(head: string) {
     return { Icon: HiOutlineDocumentText, tint: "text-gray-500 dark:text-gray-400", chip: "bg-gray-100 dark:bg-gray-800" };
 }
 
+/** Returns the PTC fare entry for a given traveler type. */
+function ptcEntry(fare: FareInfo, ptc: "ADT" | "CHD" | "INF") {
+    return fare.PTCFare?.find((p) => p.PTC === ptc);
+}
+
+/** Sums a fare field across ALL traveler types (Adult, Child, Infant), each
+ * weighted by its own passenger count — mirrors ReviewBooking so both
+ * surfaces always show the same "Total". */
+function totalAcrossTravelers(
+    legs: FareLeg[],
+    field: "Fare" | "Tax" | "GrossFare" | "NetFare",
+    counts: { adults: number; children: number; infants: number }
+): number {
+    return legs.reduce((sum, l) => {
+        const adt = ptcEntry(l.fare, "ADT");
+        const chd = ptcEntry(l.fare, "CHD");
+        const inf = ptcEntry(l.fare, "INF");
+        const adtAmt = (adt?.[field] ?? (field === "GrossFare" ? l.fare.GrossFare : field === "NetFare" ? l.fare.NetFare : 0)) * counts.adults;
+        const chdAmt = (chd?.[field] ?? 0) * counts.children;
+        const infAmt = (inf?.[field] ?? 0) * counts.infants;
+        return sum + adtAmt + chdAmt + infAmt;
+    }, 0);
+}
+
 export default function FareDetailsPanel({
     legs,
     travelerCounts,
@@ -66,7 +90,6 @@ export default function FareDetailsPanel({
     travelerCounts?: TravelerCounts;
     tokenId?: string;
     searchType?: string;
-
 }) {
     const [tab, setTab] = useState<DetailTab>("FLIGHT");
     const tabs: DetailTab[] = ["FLIGHT", "BAGGAGE", "FARE", "RULES"];
@@ -77,12 +100,74 @@ export default function FareDetailsPanel({
     const [ruleData, setRuleData] = useState<RuleEntry[] | null>(null);
     const [ruleFetchedFor, setRuleFetchedFor] = useState<string | null>(null);
     const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+    const [activeRuleLegIdx, setActiveRuleLegIdx] = useState(0);
+    const [legRuleCache, setLegRuleCache] = useState<Record<number, {
+        loading: boolean;
+        error: string | null;
+        data: RuleEntry[] | null;
+    }>>({});
+    const [legRuleFetchedFor, setLegRuleFetchedFor] = useState<string | null>(null);
 
     const effectiveIndex = legs
         .flatMap((l) => (l.fare.Index ? [l.fare.Index] : []))
         .filter(Boolean);
     const indexKey = effectiveIndex.join(",");
 
+
+    async function fetchAllLegRules() {
+        if (!tokenId) return;
+
+        const legsToFetch = legs
+            .map((leg, i) => ({ leg, i }))
+            .filter(({ leg }) => !!leg.fare?.Index);
+
+        if (legsToFetch.length === 0) return;
+
+        setLegRuleCache((prev) => {
+            const next = { ...prev };
+            legsToFetch.forEach(({ i }) => {
+                next[i] = { ...(next[i] || { data: null, error: null }), loading: true, error: null };
+            });
+            return next;
+        });
+
+        await Promise.all(
+            legsToFetch.map(async ({ leg, i }) => {
+                const res = await getAirlineFareRule({
+                    tokenId,
+                    index: [leg.fare.Index as string],
+                    searchType,
+                });
+
+                setLegRuleCache((prev) => {
+                    const next = { ...prev };
+                    if (!res.success || !res.rules) {
+                        next[i] = {
+                            loading: false,
+                            error: res.message || "Could not fetch rules.",
+                            data: null,
+                        };
+                        return next;
+                    }
+
+                    const legRoute = `${leg.journey.From}-${leg.journey.To}`.toUpperCase();
+                    const matching = (res.rules as RuleEntry[]).filter(
+                        (entry) => (entry.originDestination || "").toUpperCase() === legRoute
+                    );
+
+                    next[i] = {
+                        loading: false,
+                        error: null,
+                        data: matching.length > 0 ? matching : (res.rules as RuleEntry[]),
+                    };
+                    return next;
+                });
+            })
+        );
+
+        setLegRuleFetchedFor(indexKey);
+    }
+    
     async function fetchRules() {
         if (!tokenId || effectiveIndex.length === 0) return;
         setRuleLoading(true);
@@ -99,10 +184,24 @@ export default function FareDetailsPanel({
 
     function handleTabClick(t: DetailTab) {
         setTab(t);
-        if (t === "RULES" && tokenId && effectiveIndex.length > 0 && ruleFetchedFor !== indexKey && !ruleLoading) {
+        if (t !== "RULES" || !tokenId) return;
+        if (multiLeg && searchType === "RS") {
+            if (legRuleFetchedFor !== indexKey && !legRuleCache[activeRuleLegIdx]?.loading) {
+                fetchAllLegRules();
+            }
+        } else if (effectiveIndex.length > 0 && ruleFetchedFor !== indexKey && !ruleLoading) {
             fetchRules();
         }
     }
+
+    useEffect(() => {
+        if (tab === "RULES" && multiLeg && searchType === "RS" && tokenId) {
+            if (legRuleFetchedFor !== indexKey && !legRuleCache[activeRuleLegIdx]?.loading) {
+                fetchAllLegRules();
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tab, multiLeg, searchType, tokenId, indexKey]);
 
     function toggleSection(key: string) {
         setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -133,10 +232,33 @@ export default function FareDetailsPanel({
         return amt * count;
     }
 
-    const grandTotal = legs.reduce(
-        (sum, l) => sum + visiblePtcFaresFor(l.fare).reduce((s, p) => s + lineTotalFor(l.fare, p), 0),
-        0
-    );
+const isCombinedRoundtrip = searchType === "RS";
+// Combined (RS) roundtrip fares price both legs together under a single
+// fare object, so only the first leg's PTC entries are used to avoid
+// double counting — same rule ReviewBooking applies.
+const fareLegsForTotal = isCombinedRoundtrip && legs[0] ? [legs[0]] : legs;
+const totalCounts = {
+    adults: travelerCounts?.adults ?? 1,
+    children: travelerCounts?.children ?? 0,
+    infants: travelerCounts?.infants ?? 0,
+};
+
+const baseFareTotal = totalAcrossTravelers(fareLegsForTotal, "Fare", totalCounts);
+const taxTotal = totalAcrossTravelers(fareLegsForTotal, "Tax", totalCounts);
+const grossFareTotal = totalAcrossTravelers(fareLegsForTotal, "GrossFare", totalCounts);
+const netFareTotal = totalAcrossTravelers(fareLegsForTotal, "NetFare", totalCounts);
+const discountTotal = grossFareTotal - netFareTotal;
+
+    // FareDisplayType: "G" Gross fare only, "N" Net fare only, "S" Gross fare
+    // struck through, "P" discount + strike-through only if discounted —
+    // identical semantics to ReviewBooking.
+    const fareDisplayType = fareLegsForTotal[0]?.fare.FareDisplayType ?? "P";
+
+    const showBreakdown = fareDisplayType !== "N";
+    const showDiscountRow = (fareDisplayType === "P" || fareDisplayType === "S") && discountTotal > 0;
+    const showStrikeThru =
+        fareDisplayType === "S" ? true : fareDisplayType === "P" ? discountTotal > 0 : false;
+    const totalAmount = fareDisplayType === "G" ? grossFareTotal : netFareTotal;
 
     const refundableValue = legs.some((l) => l.fare.Refundable === "N")
         ? "N"
@@ -286,9 +408,35 @@ export default function FareDetailsPanel({
                         );
                     })}
 
+                    {showBreakdown && (
+                        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-2 text-sm">
+                            <div className="flex items-center justify-between">
+                                <span className="text-gray-500 dark:text-gray-400">Base fare</span>
+                                <span className="font-semibold text-gray-900 dark:text-gray-100">{formatPrice(baseFareTotal)}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span className="text-gray-500 dark:text-gray-400">Taxes &amp; fees</span>
+                                <span className="font-semibold text-gray-900 dark:text-gray-100">{formatPrice(taxTotal)}</span>
+                            </div>
+                            {showDiscountRow && (
+                                <div className="flex items-center justify-between">
+                                    <span className="text-gray-500 dark:text-gray-400">Discount</span>
+                                    <span className="font-semibold text-green-600 dark:text-green-400">-{formatPrice(discountTotal)}</span>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between text-sm">
                         <span className="text-gray-700 dark:text-gray-300 font-semibold">Grand Total{multiLeg ? " (Both Legs)" : ""}</span>
-                        <span className="font-bold text-gray-900 dark:text-gray-100">{formatPrice(grandTotal)}</span>
+                        <div className="text-right">
+                            {showStrikeThru && (
+                                <p className="text-xs text-gray-400 dark:text-gray-500 line-through leading-tight">
+                                    {formatPrice(grossFareTotal)}
+                                </p>
+                            )}
+                            <span className="font-bold text-gray-900 dark:text-gray-100">{formatPrice(totalAmount)}</span>
+                        </div>
                     </div>
 
                     {legs.map((leg, li) => (
@@ -304,164 +452,174 @@ export default function FareDetailsPanel({
 
             {tab === "RULES" && (
                 <div className="space-y-3">
-                    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4 flex items-center gap-6 flex-wrap text-sm">
-                        <div>
-                            <p className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-0.5">Fare Type</p>
-                            <p className="font-semibold text-gray-900 dark:text-gray-100">{fareTypeLabel}</p>
-                        </div>
-                        <div className="w-px h-8 bg-gray-100 dark:bg-gray-800 hidden sm:block" />
-                        <div className="flex items-center gap-2">
-                            <span
-                                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${
-                                    refundableValue === "Y"
-                                        ? "bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400"
-                                        : refundableValue === "P"
-                                        ? "bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400"
-                                        : "bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400"
-                                }`}
-                            >
-                                {refundableValue === "Y" ? "Refundable" : refundableValue === "P" ? "Partially Refundable" : "Non-Refundable"}
-                            </span>
-                        </div>
-                    </div>
+                    {(() => {
+                        const isRsMulti = multiLeg && searchType === "RS";
+                        const rLoading = isRsMulti ? (legRuleCache[activeRuleLegIdx]?.loading ?? false) : ruleLoading;
+                        const rError = isRsMulti ? (legRuleCache[activeRuleLegIdx]?.error ?? null) : ruleError;
+                        const rData = isRsMulti ? (legRuleCache[activeRuleLegIdx]?.data ?? null) : ruleData;
 
-                    {ruleLoading && (
-                        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
-                            <div className="flex items-center gap-2 text-sm text-gray-400 dark:text-gray-500">
-                                <AiOutlineLoading3Quarters className="w-4 h-4 animate-spin text-[#FF7626]" />
-                                Fetching cancellation &amp; date-change rules...
-                            </div>
-                            <div className="space-y-2 animate-pulse">
-                                <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded w-1/3" />
-                                <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded w-full" />
-                                <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded w-5/6" />
-                            </div>
-                        </div>
-                    )}
-
-                    {!ruleLoading && ruleError && (
-                        <div className="bg-red-50 dark:bg-red-950 border border-red-100 dark:border-red-900 rounded-xl p-4 flex items-center justify-between gap-3">
-                            <p className="text-sm text-red-600 dark:text-red-400">{ruleError}</p>
-                            <button
-                                type="button"
-                                onClick={() => fetchRules()}
-                                className="inline-flex items-center gap-1.5 text-sm font-semibold text-red-600 dark:text-red-400 shrink-0 hover:text-red-700 dark:hover:text-red-300"
-                            >
-                                <HiOutlineArrowPath className="w-4 h-4" /> Retry
-                            </button>
-                        </div>
-                    )}
-
-                    {!ruleLoading &&
-                        !ruleError &&
-                        ruleData &&
-                        ruleData.length > 0 &&
-                        ruleData.map((entry, i) => (
-                            <div key={i} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                                {entry.originDestination && (
-                                    <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800">
-                                        <p className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">{entry.originDestination}</p>
+                        return (
+                            <>
+                                
+                                {isRsMulti && (
+                                    <div className="flex gap-1 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 rounded-t-xl px-4 pt-2">
+                                        {legs.map((leg, i) => (
+                                            <button
+                                                key={i}
+                                                type="button"
+                                                onClick={() => setActiveRuleLegIdx(i)}
+                                                className={`px-4 py-2.5 text-[14px] font-semibold border-b-2 -mb-px transition-colors whitespace-nowrap leading-[1.4] ${
+                                                    i === activeRuleLegIdx
+                                                        ? "border-[#1c8fc7] text-[#1c8fc7]"
+                                                        : "border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                                                }`}
+                                            >
+                                                {leg.journey.From} - {leg.journey.To}
+                                            </button>
+                                        ))}
                                     </div>
                                 )}
 
-                                <div className="p-4 space-y-4">
-                                    {entry.sections.length === 0 && (
-                                        <p className="text-gray-400 dark:text-gray-500 text-sm">No detailed rules returned for this fare.</p>
-                                    )}
+                                {rLoading && (
+                                    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+                                        <div className="flex items-center gap-2 text-sm text-gray-400 dark:text-gray-500">
+                                            <AiOutlineLoading3Quarters className="w-4 h-4 animate-spin text-[#FF7626]" />
+                                            Fetching cancellation &amp; date-change rules...
+                                        </div>
+                                        <div className="space-y-2 animate-pulse">
+                                            <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded w-1/3" />
+                                            <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded w-full" />
+                                            <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded w-5/6" />
+                                        </div>
+                                    </div>
+                                )}
 
-                                    {entry.sections.map((s, si) => {
-                                        const sectionKey = `${i}-${si}`;
-                                        const isCollapsed = !!collapsedSections[sectionKey];
-                                        const { Icon, tint, chip } = getSectionVisual(s.head);
-                                        const hasChild = s.tiers.some((t) => t.childAmount);
-                                        const hasInfant = s.tiers.some((t) => t.infantAmount);
+                                {!rLoading && rError && (
+                                    <div className="bg-red-50 dark:bg-red-950 border border-red-100 dark:border-red-900 rounded-xl p-4 flex items-center justify-between gap-3">
+                                        <p className="text-sm text-red-600 dark:text-red-400">{rError}</p>
+                                        <button
+                                            type="button"
+                                            onClick={() => (isRsMulti ? fetchAllLegRules() : fetchRules())}
+                                            className="inline-flex items-center gap-1.5 text-sm font-semibold text-red-600 dark:text-red-400 shrink-0 hover:text-red-700 dark:hover:text-red-300"
+                                        >
+                                            <HiOutlineArrowPath className="w-4 h-4" /> Retry
+                                        </button>
+                                    </div>
+                                )}
 
-                                        return (
-                                            <div key={si} className="border border-gray-100 dark:border-gray-800 rounded-lg overflow-hidden">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => toggleSection(sectionKey)}
-                                                    className="w-full flex items-center justify-between gap-3 px-3 py-2.5 bg-gray-50/70 dark:bg-gray-900/70 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                                                >
-                                                    <span className="flex items-center gap-2">
-                                                        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full ${chip} ${tint} shrink-0`}>
-                                                            <Icon className="w-4 h-4" />
-                                                        </span>
-                                                        <span className="text-xs font-bold uppercase tracking-wide text-gray-700 dark:text-gray-300 text-left">{s.head}</span>
-                                                    </span>
-                                                    <HiOutlineChevronDown
-                                                        className={`w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0 transition-transform ${isCollapsed ? "-rotate-90" : ""}`}
-                                                    />
-                                                </button>
+                                {!rLoading &&
+                                    !rError &&
+                                    rData &&
+                                    rData.length > 0 &&
+                                    rData.map((entry, i) => (
+                                        <div key={i} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                            {entry.originDestination && (
+                                                <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800">
+                                                    <p className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">{entry.originDestination}</p>
+                                                </div>
+                                            )}
 
-                                                {!isCollapsed && (
-                                                    <div className="px-3 py-2">
-                                                        {s.tiers.length === 0 ? (
-                                                            <p className="text-xs text-gray-400 dark:text-gray-500 py-2">No charge details available.</p>
-                                                        ) : (
-                                                            <div className="overflow-x-auto">
-                                                                <table className="w-full text-xs">
-                                                                    <thead>
-                                                                        <tr className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                                                                            <th className="text-left font-semibold py-1.5 pr-2">Period</th>
-                                                                            <th className="text-right font-semibold py-1.5 px-2">Adult</th>
-                                                                            {hasChild && <th className="text-right font-semibold py-1.5 px-2">Child</th>}
-                                                                            {hasInfant && <th className="text-right font-semibold py-1.5 pl-2">Infant</th>}
-                                                                        </tr>
-                                                                    </thead>
-                                                                    <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
-                                                                        {s.tiers.map((t, ti) => (
-                                                                            <tr key={ti} className={ti % 2 === 1 ? "bg-gray-50/50 dark:bg-gray-900/50" : ""}>
-                                                                                <td className="py-2 pr-2 text-gray-500 dark:text-gray-400 align-top">{t.description || "—"}</td>
-                                                                                <td
-                                                                                    className="py-2 px-2 text-right font-semibold text-gray-900 dark:text-gray-100 align-top whitespace-nowrap"
-                                                                                    dangerouslySetInnerHTML={{ __html: t.adultAmount || "—" }}
-                                                                                />
-                                                                                {hasChild && (
-                                                                                    <td
-                                                                                        className="py-2 px-2 text-right font-semibold text-gray-900 dark:text-gray-100 align-top whitespace-nowrap"
-                                                                                        dangerouslySetInnerHTML={{ __html: t.childAmount || "—" }}
-                                                                                    />
-                                                                                )}
-                                                                                {hasInfant && (
-                                                                                    <td
-                                                                                        className="py-2 pl-2 text-right font-semibold text-gray-900 dark:text-gray-100 align-top whitespace-nowrap"
-                                                                                        dangerouslySetInnerHTML={{ __html: t.infantAmount || "—" }}
-                                                                                    />
-                                                                                )}
-                                                                            </tr>
-                                                                        ))}
-                                                                    </tbody>
-                                                                </table>
-                                                            </div>
-                                                        )}
+                                            <div className="p-4 space-y-4">
+                                                {entry.sections.length === 0 && (
+                                                    <p className="text-gray-400 dark:text-gray-500 text-sm">No detailed rules returned for this fare.</p>
+                                                )}
+
+                                                {entry.sections.map((s, si) => {
+                                                    const sectionKey = `${i}-${si}`;
+                                                    const isCollapsed = !!collapsedSections[sectionKey];
+                                                    const { Icon, tint, chip } = getSectionVisual(s.head);
+                                                    const hasChild = s.tiers.some((t) => t.childAmount);
+                                                    const hasInfant = s.tiers.some((t) => t.infantAmount);
+
+                                                    return (
+                                                        <div key={si} className="border border-gray-100 dark:border-gray-800 rounded-lg overflow-hidden">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => toggleSection(sectionKey)}
+                                                                className="w-full flex items-center justify-between gap-3 px-3 py-2.5 bg-gray-50/70 dark:bg-gray-900/70 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                                                            >
+                                                                <span className="flex items-center gap-2">
+                                                                    <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full ${chip} ${tint} shrink-0`}>
+                                                                        <Icon className="w-4 h-4" />
+                                                                    </span>
+                                                                    <span className="text-xs font-bold uppercase tracking-wide text-gray-700 dark:text-gray-300 text-left">{s.head}</span>
+                                                                </span>
+                                                                <HiOutlineChevronDown
+                                                                    className={`w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0 transition-transform ${isCollapsed ? "-rotate-90" : ""}`}
+                                                                />
+                                                            </button>
+
+                                                            {!isCollapsed && (
+                                                                <div className="px-3 py-2">
+                                                                    {s.tiers.length === 0 ? (
+                                                                        <p className="text-xs text-gray-400 dark:text-gray-500 py-2">No charge details available.</p>
+                                                                    ) : (
+                                                                        <div className="overflow-x-auto">
+                                                                            <table className="w-full text-xs">
+                                                                                <thead>
+                                                                                    <tr className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                                                                                        <th className="text-left font-semibold py-1.5 pr-2">Period</th>
+                                                                                        <th className="text-right font-semibold py-1.5 px-2">Adult</th>
+                                                                                        {hasChild && <th className="text-right font-semibold py-1.5 px-2">Child</th>}
+                                                                                        {hasInfant && <th className="text-right font-semibold py-1.5 pl-2">Infant</th>}
+                                                                                    </tr>
+                                                                                </thead>
+                                                                                <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+                                                                                    {s.tiers.map((t, ti) => (
+                                                                                        <tr key={ti} className={ti % 2 === 1 ? "bg-gray-50/50 dark:bg-gray-900/50" : ""}>
+                                                                                            <td className="py-2 pr-2 text-gray-500 dark:text-gray-400 align-top">{t.description || "—"}</td>
+                                                                                            <td
+                                                                                                className="py-2 px-2 text-right font-semibold text-gray-900 dark:text-gray-100 align-top whitespace-nowrap"
+                                                                                                dangerouslySetInnerHTML={{ __html: t.adultAmount || "—" }}
+                                                                                            />
+                                                                                            {hasChild && (
+                                                                                                <td
+                                                                                                    className="py-2 px-2 text-right font-semibold text-gray-900 dark:text-gray-100 align-top whitespace-nowrap"
+                                                                                                    dangerouslySetInnerHTML={{ __html: t.childAmount || "—" }}
+                                                                                                />
+                                                                                            )}
+                                                                                            {hasInfant && (
+                                                                                                <td
+                                                                                                    className="py-2 pl-2 text-right font-semibold text-gray-900 dark:text-gray-100 align-top whitespace-nowrap"
+                                                                                                    dangerouslySetInnerHTML={{ __html: t.infantAmount || "—" }}
+                                                                                                />
+                                                                                            )}
+                                                                                        </tr>
+                                                                                    ))}
+                                                                                </tbody>
+                                                                            </table>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+
+                                                {entry.additionalCharge && (
+                                                    <div className="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 rounded-lg px-3 py-2.5">
+                                                        <HiOutlineDocumentText className="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0 mt-0.5" />
+                                                        <span>{entry.additionalCharge}</span>
                                                     </div>
                                                 )}
                                             </div>
-                                        );
-                                    })}
-
-                                    {entry.additionalCharge && (
-                                        <div className="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 rounded-lg px-3 py-2.5">
-                                            <HiOutlineDocumentText className="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0 mt-0.5" />
-                                            <span>{entry.additionalCharge}</span>
                                         </div>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
+                                    ))}
 
-                    {!ruleLoading && !ruleError && ruleData && ruleData.length === 0 && (
-                        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-xs text-gray-400 dark:text-gray-500 text-center">
-                            Cancellation and date-change charges vary by fare rule and are confirmed at the time of booking.
-                        </div>
-                    )}
+                                {!rLoading && !rError && rData && rData.length === 0 && (
+                                    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-xs text-gray-400 dark:text-gray-500 text-center">
+                                        Cancellation and date-change charges vary by fare rule and are confirmed at the time of booking.
+                                    </div>
+                                )}
 
-                    {!ruleLoading && !ruleError && !ruleData && !tokenId && (
-                        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-xs text-gray-400 dark:text-gray-500 text-center">
-                            Cancellation and date-change charges vary by fare rule and are confirmed at the time of booking.
-                        </div>
-                    )}
+                                {!rLoading && !rError && !rData && !tokenId && (
+                                    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-xs text-gray-400 dark:text-gray-500 text-center">
+                                        Cancellation and date-change charges vary by fare rule and are confirmed at the time of booking.
+                                    </div>
+                                )}
+                            </>
+                        );
+                    })()}
                 </div>
             )}
         </div>

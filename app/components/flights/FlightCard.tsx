@@ -49,7 +49,10 @@ export default function FlightCard({
     const [fareDropdownOpen, setFareDropdownOpen] = useState(false);
     const fare = fares[selectedFareIdx];
     const stopsLabel = journey.Stops === 0 ? "Non stop" : `${journey.Stops} stop${journey.Stops > 1 ? "s" : ""}`;
-
+const stopAirports =
+    journey.Stops > 0
+        ? journey.Segments.slice(0, -1).map((s) => s.ArrivalAirportCode).join(", ")
+        : "";
 const flightCodes = useMemo(
     () => journey.Segments.map((s) => `${s.AirlineCode}-${s.FlightNo}`),
     [journey.Segments]
@@ -131,7 +134,10 @@ const [showAllCodes, setShowAllCodes] = useState(false);
                             </span>
                             <span className="flex-1 border-t border-gray-300 dark:border-gray-600" />
                         </div>
-                        <span className="text-[11px] mt-0.5">{stopsLabel}</span>
+                         <span className="text-[11px] mt-0.5 whitespace-nowrap">
+     {stopsLabel}
+    {stopAirports ? ` · ${stopAirports}` : ""}
+</span>
                     </div>
 
                     {/* Arrival */}
@@ -173,6 +179,10 @@ const [showAllCodes, setShowAllCodes] = useState(false);
         open={fareDropdownOpen}
         onOpenChange={setFareDropdownOpen}
         hidePanel
+        journey={journey}
+        travelerCounts={travelerCounts}
+        tokenId={tokenId}
+        searchType={searchType}
     />
 )}
 
@@ -188,6 +198,10 @@ const [showAllCodes, setShowAllCodes] = useState(false);
         hidePanel
         showBookButton={false}
         selectedIndex={selectedFareIdx}
+        journey={journey}
+        travelerCounts={travelerCounts}
+        tokenId={tokenId}
+        searchType={searchType}
     />
 )}
     </div>
@@ -209,6 +223,7 @@ const [showAllCodes, setShowAllCodes] = useState(false);
             journey={journey}
             travelerCounts={travelerCounts}
             tokenId={tokenId}
+            searchType={searchType}
             showBookButton={directBooking}
             selectedIndex={directBooking ? null : selectedFareIdx}
         />

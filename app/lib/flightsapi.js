@@ -358,3 +358,135 @@ export async function getAirlineSSR({ tokenId, bookingId }) {
         return { success: false, message: "Network error. Please try again.", tokenId, legs: [] };
     }
 }
+
+
+export async function getAirlineTrvlItinerary({
+  tokenId,
+  bookingId,
+  contactInfo,
+  travelers,
+  ssrl,
+}) {
+  try {
+    const res = await apiRequest("/Flights/AirlineTravelItinerary", {
+      method: "POST",
+      body: {
+        TokenID: tokenId,
+        BookingID: bookingId,
+        ContactInfo: {
+          Mobile: contactInfo.mobile,
+          Email: contactInfo.email,
+          GSTCompanyName: contactInfo.gstCompanyName || "",
+          GSTTIN: contactInfo.gstTin || "",
+          GSTMobile: contactInfo.gstMobile || "",
+          GSTEmail: contactInfo.gstEmail || "",
+          GSTAddress: contactInfo.gstAddress || "",
+        },
+        Travelers: travelers.map((t, i) => ({
+          PaxID: t.paxId ?? i + 1,
+          Title: t.title,
+          FirstName: t.firstName,
+          LastName: t.lastName,
+          DOB: t.dob,
+          Nationality: t.nationality,
+          PassportNo: t.passportNo || "",
+          PIC: t.pic || "",
+          PDOI: t.pdoi || "",
+          PDOE: t.pdoe || "",
+          DocumentNo: t.documentNo || "",
+          FFNo: t.ffNo || "",
+          PaxType: t.paxType,
+        })),
+        SSRL:
+          ssrl?.map((s) => ({
+            SID: s.sid,
+            PaxID: s.paxId,
+            SSRCode: s.ssrCode,
+            SSRType: s.ssrType,
+          })) ?? [],
+        BookingType: "NM",
+      },
+    });
+
+    const payload = res?.ServiceResponse ?? {};
+
+    if (payload.ErrorCode) {
+      return {
+        success: false,
+        message: payload.Message || "Could not create itinerary",
+      };
+    }
+
+    return {
+      success: true,
+      message: payload.Message || null,
+      tokenId: payload.TokenID,
+      transactionId: payload.TransactionID,
+      bookingId: payload.BookingID,
+      fareInfo: (payload.FareInfo || []).map((f) => ({
+       pgDetails: {
+  pgId: f.PGDetails?.PGID,
+  pgCode: f.PGDetails?.PGCode,
+  pgName: f.PGDetails?.PGName,
+  pgDescription: f.PGDetails?.PGDescription,
+},
+        baseFare: f.BaseFare,
+        tax: f.Tax,
+        convenienceFee: f.ConvenienceFee,
+        discount: f.Discount,
+        instantOff: f.InstantOff,
+        markUp: f.MarkUp,
+        addOns: f.AddOns,
+        addOnDetails: f.AddOnDetails || [],
+        wallet: f.Wallet,
+        amountToBePaid: f.AmountToBePaid,
+        ptcFares: (f.PTCFares || []).map((p) => ({
+          ptc: p.PTC,
+          fare: p.Fare,
+          tax: p.Tax,
+        })),
+      })),
+    };
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return { success: false, message: error.message };
+    }
+    return {
+      success: false,
+      message: "Network error. Please try again.",
+    };
+  }
+}
+
+export async function getAirlinePaymentUrl({ tokenId, transactionId, pgId, pgCode, amountToBePaid }) {
+    try {
+        const res = await apiRequest("/Payment/PaymentURL", {
+            method: "POST",
+            body: {
+                TokenID: tokenId,
+                TransactionID: transactionId,
+                PGID: pgId,
+                PGCode: pgCode,
+                AmountToBePaid: amountToBePaid,
+            },
+        });
+
+        const payload = res?.ServiceResponse ?? res ?? {};
+
+        if (payload.ErrorCode) {
+            return { success: false, message: payload.Message || "Could not fetch payment URL", paymentUrl: null };
+        }
+
+        return {
+            success: true,
+            message: payload.Message || null,
+            transactionId: payload.TransactionID ?? transactionId,
+            paymentUrl: payload.PaymentUrl,
+        };
+    } catch (error) {
+        if (error instanceof ApiError) {
+            return { success: false, message: error.message, paymentUrl: null };
+        }
+        return { success: false, message: "Network error. Please try again.", paymentUrl: null };
+    }
+}

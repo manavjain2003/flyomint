@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
     HiOutlineChevronLeft,
     HiOutlineChevronDown,
@@ -50,7 +50,15 @@ export type FlightAddOnsProps = {
     tripSummary: { from: string; to: string; date: string; isRoundtrip: boolean };
     baseFareTotal: number;
     onBack: () => void;
-    onContinue: (data: { addOnTotal: number; selections: { passengerId: string; code: string; charge: number; label: string }[] }) => void;
+    onContinue: (data: { addOnTotal: number;  selections: {
+             passengerId: string;
+             paxId: number;
+             code: string;
+             charge: number;
+            label: string;
+             sid: string | number;
+             ssrType: string;
+         }[] }) => void;
 };
 
 function formatPrice(amount: number) {
@@ -77,9 +85,41 @@ export default function FlightAddOns({
     const [activeLegIndex, setActiveLegIndex] = useState(0);
     const [activeTab, setActiveTab] = useState<"baggage" | "meal">("meal");
     const [activePassengerId, setActivePassengerId] = useState(passengers[0]?.id ?? "");
-
+const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
     const [baggage, setBaggage] = useState<BaggageSelection>({});
     const [meals, setMeals] = useState<MealSelection>({});
+
+    const autoSkipped = useRef(false);
+    const hasAnyBaggage = useMemo(
+        () => legs.some((l) => l.baggageOptions.length > 0),
+        [legs]
+    );
+    const hasAnyMeals = useMemo(
+        () => legs.some((l) => l.segments.some((s) => s.mealOptions.length > 0)),
+        [legs]
+    );
+
+    useEffect(() => {
+        if (activeTab === "baggage" && !hasAnyBaggage && hasAnyMeals) {
+            setActiveTab("meal");
+        } else if (activeTab === "meal" && !hasAnyMeals && hasAnyBaggage) {
+            setActiveTab("baggage");
+        }
+    }, [activeTab, hasAnyBaggage, hasAnyMeals]);
+
+    useEffect(() => {
+        if (loading || error || legs.length === 0 || autoSkipped.current) return;
+
+        const hasBaggage = legs.some((leg) => leg.baggageOptions.length > 0);
+        const hasMeals = legs.some((leg) =>
+            leg.segments.some((seg) => seg.mealOptions.length > 0)
+        );
+
+        if (!hasBaggage && !hasMeals) {
+            autoSkipped.current = true;
+            onContinue({ addOnTotal: 0, selections: [] });
+        }
+    }, [legs, loading, error, onContinue]);
 
     useEffect(() => {
         let cancelled = false;
@@ -100,6 +140,10 @@ export default function FlightAddOns({
             cancelled = true;
         };
     }, [tokenId, bookingId]);
+
+    useEffect(() => {
+        setActiveSegmentIndex(0);
+    }, [activeLegIndex]);
 
     const activeLeg = legs[activeLegIndex];
 
@@ -131,25 +175,48 @@ export default function FlightAddOns({
         });
     }
 
-    // Flatten all selections into a priced list for the summary + parent callback
     const selectionList = useMemo(() => {
-        const list: { passengerId: string; code: string; charge: number; label: string }[] = [];
+                const list: {
+             passengerId: string;
+             paxId: number;
+             code: string;
+             charge: number;
+             label: string;
+             sid: string | number;
+            ssrType: string;
+         }[] = [];
 
         legs.forEach((leg, legIndex) => {
-            passengers.forEach((p) => {
+            passengers.forEach((p, paxIdx) => {
                 const selectedCode = baggage[p.id]?.[legIndex];
                 if (!selectedCode) return;
                 const opt = leg.baggageOptions.find((o) => o.code === selectedCode);
-                if (opt) list.push({ passengerId: p.id, code: opt.code, charge: opt.charge, label: `${p.label} · ${leg.from}-${leg.to} · ${opt.desc}` });
-            });
+                  if (opt) list.push({
+                                    passengerId: p.id,
+                                    paxId: paxIdx + 1,
+                                    code: opt.code,
+                                    charge: opt.charge,
+                                    label: `${p.label} · ${leg.from}-${leg.to} · ${opt.desc}`,
+                                    sid: leg.segments[0]?.sid ?? 1,
+                                    ssrType: "2",
+                                });
+                                });
 
             leg.segments.forEach((seg) => {
-                passengers.forEach((p) => {
+                passengers.forEach((p, paxIdx) => {
                     const codes = meals[p.id]?.[seg.sid];
                     if (!codes || codes.size === 0) return;
                     codes.forEach((code) => {
                         const opt = seg.mealOptions.find((o) => o.code === code);
-                        if (opt) list.push({ passengerId: p.id, code: opt.code, charge: opt.charge, label: `${p.label} · ${seg.from}-${seg.to} · ${opt.desc}` });
+                               if (opt) list.push({
+                                            passengerId: p.id,
+                                           paxId: paxIdx + 1,
+                                            code: opt.code,
+                                            charge: opt.charge,
+                                           label: `${p.label} · ${seg.from}-${seg.to} · ${opt.desc}`,
+                                            sid: seg.sid,
+                                            ssrType: "1",
+                                       });
                     });
                 });
             });
@@ -250,22 +317,42 @@ export default function FlightAddOns({
                 {/* Right column */}
                 <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 min-w-0">
                     <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
-                        <div className="flex gap-2">
-                            {(["baggage", "meal"] as const).map((tab) => (
-                                <button
-                                    key={tab}
-                                    type="button"
-                                    onClick={() => setActiveTab(tab)}
-                                    className={`text-sm font-semibold pb-1 border-b-2 transition-colors ${
-                                        activeTab === tab ? "text-[#1c8fc7] border-[#1c8fc7]" : "text-gray-400 dark:text-gray-500 border-transparent"
-                                    }`}
-                                >
-                                    {tab === "baggage" ? "Baggage" : "Meal"}
-                                </button>
-                            ))}
-                        </div>
+                        {(() => {
+                            const tabs = (["baggage", "meal"] as const).filter((t) =>
+                                t === "baggage" ? hasAnyBaggage : hasAnyMeals
+                            );
+                            return (
+                                <>
+                                    {tabs.length > 1 ? (
+                                        <div className="flex gap-2">
+                                            {tabs.map((tab) => (
+                                                <button
+                                                    key={tab}
+                                                    type="button"
+                                                    onClick={() => setActiveTab(tab)}
+                                                    className={`text-sm font-semibold pb-1 border-b-2 transition-colors ${
+                                                        activeTab === tab
+                                                            ? "text-[#1c8fc7] border-[#1c8fc7]"
+                                                            : "text-gray-400 dark:text-gray-500 border-transparent"
+                                                    }`}
+                                                >
+                                                    {tab === "baggage" ? "Baggage" : "Meal"}
+                                                </button>
+                                            ))}
+                                        </div>
+                                                                      ) : tabs.length === 1 ? (
+                                        <div className="flex gap-2">
+                                            <span className="text-sm font-semibold pb-1 border-b-2 border-[#1c8fc7] text-[#1c8fc7]">
+                                                {tabs[0] === "baggage" ? "Baggage" : "Meal"}
+                                            </span>
+                                        </div>
+                                    ) : null}
 
-                        {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+
+                                    {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+                                </>
+                            );
+                        })()}
                     </div>
 
                     {legs.length > 1 && (
@@ -328,8 +415,10 @@ export default function FlightAddOns({
                                     <div
                                         key={opt.code}
                                         className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 ${
-                                            selected ? "border-[#1c8fc7] bg-dark dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700" : "border-gray-200 dark:border-gray-700"
-                                        }`}
+                                             selected
+                                                ? "border-[#1c8fc7] bg-[#e8f4fb] dark:bg-gray-900"
+                                                : "border-gray-200 dark:border-gray-700"
+                                         }`}
                                     >
                                         <div>
                                             <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{opt.desc}</p>
@@ -355,55 +444,83 @@ export default function FlightAddOns({
                         </div>
                     )}
 
-                    {activeLeg && activeTab === "meal" && (
-                        <div className="space-y-6">
-                            {activeLeg.segments.map((seg) => {
-                                const paxType = passengers.find((p) => p.id === activePassengerId)?.type ?? "ADT";
-                                const options = optionsForPax(seg.mealOptions, paxType);
-                                const selectedCodes = meals[activePassengerId]?.[seg.sid] ?? new Set<string>();
+{activeLeg && activeTab === "meal" && (
+    <div>
+        {/* Segment tabs — always show as rounded pills */}
+        <div className="flex gap-2 mb-4 flex-wrap">
+            {activeLeg.segments.map((seg, i) => {
+                const count = meals[activePassengerId]?.[seg.sid]?.size ?? 0;
+                const isSingle = activeLeg.segments.length === 1;
+                return (
+                    <button
+                        key={seg.sid}
+                        type="button"
+                        onClick={() => setActiveSegmentIndex(i)}
+                        disabled={isSingle}
+                        className={`text-xs font-semibold rounded-full px-4 py-1.5 border transition-colors ${
+                            activeSegmentIndex === i
+                                ? "bg-[#e8f4fb] text-[#1c8fc7] border-[#1c8fc7]"
+                                : "bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700"
+                        } ${isSingle ? "cursor-default" : ""}`}
+                    >
+                        {seg.from}-{seg.to}
+                        {count > 0 && <span className="ml-1">· {count} Meal</span>}
+                    </button>
+                );
+            })}
+        </div>
+
+        {/* Render only the active segment */}
+        {(() => {
+            const seg = activeLeg.segments[activeSegmentIndex];
+            if (!seg) return null;
+            const paxType = passengers.find((p) => p.id === activePassengerId)?.type ?? "ADT";
+            const options = optionsForPax(seg.mealOptions, paxType);
+            const selectedCodes = meals[activePassengerId]?.[seg.sid] ?? new Set<string>();
+
+            return (
+                <div>
+                   
+                    {options.length === 0 ? (
+                        <p className="text-sm text-gray-400 dark:text-gray-500">No meal add-ons available on this segment.</p>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {options.map((opt) => {
+                                const selected = selectedCodes.has(opt.code);
                                 return (
-                                    <div key={seg.sid}>
-                                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">
-                                            {seg.from} &rarr; {seg.to} &middot; {seg.airlineCode}-{seg.flightNo}
-                                        </p>
-                                        {options.length === 0 ? (
-                                            <p className="text-sm text-gray-400 dark:text-gray-500">No meal add-ons available on this segment.</p>
-                                        ) : (
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                {options.map((opt) => {
-                                                    const selected = selectedCodes.has(opt.code);
-                                                    return (
-                                                        <div
-                                                            key={opt.code}
-                                                            className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 ${
-                                                                selected ? "border-[#1c8fc7] bg-dark dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700]" : "border-gray-200 dark:border-gray-700"
-                                                            }`}
-                                                        >
-                                                            <div>
-                                                                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{opt.desc}</p>
-                                                                <p className="text-xs text-gray-400 dark:text-gray-500">{formatPrice(opt.charge)}</p>
-                                                            </div>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => toggleMeal(activePassengerId, seg.sid, opt.code)}
-                                                                className={`text-xs font-semibold rounded-full px-4 py-1.5 border shrink-0 transition-colors ${
-                                                                    selected
-                                                                        ? "border-[#FF7626] text-[#FF7626] bg-white dark:bg-gray-900"
-                                                                        : "border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
-                                                                }`}
-                                                            >
-                                                                {selected ? "Remove" : "Add"}
-                                                            </button>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        )}
+                                    <div
+                                        key={opt.code}
+                                        className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 ${
+                                            selected
+                                                ? "border-[#1c8fc7] bg-[#e8f4fb] dark:bg-gray-900"
+                                                : "border-gray-200 dark:border-gray-700"
+                                        }`}
+                                    >
+                                        <div>
+                                            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{opt.desc}</p>
+                                            <p className="text-xs text-gray-400 dark:text-gray-500">{formatPrice(opt.charge)}</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleMeal(activePassengerId, seg.sid, opt.code)}
+                                            className={`text-xs font-semibold rounded-full px-4 py-1.5 border shrink-0 transition-colors ${
+                                                selected
+                                                    ? "border-[#FF7626] text-[#FF7626] bg-white dark:bg-gray-900"
+                                                    : "border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+                                            }`}
+                                        >
+                                            {selected ? "Remove" : "Add"}
+                                        </button>
                                     </div>
                                 );
                             })}
                         </div>
                     )}
+                </div>
+            );
+        })()}
+    </div>
+)}
                 </div>
             </div>
 

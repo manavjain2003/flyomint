@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
     HiOutlineCalendar,
     HiOutlineUserGroup,
@@ -11,6 +11,7 @@ import {
     HiOutlineTag,
     HiOutlinePencil,
 } from "react-icons/hi";
+import GoogleAdSlot from "../shared/GoogleAdSlot";
 import { getAirlineToken, pollAvailability } from "@/app/lib/flightsapi";
 import { DatePickerBrandStyles } from "../shared/DatePickerBrandStyles";
 import {
@@ -152,12 +153,14 @@ export default function FlightResults({
             const resolvedToCity = toCityProp || prev.toCity;
             const resolvedFromAirport = fromAirportProp ?? prev.fromAirport;
             const resolvedToAirport = toAirportProp ?? prev.toAirport;
+const resolvedDirectOnly = directOnlyProp ?? prev.directOnly;
 
             const unchanged =
                 resolvedFromCity === prev.fromCity &&
                 resolvedToCity === prev.toCity &&
                 resolvedFromAirport === prev.fromAirport &&
-                resolvedToAirport === prev.toAirport;
+                       resolvedToAirport === prev.toAirport &&
+        resolvedDirectOnly === prev.directOnly;
 
             if (unchanged) return prev;
 
@@ -167,9 +170,11 @@ export default function FlightResults({
                 toCity: resolvedToCity,
                 fromAirport: resolvedFromAirport,
                 toAirport: resolvedToAirport,
+                directOnly: resolvedDirectOnly,
+
             };
         });
-    }, [fromProp, toProp, fromCityProp, toCityProp, fromAirportProp, toAirportProp]);
+    }, [fromProp, toProp, fromCityProp, toCityProp, fromAirportProp, toAirportProp, directOnlyProp]);
 
     const { from, to, fromCity, toCity, tripType, adults, children, infants, cabinClass, directOnly } = criteria;
     const fromLabel = formatAirportCodeLabel(from, fromAirportProp?.CityName || fromCity);
@@ -326,7 +331,7 @@ useEffect(() => {
     return () => { ignore = true; };
 }, [selectedDate, returnDate, tripType, adults, children, infants, cabinClass, directOnly, from, to]);
 
-    const onwardJourneys = trips[0]?.Journey ?? [];
+const onwardJourneys = trips[0]?.Journey ?? [];
     const returnJourneys = trips[1]?.Journey ?? [];
     const allJourneys = useMemo(() => [...onwardJourneys, ...returnJourneys], [onwardJourneys, returnJourneys]);
 
@@ -366,12 +371,6 @@ useEffect(() => {
                 .map(([code, v]) => ({ code, name: v.name, price: v.price })),
         };
     }, [allJourneys]);
-
-    useEffect(() => {
-        if (!priceTouched && filterOptions.maxPrice > 0) {
-            setFilters((f) => ({ ...f, maxPrice: filterOptions.maxPrice }));
-        }
-    }, [filterOptions.maxPrice, priceTouched]);
 
     const filteredOnward = useMemo(
         () => onwardJourneys.filter((j) => journeyPasses(j, filters)),
@@ -425,6 +424,50 @@ useEffect(() => {
         );
     }, [combinedOnwardJourneys, combinedReturnJourneys]);
 
+    // Combined (RS) view uses a completely different dataset — combinedPairs,
+    // built from combinedTrips — not the split-search `trips`/allJourneys above.
+    // filterOptions was previously being reused for both views, which meant the
+    // sidebar in Combined View showed options derived from the split search
+    // (often empty or mismatched), not from the pairs actually on screen.
+    const combinedFilterOptions = useMemo(() => {
+        let min = Infinity;
+        let max = 0;
+        const stopsMap = new Map<number, number>();
+        const airlineMap = new Map<string, { name: string; price: number }>();
+
+        for (const pair of combinedPairs) {
+            const amount = primaryFareAmount(pair.onwardFare) + primaryFareAmount(pair.retFare);
+            min = Math.min(min, amount);
+            max = Math.max(max, amount);
+
+            // Combined trips have two legs; bucket by the higher stop-count of
+            // the two so the label ("Non Stop" / "1 Stop") reflects what a
+            // person filtering by stops would expect to see excluded/included.
+            const stopsKey = Math.max(pair.onward.Stops, pair.ret.Stops);
+            const prevStop = stopsMap.get(stopsKey);
+            stopsMap.set(stopsKey, prevStop != null ? Math.min(prevStop, amount) : amount);
+
+            const firstSeg = pair.onward.Segments[0];
+            if (firstSeg) {
+                const prev = airlineMap.get(firstSeg.AirlineCode);
+                if (!prev || amount < prev.price) {
+                    airlineMap.set(firstSeg.AirlineCode, { name: firstSeg.AirlineName, price: amount });
+                }
+            }
+        }
+
+        if (!Number.isFinite(min)) min = 0;
+
+        return {
+            minPrice: min,
+            maxPrice: max,
+            stops: [...stopsMap.entries()].sort((a, b) => a[0] - b[0]).map(([stops, price]) => ({ stops, price })),
+            airlines: [...airlineMap.entries()]
+                .sort((a, b) => a[1].price - b[1].price)
+                .map(([code, v]) => ({ code, name: v.name, price: v.price })),
+        };
+    }, [combinedPairs]);
+
     const filteredCombinedPairs = useMemo(
         () => combinedPairs.filter((p) => pairPasses(p, filters)),
         [combinedPairs, filters]
@@ -443,14 +486,25 @@ useEffect(() => {
                 : bothViewsLoaded && combinedHasResults && !splitHasResults
                     ? "combined"
                     : "split";
+
+    // Whichever dataset is actually rendered on screen right now drives the sidebar.
+    const activeFilterOptions = effectiveView === "combined" ? combinedFilterOptions : filterOptions;
+
+    useEffect(() => {
+        if (!priceTouched && activeFilterOptions.maxPrice > 0) {
+            setFilters((f) => ({ ...f, maxPrice: activeFilterOptions.maxPrice }));
+        }
+    }, [activeFilterOptions.maxPrice, priceTouched]);
+
     const noResultsAtAll =
         tripType === "roundtrip"
             ? bothViewsLoaded && !error && !combinedError && !splitHasResults && !combinedHasResults
             : !loading && !error && !splitHasResults;
     const showFooter = tripType === "roundtrip" && effectiveView === "split";
     const overallLoading = tripType === "roundtrip" ? (loading || combinedLoading) : loading;
+
     function clearFilters() {
-        setFilters({ ...EMPTY_FILTERS, maxPrice: filterOptions.maxPrice });
+        setFilters({ ...EMPTY_FILTERS, maxPrice: activeFilterOptions.maxPrice });
         setPriceTouched(false);
     }
 
@@ -604,174 +658,256 @@ useEffect(() => {
             </div>
 
             {/* Promo strip */}
-            <div className="max-w-8xl mx-auto px-4 sm:px-6 py-4">
-                <div className="flex gap-3 overflow-x-auto pb-1">
-                    {PROMOS.map((p) => (
-                        <button
-                            key={p.title}
-                            type="button"
-                            className="flex items-center gap-3 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl px-4 py-3 shrink-0 min-w-[260px] text-left hover:border-gray-200 dark:hover:border-gray-700 transition-colors"
-                        >
-                            <span className="w-8 h-8 rounded-full bg-[#e8f4fb] text-[#1c8fc7] flex items-center justify-center shrink-0">
-                                <HiOutlineTag className="w-4 h-4" />
-                            </span>
-                            <span className="min-w-0">
-                                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{p.title}</p>
-                                <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{p.subtitle}</p>
-                            </span>
-                            <HiOutlineChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-600 shrink-0" />
-                        </button>
-                    ))}
-                </div>
-            </div>
+         {(() => {
+                const isOneway = tripType === "oneway";
+const promoRef = useRef<HTMLDivElement>(null);
+const [promoCanScrollLeft, setPromoCanScrollLeft] = useState(false);
+const [promoCanScrollRight, setPromoCanScrollRight] = useState(true);
 
-            <div className="max-w-8xl mx-auto px-4 sm:px-6 flex gap-6">
-                <aside className="hidden lg:block w-64 shrink-0">
-                    <FilterSidebar
-                        filters={filters}
-                        setFilters={setFilters}
-                        setPriceTouched={setPriceTouched}
-                        options={filterOptions}
-                        onClear={clearFilters}
-                    />
-                </aside>
+const checkPromoScroll = useCallback(() => {
+    const el = promoRef.current;
+    if (!el) return;
+    setPromoCanScrollLeft(el.scrollLeft > 0);
+    setPromoCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+}, []);
 
-                <div className="flex-1 min-w-0">
-                    {/* Date strip — one-way trips only */}
-                    {tripType === "oneway" && (
-                        <div className="flex items-center gap-2 mb-5 w-full">
-                            <button
-                                type="button"
-                                onClick={() => setDateStripOffset((v) => v - 7)}
-                                className="grid place-items-center w-8 h-8 rounded-full border border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 hover:text-[#1c8fc7] hover:border-[#1c8fc7] shrink-0"
-                                aria-label="Earlier dates"
-                            >
-                                <HiOutlineChevronLeft className="w-4 h-4" />
-                            </button>
+useEffect(() => {
+    const el = promoRef.current;
+    if (!el) return;
+    checkPromoScroll();
+    el.addEventListener("scroll", checkPromoScroll, { passive: true });
+    window.addEventListener("resize", checkPromoScroll);
+    return () => {
+        el.removeEventListener("scroll", checkPromoScroll);
+        window.removeEventListener("resize", checkPromoScroll);
+    };
+}, [checkPromoScroll]);
 
-                            <div className="flex-1 flex gap-2 overflow-x-auto sm:overflow-x-visible min-w-0">
-                               {dateStrip.map((d) => {
-    const { dow, day, mon } = formatDayLabel(d);
-    const isSelected = toApiDate(d) === toApiDate(selectedDate);
-    return (
+const scrollPromo = (dir: "left" | "right") => {
+    const el = promoRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir === "left" ? -280 : 280, behavior: "smooth" });
+};
+const promoStrip = (
+    <div className="flex items-center gap-2 mb-4">
         <button
-            key={toApiDate(d)}
             type="button"
-            onClick={() => {
-                setSelectedDate(d);
-                onModifySearch?.(criteria, d, null);
-            }}
-            className={`flex-1 min-w-[64px] rounded-xl border px-2 py-2 text-center transition-colors ${
-                isSelected
-                    ? "border-[#1c8fc7] bg-[#e8f4fb] text-[#1c8fc7]"
-                    : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600"
+            onClick={() => scrollPromo("left")}
+            disabled={!promoCanScrollLeft}
+            className={`grid place-items-center w-8 h-8 rounded-full border shrink-0 transition-colors ${
+                promoCanScrollLeft
+                    ? "border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 hover:text-[#1c8fc7] hover:border-[#1c8fc7]"
+                    : "border-gray-100 dark:border-gray-800 text-gray-200 dark:text-gray-700 cursor-not-allowed"
             }`}
+            aria-label="Previous offers"
         >
-                                            <p className="text-[11px] font-medium">{dow}</p>
-                                            <p className="text-lg font-bold leading-tight">{day}</p>
-                                            <p className="text-[11px]">{mon}</p>
-                                        </button>
-                                    );
-                                })}
-                            </div>
+            <HiOutlineChevronLeft className="w-4 h-4" />
+        </button>
 
-                            <button
-                                type="button"
-                                onClick={() => setDateStripOffset((v) => v + 7)}
-                                className="grid place-items-center w-8 h-8 rounded-full border border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 hover:text-[#1c8fc7] hover:border-[#1c8fc7] shrink-0"
-                                aria-label="Later dates"
-                            >
-                                <HiOutlineChevronRight className="w-4 h-4" />
-                            </button>
-                        </div>
-                    )}
+        <div
+            ref={promoRef}
+            className="flex-1 flex gap-3 overflow-x-auto pb-1 scrollbar-hide scroll-smooth snap-x snap-mandatory min-w-0"
+            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+        >
+            {PROMOS.map((p) => (
+                <button
+                    key={p.title}
+                    type="button"
+                    className="flex items-center gap-3 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl px-4 py-3 shrink-0 min-w-[260px] text-left hover:border-gray-200 dark:hover:border-gray-700 transition-colors snap-start"
+                >
+                    <span className="w-8 h-8 rounded-full bg-[#e8f4fb] text-[#1c8fc7] flex items-center justify-center shrink-0">
+                        <HiOutlineTag className="w-4 h-4" />
+                    </span>
+                    <span className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{p.title}</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{p.subtitle}</p>
+                    </span>
+                    <HiOutlineChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-600 shrink-0" />
+                </button>
+            ))}
+        </div>
 
-                    {showViewTabs && (
-                        <div className="inline-flex rounded-full border border-gray-200 dark:border-gray-700 p-1 mb-5 gap-1">
-                            <button
-                                type="button"
-                                onClick={() => setViewMode("combined")}
-                                className={`px-5 py-1.5 rounded-full text-sm font-semibold transition-colors ${effectiveView === "combined"
-                                    ? "bg-[#1c8fc7] text-white"
-                                    : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
-                                    }`}
-                            >
-                                Combined View
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setViewMode("split")}
-                                className={`px-5 py-1.5 rounded-full text-sm font-semibold transition-colors ${effectiveView === "split"
-                                    ? "bg-[#1c8fc7] text-white"
-                                    : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
-                                    }`}
-                            >
-                                Split View
-                            </button>
-                        </div>
-                    )}
-
-{noResultsAtAll ? (
-    <div className="flex flex-col items-center justify-center text-center py-24 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800">
-        <p className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">No flights found</p>
-        <p className="text-sm text-gray-400 dark:text-gray-500">
-            Try changing your travel dates, route, or search filters.
-        </p>
+        <button
+            type="button"
+            onClick={() => scrollPromo("right")}
+            disabled={!promoCanScrollRight}
+            className={`grid place-items-center w-8 h-8 rounded-full border shrink-0 transition-colors ${
+                promoCanScrollRight
+                    ? "border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 hover:text-[#1c8fc7] hover:border-[#1c8fc7]"
+                    : "border-gray-100 dark:border-gray-800 text-gray-200 dark:text-gray-700 cursor-not-allowed"
+            }`}
+            aria-label="Next offers"
+        >
+            <HiOutlineChevronRight className="w-4 h-4" />
+        </button>
     </div>
-) : tripType === "roundtrip" && overallLoading && !splitHasResults && !combinedHasResults ? (
-    <FlightSearchSkeleton fromLabel={fromCity || from} toLabel={toCity || to} />
-) : tripType === "roundtrip" && effectiveView === "combined" ? (
-    <CombinedJourneyList
-        fromCity={fromCity || from}
-        toCity={toCity || to}
-        loading={overallLoading}
-        error={combinedError}
-        pairs={filteredCombinedPairs}
-        expandedGroupId={expandedGroupId}
-        setExpandedGroupId={setExpandedGroupId}
-        onBookPair={handleBookPair}
-        travelerCounts={{ adults, children, infants }}
-        tokenId={combinedTokenId}
-    />
-) : (
-    <div className={tripType === "roundtrip" ? "grid grid-cols-1 lg:grid-cols-2 gap-6" : undefined}>
-        <JourneyList
-            title="Departing"
-            from={fromCity || from}
-            to={toCity || to}
-            loading={overallLoading}
-            error={error}
-            journeys={filteredOnward}
-            selectedGroupId={selectedOnward?.journey.GroupId ?? null}
-            expandedGroupId={expandedGroupId}
-            setExpandedGroupId={setExpandedGroupId}
-            onSelectFlight={(j, f) => handleSelect("onward", j, f)}
-            onBookFare={handleBookFare}
-            directBooking={tripType === "oneway"}
-            travelerCounts={{ adults, children, infants }}
-            tokenId={searchTokenId}
-        />
+);
 
-        {tripType === "roundtrip" && (
-            <JourneyList
-                title="Returning"
-                from={toCity || to}
-                to={fromCity || from}
-                loading={loading}
-                error={error}
-                journeys={filteredReturn}
-                selectedGroupId={selectedReturn?.journey.GroupId ?? null}
-                expandedGroupId={expandedGroupId}
-                setExpandedGroupId={setExpandedGroupId}
-                onSelectFlight={(j, f) => handleSelect("return", j, f)}
-                travelerCounts={{ adults, children, infants }}
-                tokenId={searchTokenId}
-            />
-        )}
+                const dateStripEl = isOneway && (
+                    <div className="flex items-center gap-2 mb-5">
+                        <button
+                            type="button"
+                            onClick={() => setDateStripOffset((v) => v - 7)}
+                            className="grid place-items-center w-8 h-8 rounded-full border border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 hover:text-[#1c8fc7] hover:border-[#1c8fc7] shrink-0"
+                            aria-label="Earlier dates"
+                        >
+                            <HiOutlineChevronLeft className="w-4 h-4" />
+                        </button>
+
+                        <div className="flex-1 flex gap-2 overflow-x-auto sm:overflow-x-visible min-w-0">
+                            {dateStrip.map((d) => {
+                                const { dow, day, mon } = formatDayLabel(d);
+                                const isSelected = toApiDate(d) === toApiDate(selectedDate);
+                                return (
+                                    <button
+                                        key={toApiDate(d)}
+                                        type="button"
+                                        onClick={() => {
+                                            setSelectedDate(d);
+                                            onModifySearch?.(criteria, d, null);
+                                        }}
+                                        className={`flex-1 min-w-[56px] rounded-xl border px-2 py-2 text-center transition-colors ${
+                                            isSelected
+                                                ? "border-[#1c8fc7] bg-[#e8f4fb] text-[#1c8fc7]"
+                                                : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600"
+                                        }`}
+                                    >
+                                        <p className="text-[11px] font-medium">{dow}</p>
+                                        <p className="text-lg font-bold leading-tight">{day}</p>
+                                        <p className="text-[11px]">{mon}</p>
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={() => setDateStripOffset((v) => v + 7)}
+                            className="grid place-items-center w-8 h-8 rounded-full border border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 hover:text-[#1c8fc7] hover:border-[#1c8fc7] shrink-0"
+                            aria-label="Later dates"
+                        >
+                            <HiOutlineChevronRight className="w-4 h-4" />
+                        </button>
+                    </div>
+                );
+
+                const viewTabsEl = showViewTabs && (
+                    <div className="inline-flex rounded-full border border-gray-200 dark:border-gray-700 p-1 mb-5 gap-1">
+                        <button
+                            type="button"
+                            onClick={() => setViewMode("combined")}
+                            className={`px-5 py-1.5 rounded-full text-sm font-semibold transition-colors ${
+                                effectiveView === "combined"
+                                    ? "bg-[#1c8fc7] text-white"
+                                    : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                            }`}
+                        >
+                            Combined View
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setViewMode("split")}
+                            className={`px-5 py-1.5 rounded-full text-sm font-semibold transition-colors ${
+                                effectiveView === "split"
+                                    ? "bg-[#1c8fc7] text-white"
+                                    : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                            }`}
+                        >
+                            Split View
+                        </button>
+                    </div>
+                );
+
+                const resultsEl = noResultsAtAll ? (
+                    <div className="flex flex-col items-center justify-center text-center py-24 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800">
+                        <p className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">No flights found</p>
+                        <p className="text-sm text-gray-400 dark:text-gray-500">
+                            Try changing your travel dates, route, or search filters.
+                        </p>
+                    </div>
+                ) : tripType === "roundtrip" && overallLoading && !splitHasResults && !combinedHasResults ? (
+                    <FlightSearchSkeleton fromLabel={fromCity || from} toLabel={toCity || to} />
+                ) : tripType === "roundtrip" && effectiveView === "combined" ? (
+                    <CombinedJourneyList
+                        fromCity={fromCity || from}
+                        toCity={toCity || to}
+                        loading={overallLoading}
+                        error={combinedError}
+                        pairs={filteredCombinedPairs}
+                        expandedGroupId={expandedGroupId}
+                        setExpandedGroupId={setExpandedGroupId}
+                        onBookPair={handleBookPair}
+                        travelerCounts={{ adults, children, infants }}
+                        tokenId={combinedTokenId}
+                        searchType="RS"
+                    />
+                ) : (
+                    <div className={tripType === "roundtrip" ? "grid grid-cols-1 lg:grid-cols-2 gap-6" : undefined}>
+                        <JourneyList
+                            title="Departing"
+                            from={fromCity || from}
+                            to={toCity || to}
+                            loading={overallLoading}
+                            error={error}
+                            journeys={filteredOnward}
+                            selectedGroupId={selectedOnward?.journey.GroupId ?? null}
+                            expandedGroupId={expandedGroupId}
+                            setExpandedGroupId={setExpandedGroupId}
+                            onSelectFlight={(j, f) => handleSelect("onward", j, f)}
+                            onBookFare={handleBookFare}
+                            directBooking={tripType === "oneway"}
+                            travelerCounts={{ adults, children, infants }}
+                            tokenId={searchTokenId}
+                            searchType={tripType === "roundtrip" ? "RT" : "ON"}
+                        />
+
+                        {tripType === "roundtrip" && (
+                            <JourneyList
+                                title="Returning"
+                                from={toCity || to}
+                                to={fromCity || from}
+                                loading={loading}
+                                error={error}
+                                journeys={filteredReturn}
+                                selectedGroupId={selectedReturn?.journey.GroupId ?? null}
+                                expandedGroupId={expandedGroupId}
+                                setExpandedGroupId={setExpandedGroupId}
+                                onSelectFlight={(j, f) => handleSelect("return", j, f)}
+                                travelerCounts={{ adults, children, infants }}
+                                tokenId={searchTokenId}
+                                searchType={tripType === "roundtrip" ? "RT" : "ON"}
+                            />
+                        )}
+                    </div>
+                );
+
+               return (
+                    <div className="max-w-8xl mx-auto px-4 sm:px-6 flex gap-6 py-4">
+                        <aside className="hidden lg:block w-74 shrink-0">
+                            <FilterSidebar
+                                filters={filters}
+                                setFilters={setFilters}
+                                setPriceTouched={setPriceTouched}
+                                options={activeFilterOptions}
+                                onClear={clearFilters}
+                            />
+                        </aside>
+
+                        <div className={isOneway ? "flex-1 min-w-0 lg:max-w-[1120px]" : "flex-1 min-w-0"}>
+                            {promoStrip}
+                            {dateStripEl}
+                            {viewTabsEl}
+                            {resultsEl}
+                        </div>
+
+                        {isOneway && (
+    <div className="hidden xl:block w-[320px] shrink-0">
+        <GoogleAdSlot width={300} height={600} />
     </div>
 )}
-                </div>
-            </div>
+                    </div>
+                );
+            })()}
 
             {/* Sticky booking summary bar */}
             {showFooter && (

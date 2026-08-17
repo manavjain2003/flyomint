@@ -24,26 +24,8 @@ export default function CombinedFlightCard({
     tokenId?: string;
     searchType?: string;
 }) {
-    const onwardFares = useMemo(
-        () =>
-            [...(pair.onward.FareInfo ?? [])].sort(
-                (a, b) => primaryFareAmount(a) - primaryFareAmount(b)
-            ),
-        [pair.onward]
-    );
-    const returnFares = useMemo(
-        () =>
-            [...(pair.ret.FareInfo ?? [])].sort(
-                (a, b) => primaryFareAmount(a) - primaryFareAmount(b)
-            ),
-        [pair.ret]
-    );
-
-    const [onwardFareIdx] = useState(0);
-    const [returnFareIdx] = useState(0);
-
-    const onwardFare = onwardFares[onwardFareIdx] ?? { GrossFare: 0, NetFare: 0 };
-    const returnFare = returnFares[returnFareIdx] ?? { GrossFare: 0, NetFare: 0 };
+      const onwardFare = pair.onwardFare;
+    const returnFare = pair.retFare;
     const totalFare =
         primaryFareAmount(onwardFare as FareInfo) +
         primaryFareAmount(returnFare as FareInfo);

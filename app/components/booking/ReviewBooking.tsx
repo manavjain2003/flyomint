@@ -44,6 +44,8 @@ type FareInfo = {
     ConId?: string;
     ChannelCode?: string;
     FareType?: string;
+    BaseFare?: number;
+    Tax?: number;
     GrossFare: number;
     NetFare: number;
     FareMessage?: string;
@@ -158,18 +160,31 @@ function formatPrice(amount: number) {
     );
 }
 
-function adtPtc(fare: FareInfo): PTCFareEntry | undefined {
-    return fare.PTCFare?.find((p) => p.PTC === "ADT");
+function ptcEntry(fare: FareInfo, ptc: "ADT" | "CHD" | "INF"): PTCFareEntry | undefined {
+    return fare.PTCFare?.find((p) => p.PTC === ptc);
 }
 
-function adtNetFare(fare: FareInfo): number {
-    return adtPtc(fare)?.NetFare ?? fare.NetFare;
+/** Sums a fare field (Fare / Tax / GrossFare / NetFare) across ALL traveler
+ * types — Adult, Child, Infant — each weighted by its own passenger count.
+ * This is what makes the total reflect what every traveler actually pays,
+ * not just the adults. */
+function totalAcrossTravelers(
+    legs: LegSelection[],
+    field: "Fare" | "Tax" | "GrossFare" | "NetFare",
+    counts: { adults: number; children: number; infants: number }
+): number {
+    return legs.reduce((sum, leg) => {
+        const adt = ptcEntry(leg.fare, "ADT");
+        const chd = ptcEntry(leg.fare, "CHD");
+        const inf = ptcEntry(leg.fare, "INF");
+        const adtAmt = (adt?.[field] ?? (field === "GrossFare" ? leg.fare.GrossFare : field === "NetFare" ? leg.fare.NetFare : 0)) * counts.adults;
+        const chdAmt = (chd?.[field] ?? 0) * counts.children;
+        const infAmt = (inf?.[field] ?? 0) * counts.infants;
+        return sum + adtAmt + chdAmt + infAmt;
+    }, 0);
 }
-function displayFareAmount(fare: FareInfo): number {
-    const type = fare.FareDisplayType;
-    if (type === "S" || type === "N") return fare.NetFare;
-    return fare.GrossFare; // P, G, or fallback
-}
+
+
 
 function isStrikeThruFare(fare: FareInfo): boolean {
     return fare.FareDisplayType === "S";
@@ -237,7 +252,7 @@ function Tag({ children, tone = "orange" }: { children: React.ReactNode; tone?: 
             : tone === "blue"
                 ? "bg-[#e8f4fb] text-[#1c8fc7]"
                 : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300";
-    return <span className={`text-[10px] font-semibold rounded-full px-3 py-1 whitespace-nowrap leading-[1.4] ${cls}`}>{children}</span>;
+    return <span className={`text-[12px] font-semibold rounded-full px-3 py-1 whitespace-nowrap leading-[1.4] ${cls}`}>{children}</span>;
 }
 
 function StepIndicator() {
@@ -309,21 +324,23 @@ function SegmentLeg({
                     </span>
             </div>
 
-            {/* Departure / duration / arrival row. Departure and arrival are sized to their own
-                content (not stretched across a wide track) so their edges end right where the
-                text ends; the divider is flex-1 so it fills exactly whatever space is left
-                between them, with only a 2px gap on each side - that's what makes the dashed
-                line actually touch both content blocks instead of floating with dead space
-                around it. self-center keeps the divider vertically centered regardless of how
-                tall either side gets (extra terminal line, nearby-airport badge, etc). */}
-            <div className="flex items-start gap-0.5">
+        
+     {/* Departure / duration / arrival row — CSS Grid with fixed left/right column
+                widths guarantees the divider (middle) column is exactly the same width on
+                every segment card, so the dot-line-dot always sits in an identical position
+                and stays symmetric regardless of how much text/badges are in the side
+                columns. A flex-based layout could still drift a few px between rows because
+                flex-basis on the side columns responds to their content; grid's fixed track
+                sizes cannot. */}
+            <div className="grid grid-cols-[minmax(0,180px)_1fr_minmax(0,180px)] items-start gap-2">
                 {/* Departure */}
-                <div className="min-w-0 shrink">
+                <div className="min-w-0">
                     {seg.DepartureTime && <p className="text-[12px] text-gray-400 dark:text-gray-500 mb-2 leading-[1.4]">{formatDate(seg.DepartureTime)}</p>}
                     <p className="text-[30px] font-bold text-gray-900 dark:text-gray-100 leading-tight">{formatTime(seg.DepartureTime)}</p>
                     <p className="text-[14px] font-semibold text-gray-600 dark:text-gray-300 mt-1 break-words leading-[1.4]">
                         {seg.DepartureAirportCode} - {depCity}
                     </p>
+                    <p className="text-[14px] text-gray-400 dark:text-gray-500 leading-[1.4]">{seg.DepartureAirportName}</p>
                     {seg.DepartureTerminal && (
                         <p className="text-[14px] text-gray-400 dark:text-gray-500 leading-[1.4]">{seg.DepartureTerminal}</p>
                     )}
@@ -335,8 +352,9 @@ function SegmentLeg({
                     )}
                 </div>
 
-                {/* Duration divider */}
-                <div className="flex-1 flex flex-col items-center justify-center self-center text-gray-400 dark:text-gray-500 min-w-[36px]">
+                {/* Duration divider — centered within its own fixed-width grid track,
+                    so the dot-line-dot midpoint lines up identically across every card. */}
+                <div className="flex flex-col items-center justify-center self-center text-gray-400 dark:text-gray-500 pt-1">
                     {seg.Duration && <span className="text-[15px] mb-1.5 whitespace-nowrap leading-[1.4]">{formatDurationShort(seg.Duration)}</span>}
                     <div className="w-full flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" />
@@ -346,17 +364,19 @@ function SegmentLeg({
                 </div>
 
                 {/* Arrival */}
-                <div className="min-w-0 shrink">
+                <div className="min-w-0 text-right">
                     {seg.ArrivalTime && <p className="text-[12px] text-gray-400 dark:text-gray-500 mb-2 leading-[1.4]">{formatDate(seg.ArrivalTime)}</p>}
                     <p className="text-[30px] font-bold text-gray-900 dark:text-gray-100 leading-tight">{formatTime(seg.ArrivalTime)}</p>
                     <p className="text-[14px] font-semibold text-gray-600 dark:text-gray-300 mt-1 break-words leading-[1.4]">
                         {seg.ArrivalAirportCode} - {arrCity}
                     </p>
+                    <p className="text-[14px] text-gray-400 dark:text-gray-500 leading-[1.4]">{seg.ArrivalAirportName}</p>
                     {seg.ArrivalTerminal && (
                         <p className="text-[14px] text-gray-400 dark:text-gray-500 leading-[1.4]">{seg.ArrivalTerminal}</p>
                     )}
+
                     {arrivalNearBy && (
-                        <span className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded-md bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300 text-[10px] font-semibold whitespace-nowrap leading-[1.4]">
+                        <span className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded-md bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300 text-[10px] font-semibold whitespace-nowrap leading-[1.4] justify-self-end">
                             <HiOutlineLocationMarker className="w-3 h-3 shrink-0" />
                             Nearby airport
                         </span>
@@ -758,7 +778,7 @@ function FareRuleSidebar({
                     </div>
                 )}
 
-                <div className="flex-1 overflow-y-auto no-scrollbar px-5 py-4">
+                <div className="flex-1 overflow-y-auto no-scrollbar px-5 py-4 dark:bg-gray-900">
                     <RulesCard
                         legs={activeLeg ? [activeLeg] : []}
                         ruleLoading={ruleLoading}
@@ -1047,12 +1067,27 @@ export default function ReviewBooking({
     const isCombinedRoundtrip = searchType === "RS";
     const fareLegs = isCombinedRoundtrip && displayOnward ? [displayOnward] : legs;
 
-    const baseFare =
-        fareLegs.reduce((sum, leg) => sum + (adtPtc(leg.fare)?.Fare ?? 0), 0) * adults;
-    const taxes = fareLegs.reduce((sum, leg) => sum + (adtPtc(leg.fare)?.Tax ?? 0), 0) * adults;
-    const totalAmount = fareLegs.reduce((sum, leg) => sum + displayFareAmount(leg.fare), 0) * adults;
-    const grossTotal = fareLegs.reduce((sum, leg) => sum + leg.fare.GrossFare, 0) * adults;
-    const showStrikeThru = fareLegs.some((l) => isStrikeThruFare(l.fare));
+const travelerCounts = { adults, children, infants };
+
+const baseFareTotal = totalAcrossTravelers(fareLegs, "Fare", travelerCounts);
+const taxTotal = totalAcrossTravelers(fareLegs, "Tax", travelerCounts);
+const grossFareTotal = totalAcrossTravelers(fareLegs, "GrossFare", travelerCounts);
+const netFareTotal = totalAcrossTravelers(fareLegs, "NetFare", travelerCounts);
+const discountTotal = grossFareTotal - netFareTotal;
+
+// FareDisplayType
+//  "G" -> Gross fare only
+//  "N" -> Net fare only
+//  "S" -> Gross fare struck through
+//  "P" -> , discount + strike-through only if discounted
+const fareDisplayType = fareLegs[0]?.fare.FareDisplayType ?? "P";
+
+const showBreakdown = fareDisplayType !== "N";
+const showDiscountRow =
+    (fareDisplayType === "P" || fareDisplayType === "S") && discountTotal > 0;
+const showStrikeThru =
+    fareDisplayType === "S" ? true : fareDisplayType === "P" ? discountTotal > 0 : false;
+const totalAmount = fareDisplayType === "G" ? grossFareTotal : netFareTotal;
 
     const gstMandatory = Boolean(checklist?.GSTMandate);
     const showTravellerForms = isPriced && checklist;
@@ -1189,16 +1224,24 @@ export default function ReviewBooking({
                         {infants > 0 && <Tag tone="blue">{infants} Infant{infants > 1 ? "s" : ""}</Tag>}
                     </div>
 
-                    <div className="space-y-2 pb-3 border-b border-gray-100 dark:border-gray-800">
-                        <div className="flex items-center justify-between text-[14px] leading-[1.4]">
-                            <span className="text-gray-500 dark:text-gray-400">Base fare</span>
-                            <span className="font-semibold text-gray-900 dark:text-gray-100">{formatPrice(baseFare)}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-[14px] leading-[1.4]">
-                            <span className="text-gray-500 dark:text-gray-400">Taxes &amp; fees</span>
-                            <span className="font-semibold text-gray-900 dark:text-gray-100">{formatPrice(taxes)}</span>
-                        </div>
-                    </div>
+{showBreakdown && (
+    <div className="space-y-2 pb-3 border-b border-gray-100 dark:border-gray-800">
+        <div className="flex items-center justify-between text-[14px] leading-[1.4]">
+            <span className="text-gray-500 dark:text-gray-400">Base fare</span>
+            <span className="font-semibold text-gray-900 dark:text-gray-100">{formatPrice(baseFareTotal)}</span>
+        </div>
+        <div className="flex items-center justify-between text-[14px] leading-[1.4]">
+            <span className="text-gray-500 dark:text-gray-400">Taxes &amp; fees</span>
+            <span className="font-semibold text-gray-900 dark:text-gray-100">{formatPrice(taxTotal)}</span>
+        </div>
+        {showDiscountRow && (
+            <div className="flex items-center justify-between text-[14px] leading-[1.4]">
+                <span className="text-gray-500 dark:text-gray-400">Discount</span>
+                <span className="font-semibold text-green-600 dark:text-green-400">-{formatPrice(discountTotal)}</span>
+            </div>
+        )}
+    </div>
+)}
 
                     <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-800">
                         <div>
@@ -1207,7 +1250,7 @@ export default function ReviewBooking({
                         </div>
                         <div className="text-right">
                             {showStrikeThru && (
-                                <p className="text-[14px] text-gray-400 dark:text-gray-500 line-through leading-[1.4]">{formatPrice(grossTotal)}</p>
+  <p className="text-[14px] text-gray-400 dark:text-gray-500 line-through leading-[1.4]">{formatPrice(grossFareTotal)}</p>
                             )}
                             <p className="text-[24px] font-bold text-[#1c8fc7] leading-tight">{formatPrice(totalAmount)}</p>
                         </div>
