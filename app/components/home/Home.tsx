@@ -47,8 +47,8 @@ const SPECIAL_FARE_INFO: Record<Exclude<SpecialFare, "regular">, string> = {
 // const HERO_IMAGE_URL_DARK =
 //     "https://images.stockcake.com/public/a/1/d/a1d4a18c-69bc-4e2e-a5e1-e689a2f67423_large/nighttime-aerial-view-stockcake.jpg";
     
-const HERO_IMAGE_URL = "/assets/15_thAug.jpeg";
-const HERO_IMAGE_URL_DARK = "/assets/15_thAug.jpeg";
+const HERO_IMAGE_URL = "/assets/Fest.jpeg";
+const HERO_IMAGE_URL_DARK = "/assets/Fest.jpeg";
 
 function formatShort(date: Date | null) {
     if (!date) return null;
@@ -339,7 +339,7 @@ const [hoveredFare, setHoveredFare] = useState<SpecialFare | null>(null);
                         <div className="flex items-center gap-3">
     <button
         type="button"
-        onClick={() => setTripType("oneway")}
+        onClick={() => { setTripType("oneway"); setReturnDate(null); }}
         className={`px-5 py-2 rounded-full border text-sm font-medium transition-colors ${
             tripType === "oneway"
                 ? "border-[#1c8fc7] text-[#1c8fc7] bg-[#1c8fc7]/5"
@@ -441,7 +441,7 @@ const [hoveredFare, setHoveredFare] = useState<SpecialFare | null>(null);
                                 monthsShown={2}
                                 popperPlacement="bottom-start"
                                 wrapperClassName="block w-full"
-                                openToDate={TODAY}
+                                openToDate={returnDate || departureDate}
                                 customInput={
                                     <Field label="Departure">
                                         <div className="flex items-center justify-between">
@@ -467,7 +467,7 @@ const [hoveredFare, setHoveredFare] = useState<SpecialFare | null>(null);
     monthsShown={2}
     popperPlacement="bottom-start"
     wrapperClassName="block w-full"
-    openToDate={TODAY}
+    openToDate={returnDate || departureDate} 
     customInput={
         <Field label="Return">
             <div className="flex items-center justify-between">

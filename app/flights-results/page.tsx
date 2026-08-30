@@ -215,7 +215,6 @@ const [addOnData, setAddOnData] = useState<any>(null);
       />
     );
   }
-  // ─── Search results step ───
   return (
     <FlightResults
       from={from}

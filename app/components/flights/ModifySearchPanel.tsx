@@ -340,29 +340,34 @@ const [hoveredFare, setHoveredFare] = useState<Exclude<SpecialFare, "regular"> |
                         />
                     </div>
 
-                    {/* Return date */}
-                    <div className={`col-span-1 ${draft.tripType === "roundtrip" ? "" : "opacity-40 pointer-events-none"}`}>
-                        <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">Return</p>
-                        <DatePicker
-                            selected={draftReturn}
-                            onChange={(date) => date && setDraftReturn(date)}
-                            minDate={draftDeparture}
-                            monthsShown={2}
-                            popperPlacement="bottom-start"
-                            portalId="flight-search-datepicker-portal"
-                            wrapperClassName="block w-full"
-                            disabled={draft.tripType !== "roundtrip"}
-                             customInput={
-                                <ModifyDateInput
-                                    placeholder="Add return"
-                                    onClear={() => {
-                                        setDraftReturn(null);
-                                        setDraft((d) => ({ ...d, tripType: "oneway" }));
-                                    }}
-                                />
-                            }
-                        />
-                    </div>
+{/* Return date */}
+<div className={`col-span-1 ${draft.tripType === "roundtrip" ? "" : "opacity-50"}`}>
+    <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">Return</p>
+    <DatePicker
+        key={draftDeparture.getTime()}  
+        selected={draftReturn}
+        onChange={(date) => {
+            if (!date) return;
+            setDraftReturn(date);
+            setDraft((d) => ({ ...d, tripType: "roundtrip" }));
+        }}
+        minDate={draftDeparture}
+        openToDate={draftReturn || draftDeparture}
+        monthsShown={2}
+        popperPlacement="bottom-start"
+        portalId="flight-search-datepicker-portal"
+        wrapperClassName="block w-full"
+        customInput={
+            <ModifyDateInput
+                placeholder="Add return"
+                onClear={() => {
+                    setDraftReturn(null);
+                    setDraft((d) => ({ ...d, tripType: "oneway" }));
+                }}
+            />
+        }
+    />
+</div>
 
                     {/* Travelers & class */}
                     <div className="col-span-2 md:col-span-1 relative" ref={travelersRef}>

@@ -14,7 +14,7 @@ export class ApiError extends Error {
     }
 }
 
-let cachedKey = null;        // { uniqueKey, validity, isLoginKey }
+let cachedKey = null;      
 let inFlightRequest = null;
 let refreshTimer = null;
 
@@ -37,7 +37,6 @@ function clearPersistedLoginKey() {
     localStorage.removeItem(VALIDITY_STORAGE);
 }
 
-// Guest key (Auth/Signature)
 
 async function fetchSignatureKey() {
     const response = await fetch(`${BASE_URL}/Auth/Signature`, {
@@ -59,11 +58,10 @@ async function fetchSignatureKey() {
 
     const { UniqueKey, Validity } = data.ServiceResponse;
     cachedKey = { uniqueKey: UniqueKey?.trim(), validity: Validity, isLoginKey: false };
-    clearScheduledRefresh(); // guest keys aren't proactively refreshed
+    clearScheduledRefresh();
     return cachedKey;
 }
 
-// Login key refresh (Auth/ResetToken)
 
 async function fetchResetToken(uniqueKey) {
     const response = await fetch(`${BASE_URL}/Auth/ResetToken`, {
@@ -88,7 +86,6 @@ async function fetchResetToken(uniqueKey) {
     return cachedKey;
 }
 
-// Proactive refresh scheduling for login keys
 
 function clearScheduledRefresh() {
     if (refreshTimer) {
@@ -130,7 +127,7 @@ async function handleExpiry() {
     if (isVisible && cachedKey?.isLoginKey) {
         try {
             await fetchResetToken(cachedKey.uniqueKey);
-            scheduleRefresh(); // reschedule against the new validity
+            scheduleRefresh(); 
             return;
         } catch (e) {
             console.error("ResetToken failed:", e);
@@ -163,7 +160,6 @@ if (typeof window !== "undefined") {
     }
 }
 
-// Public key accessors
 
 export function setUniqueKey(uniqueKey, validity, isLoginKey = true) {
     cachedKey = { uniqueKey: uniqueKey?.trim(), validity, isLoginKey };
@@ -198,8 +194,6 @@ export async function getUniqueKey({ forceRefresh = false } = {}) {
     return key.uniqueKey;
 }
 
-// Core fetch/request logic
-
 async function doFetch(endpoint, { method, body, headers, authHeader }) {
     const config = {
         method,
@@ -218,11 +212,20 @@ async function doFetch(endpoint, { method, body, headers, authHeader }) {
         throw new ApiError(0, "NetworkError", null, "Network error. Please check your connection and try again.");
     }
 
+    const contentType = response.headers.get("content-type") || "";
+
+
+    if (contentType.includes("application/pdf") || contentType.includes("application/octet-stream")) {
+        const blob = await response.blob();
+        return { response, data: { __blob: blob, __contentType: contentType } };
+    }
+
+    const rawText = await response.text();
     let data;
     try {
-        data = await response.json();
+        data = JSON.parse(rawText);
     } catch {
-        data = {};
+        data = { __raw: rawText }; 
     }
 
     return { response, data };
@@ -250,14 +253,18 @@ export async function apiRequest(endpoint, options = {}) {
         }));
     }
 
-    if (!response.ok) {
-        throw new ApiError(
-            response.status,
-            response.statusText,
-            data,
-            data?.ServiceResponse?.Message || data?.Message || data?.message || `HTTP Error: ${response.status}`
-        );
-    }
+   if (!response.ok) {
+    const serviceMsg = Array.isArray(data?.ServiceResponse)
+        ? data.ServiceResponse[0]
+        : data?.ServiceResponse?.Message;
+
+    throw new ApiError(
+        response.status,
+        response.statusText,
+        data,
+        serviceMsg || data?.Message || data?.message || `HTTP Error: ${response.status}`
+    );
+}
 
     return data;
 }

@@ -121,3 +121,33 @@ html::-webkit-scrollbar {
   width: 0;
   height: 0;
 }
+
+
+  
+        @keyframes checking-spin { to { transform: rotate(360deg); } }
+        .checking-spin { animation: checking-spin 2.2s linear infinite; }
+
+        @keyframes checking-ping {
+          0% { transform: scale(1); opacity: 0.7; }
+          100% { transform: scale(1.7); opacity: 0; }
+        }
+        .checking-ping { animation: checking-ping 2s cubic-bezier(0,0,0.2,1) infinite; }
+
+        @keyframes checking-pulse {
+          0%, 100% { opacity: 0.5; }
+          50% { opacity: 0.9; }
+        }
+        .checking-pulse { animation: checking-pulse 3s ease-in-out infinite; }
+
+        @keyframes checking-dot-pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.4; transform: scale(0.7); }
+        }
+        .checking-dot { animation: checking-dot-pulse 1.2s ease-in-out infinite; }
+
+        @keyframes checking-fade-in {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .checking-fade-in { animation: checking-fade-in 0.5s ease-out; }
+      

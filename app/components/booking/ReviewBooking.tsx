@@ -30,7 +30,7 @@ import AirlineLogo from "@/app/components/flights/AirlineLogo";
 import type { CabinClass, TripType } from "@/app/components/flights/FlightResults";
 import ContactDetailsForm, { contactFormIsValid, type ContactDetails } from "@/app/components/booking/ContactDetailsForm";
 import { getUserProfile } from "@/app/lib/authApi";
-
+import BillingAddressForm, { billingFormIsValid, type BillingAddress } from "@/app/components/booking/BillingDetailsForm";
 type Baggage = { SegID?: string; PaxID?: string | null; PTC?: string; CabinBag?: string; CheckinBaggage?: string };
 type PTCFareEntry = {
     PTC: string;
@@ -129,6 +129,7 @@ export type ReviewBookingProps = {
         passengers: PassengerDetails[];
         gst: GSTDetails | null;
         contact: ContactDetails | null;
+        billing: BillingAddress | null;
         totalAmount: number;
         pricing: { onward: LegSelection | null; ret: LegSelection | null };
         bookingId: string;
@@ -164,10 +165,7 @@ function ptcEntry(fare: FareInfo, ptc: "ADT" | "CHD" | "INF"): PTCFareEntry | un
     return fare.PTCFare?.find((p) => p.PTC === ptc);
 }
 
-/** Sums a fare field (Fare / Tax / GrossFare / NetFare) across ALL traveler
- * types — Adult, Child, Infant — each weighted by its own passenger count.
- * This is what makes the total reflect what every traveler actually pays,
- * not just the adults. */
+
 function totalAcrossTravelers(
     legs: LegSelection[],
     field: "Fare" | "Tax" | "GrossFare" | "NetFare",
@@ -821,6 +819,7 @@ export default function ReviewBooking({
     const [pricedBookingId, setPricedBookingId] = useState<string>(bookingId);
     const [passengers, setPassengers] = useState<PassengerDetails[]>([]);
     const [gst, setGst] = useState<GSTDetails | null>(null);
+    const [billing, setBilling] = useState<BillingAddress | null>(null);
     const [pricedIndex, setPricedIndex] = useState<string[] | null>(null);
     const [searchMeta, setSearchMeta] = useState<SearchMeta>({ fromCode: from, fromName, toCode: to, toName });
 
@@ -874,73 +873,140 @@ export default function ReviewBooking({
         }
     }, [isLoggedIn]);
 
-    async function fetchPricing() {
-        setPricingLoading(true);
-        setPricingError(null);
+async function fetchPricing() {
+    setPricingLoading(true);
+    setPricingError(null);
 
-        const res = await getAirlinePricing({ tokenId, bookingId, index, searchType });
+
+    if (searchType === "RS" && index.length === 2) {
+        let currentTokenId = tokenId;
+        let currentBookingId = bookingId;
+        const legResults: LegSelection[] = [];
+        let lastPricing: any = null;
+
+        for (const legIndex of index) {
+            const res = await getAirlinePricing({
+                tokenId: currentTokenId,
+                bookingId: currentBookingId,
+                index: legIndex,
+                searchType,
+            });
+
+            if (!res.success || !res.pricing) {
+                setPricingLoading(false);
+                setPricingError(res.message || "Could not fetch fare details. Please try again.");
+                return;
+            }
+
+            const journey = (res.pricing.journeys as Journey[])[0];
+            const fare = journey?.FareInfo?.[0];
+
+            if (!journey || !fare) {
+                setPricingLoading(false);
+                setPricingError("This fare is no longer available. Please go back and search again.");
+                setPricedOnward(null);
+                setPricedReturn(null);
+                return;
+            }
+
+            legResults.push({ journey, fare });
+            currentTokenId = res.pricing.tokenId || currentTokenId;
+            currentBookingId = res.pricing.bookingId || currentBookingId;
+            lastPricing = res.pricing;
+        }
+
         setPricingLoading(false);
-
-        if (!res.success || !res.pricing) {
-            setPricingError(res.message || "Could not fetch fare details. Please try again.");
-            return;
-        }
-
-        const journeys = res.pricing.journeys as Journey[];
-        const onwardJourney = journeys[0];
-        const returnJourney = tripType === "roundtrip" ? journeys[1] : undefined;
-
-        const onwardLeg = onwardJourney?.FareInfo?.[0]
-            ? { journey: onwardJourney, fare: onwardJourney.FareInfo[0] }
-            : null;
-        let returnLeg = returnJourney?.FareInfo?.[0]
-            ? { journey: returnJourney, fare: returnJourney.FareInfo[0] }
-            : null;
-
-        if (!onwardLeg) {
-            setPricingError("This fare is no longer available. Please go back and search again.");
-            setPricedOnward(null);
-            setPricedReturn(null);
-            return;
-        }
-        if (tripType === "roundtrip" && !returnLeg && returnJourney && searchType === "RS") {
-            returnLeg = { journey: returnJourney, fare: onwardLeg.fare };
-        }
-
-        if (tripType === "roundtrip" && !returnLeg) {
-            setPricingError("This fare is no longer available. Please go back and search again.");
-            setPricedOnward(null);
-            setPricedReturn(null);
-            return;
-        }
-        setPricedOnward(onwardLeg);
-        setPricedReturn(returnLeg);
+        setPricedOnward(legResults[0] ?? null);
+        setPricedReturn(legResults[1] ?? null);
         setSearchMeta({
-            fromCode: res.pricing.from ?? from,
-            fromName: res.pricing.fromName ?? fromName,
-            toCode: res.pricing.to ?? to,
-            toName: res.pricing.toName ?? toName,
+            fromCode: lastPricing?.from ?? from,
+            fromName: lastPricing?.fromName ?? fromName,
+            toCode: lastPricing?.to ?? to,
+            toName: lastPricing?.toName ?? toName,
         });
-        const newIndex = [
-            onwardJourney?.FareInfo?.[0]?.Index,
-            returnJourney?.FareInfo?.[0]?.Index,
-        ].filter((v): v is string => Boolean(v));
+
+        const newIndex = legResults
+            .map((leg) => leg.fare.Index)
+            .filter((v): v is string => Boolean(v));
         setPricedIndex(newIndex);
 
         setChecklist(
-            res.pricing.fnuLnuSettings
+            lastPricing?.fnuLnuSettings
                 ? {
-                    ...res.pricing.fnuLnuSettings.TravellerCheckList,
-                    FnuMessage: res.pricing.fnuLnuSettings.FnuMessage,
-                    LnuMessage: res.pricing.fnuLnuSettings.LnuMessage,
+                    ...lastPricing.fnuLnuSettings.TravellerCheckList,
+                    FnuMessage: lastPricing.fnuLnuSettings.FnuMessage,
+                    LnuMessage: lastPricing.fnuLnuSettings.LnuMessage,
                 }
                 : null
         );
-        setExpirySeconds(parseExpiryToSeconds(res.pricing.bookingExpiryTime));
-        setPricedBookingId(res.pricing.bookingId || bookingId);
+        setExpirySeconds(parseExpiryToSeconds(lastPricing?.bookingExpiryTime));
+        setPricedBookingId(currentBookingId || bookingId);
 
         setFareRuleState({});
+        return;
     }
+
+    // Oneway ("ON") and Roundtrip Domestic ("ON" + "RT") — single combined call.
+    const res = await getAirlinePricing({ tokenId, bookingId, index, searchType });
+    setPricingLoading(false);
+
+    if (!res.success || !res.pricing) {
+        setPricingError(res.message || "Could not fetch fare details. Please try again.");
+        return;
+    }
+
+    const journeys = res.pricing.journeys as Journey[];
+    const onwardJourney = journeys[0];
+    const returnJourney = tripType === "roundtrip" ? journeys[1] : undefined;
+
+    const onwardLeg = onwardJourney?.FareInfo?.[0]
+        ? { journey: onwardJourney, fare: onwardJourney.FareInfo[0] }
+        : null;
+    const returnLeg = returnJourney?.FareInfo?.[0]
+        ? { journey: returnJourney, fare: returnJourney.FareInfo[0] }
+        : null;
+
+    if (!onwardLeg) {
+        setPricingError("This fare is no longer available. Please go back and search again.");
+        setPricedOnward(null);
+        setPricedReturn(null);
+        return;
+    }
+    if (tripType === "roundtrip" && !returnLeg) {
+        setPricingError("This fare is no longer available. Please go back and search again.");
+        setPricedOnward(null);
+        setPricedReturn(null);
+        return;
+    }
+
+    setPricedOnward(onwardLeg);
+    setPricedReturn(returnLeg);
+    setSearchMeta({
+        fromCode: res.pricing.from ?? from,
+        fromName: res.pricing.fromName ?? fromName,
+        toCode: res.pricing.to ?? to,
+        toName: res.pricing.toName ?? toName,
+    });
+    const newIndex = [
+        onwardJourney?.FareInfo?.[0]?.Index,
+        returnJourney?.FareInfo?.[0]?.Index,
+    ].filter((v): v is string => Boolean(v));
+    setPricedIndex(newIndex);
+
+    setChecklist(
+        res.pricing.fnuLnuSettings
+            ? {
+                ...res.pricing.fnuLnuSettings.TravellerCheckList,
+                FnuMessage: res.pricing.fnuLnuSettings.FnuMessage,
+                LnuMessage: res.pricing.fnuLnuSettings.LnuMessage,
+            }
+            : null
+    );
+    setExpirySeconds(parseExpiryToSeconds(res.pricing.bookingExpiryTime));
+    setPricedBookingId(res.pricing.bookingId || bookingId);
+
+    setFareRuleState({});
+}
 
     async function fetchFareRuleForLeg(legIndex: number, leg: LegSelection) {
         setFareRuleState((prev) => ({
@@ -1039,9 +1105,7 @@ export default function ReviewBooking({
         if (leg) fetchFareRuleForLeg(activeRuleTabIndex, leg);
     }
 
-    useEffect(() => {
-        if (isLoggedIn) fetchPricing();
-    }, [isLoggedIn]);
+  
 
     useEffect(() => {
         if (expirySeconds === null) return;
@@ -1092,26 +1156,26 @@ const totalAmount = fareDisplayType === "G" ? grossFareTotal : netFareTotal;
     const gstMandatory = Boolean(checklist?.GSTMandate);
     const showTravellerForms = isPriced && checklist;
 
-    const readyToPay = showTravellerForms
-        ? passengerFormIsValid(passengers, checklist!) &&
-        contactFormIsValid(contact) &&
-        (!gst || gstFormIsValid(gst, gstMandatory))
-        : false;
+const readyToPay = showTravellerForms
+    ? passengerFormIsValid(passengers, checklist!) &&
+    contactFormIsValid(contact) &&
+    (!gst || gstFormIsValid(gst, gstMandatory)) &&
+    billingFormIsValid(billing, false)
+    : false;
 
     const travellerCount = adults + children + infants;
 
-    function handleContinueToPayment() {
-        onContinue({
-            passengers,
-            gst,
-            contact,
-            totalAmount,
-            pricing: { onward: displayOnward, ret: isRoundtrip ? displayReturn : null },
-            bookingId: pricedBookingId,
-        });
-    }
-
-
+function handleContinueToPayment() {
+    onContinue({
+        passengers,
+        gst,
+        contact,
+        billing,
+        totalAmount,
+        pricing: { onward: displayOnward, ret: isRoundtrip ? displayReturn : null },
+        bookingId: pricedBookingId,
+    });
+}
 
     function handleContinueClick() {
         if (!isLoggedIn) {
@@ -1191,24 +1255,25 @@ const totalAmount = fareDisplayType === "G" ? grossFareTotal : netFareTotal;
                             onShowFareRules={() => handleShowFareRules(1)}
                         />
                     )}
-                    {showTravellerForms && (
-                        <div className="space-y-5 mt-5">
-                            <ContactDetailsForm
-                                initial={contactInitial}
-                                fetchedName={profileName}
-                                loading={contactLoading}
-                                onChange={setContact}
-                            />
-                            <PassengerDetailsForm
-                                adults={adults}
-                                children={children}
-                                infants={infants}
-                                checklist={checklist!}
-                                onChange={setPassengers}
-                            />
-                            {checklist!.GST_Accepted && <GSTDetailsForm mandatory={gstMandatory} onChange={setGst} />}
-                        </div>
-                    )}
+                {showTravellerForms && (
+    <div className="space-y-5 mt-5">
+        <ContactDetailsForm
+            initial={contactInitial}
+            fetchedName={profileName}
+            loading={contactLoading}
+            onChange={setContact}
+        />
+        <PassengerDetailsForm
+            adults={adults}
+            children={children}
+            infants={infants}
+            checklist={checklist!}
+            onChange={setPassengers}
+        />
+        {checklist!.GST_Accepted && <GSTDetailsForm mandatory={gstMandatory} onChange={setGst} />}
+        <BillingAddressForm mandatory={false} onChange={setBilling} />
+    </div>
+)}
                 </div>
 
                 <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 sticky top-6">

@@ -21,8 +21,7 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
     { label: "Profile", href: "/my-profile", icon: HiOutlineUser },
     { label: "My bookings", href: "/my-bookings", icon: HiOutlinePaperAirplane },
-    { label: "Travellers", href: "/account/travellers", icon: HiOutlineUserGroup },
-    { label: "Payment methods", href: "/account/payment-methods", icon: HiOutlineCreditCard },
+    { label: "Travellers", href: "/travellers", icon: HiOutlineUserGroup },
     { label: "Settings", href: "/account/settings", icon: HiOutlineCog6Tooth },
 ];
 

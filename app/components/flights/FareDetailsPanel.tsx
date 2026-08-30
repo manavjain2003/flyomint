@@ -200,7 +200,6 @@ export default function FareDetailsPanel({
                 fetchAllLegRules();
             }
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [tab, multiLeg, searchType, tokenId, indexKey]);
 
     function toggleSection(key: string) {
@@ -233,9 +232,7 @@ export default function FareDetailsPanel({
     }
 
 const isCombinedRoundtrip = searchType === "RS";
-// Combined (RS) roundtrip fares price both legs together under a single
-// fare object, so only the first leg's PTC entries are used to avoid
-// double counting — same rule ReviewBooking applies.
+
 const fareLegsForTotal = isCombinedRoundtrip && legs[0] ? [legs[0]] : legs;
 const totalCounts = {
     adults: travelerCounts?.adults ?? 1,

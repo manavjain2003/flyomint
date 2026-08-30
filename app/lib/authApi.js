@@ -11,9 +11,6 @@ export async function requestLoginOtp(mobile) {
 
         const payload = res?.ServiceResponse ?? {};
 
-        console.log("Raw payload:", payload);
-        console.log("Raw OTP value:", payload.OTP);
-
         if (payload.ErrorCode) {
             return { success: false, message: payload.Message || "Could not send OTP" };
         }
@@ -22,12 +19,9 @@ export async function requestLoginOtp(mobile) {
         if (payload.OTP) {
             try {
                 plainOtp = decryptOtp(payload.OTP);
-                console.log("Decrypted OTP:", plainOtp);
             } catch (e) {
                 console.error("Failed to decrypt OTP:", e);
             }
-        } else {
-            console.warn("payload.OTP was falsy — check field name casing from API");
         }
 
         return {
@@ -69,8 +63,6 @@ export async function verifyLoginOtp({ mobile, userKey, otp }) {
     }
 }
 
-
-
 export async function getUserProfile() {
     try {
         if (!getStoredUniqueKey()) return { success: false, message: "Not logged in." };
@@ -91,6 +83,12 @@ export async function getUserProfile() {
             email: payload.Email,
             mobile: payload.Mobile,
             balance: payload.Balance,
+            billing: {
+                pinCode: payload.PINCode ?? "",
+                address: payload.Address ?? "",
+                city: payload.City ?? "",
+                state: payload.State ?? "",
+            },
         };
     } catch (error) {
         if (error instanceof ApiError) return { success: false, message: error.message };
@@ -98,14 +96,15 @@ export async function getUserProfile() {
     }
 }
 
-
 export async function requestProfileOtp({ mobile, email } = {}) {
     try {
         if (!getStoredUniqueKey()) return { success: false, message: "Not logged in." };
-
+        const body = {};
+        if (email) body.Email = email;
+        if (mobile) body.Mobile = mobile;
         const res = await apiRequest("/Auth/GenerateVerifyOTP", {
             method: "POST",
-            body: { Mobile: mobile || "", Email: email || "" },
+            body,
         });
 
         const payload = res?.ServiceResponse ?? {};
@@ -139,10 +138,12 @@ export async function verifyProfileOtp({ mobile = "", email = "", otp }) {
         if (!getStoredUniqueKey()) return { success: false, message: "Not logged in." };
 
         const encryptedOtp = encryptOtp(otp);
-
+        const body = { OTP: encryptedOtp };
+        if (email) body.Email = email;
+        if (mobile) body.Mobile = mobile;
         const res = await apiRequest("/Auth/VerifyOTP", {
             method: "POST",
-            body: { Mobile: mobile || "", Email: email || "", OTP: encryptedOtp },
+            body,
         });
 
         const payload = res?.ServiceResponse ?? {};
@@ -163,17 +164,32 @@ export async function verifyProfileOtp({ mobile = "", email = "", otp }) {
 }
 
 
-export async function updateProfile({ name, emailVerificationCode = "", mobileVerificationCode = "" }) {
+export async function updateProfile({
+    name = "",
+    emailVerificationCode = "",
+    mobileVerificationCode = "",
+    address = "",
+    city = "",
+    state = "",
+    pinCode = "",
+} = {}) {
     try {
         if (!getStoredUniqueKey()) return { success: false, message: "Not logged in." };
 
+        const body = {
+            Name: name,
+            EmailVerificationCode: emailVerificationCode,
+            MobileVerificationCode: mobileVerificationCode,
+        };
+
+        if (address !== undefined) body.Address = address;
+        if (city !== undefined) body.City = city;
+        if (state !== undefined) body.State = state;
+        if (pinCode !== undefined) body.PINCode = pinCode;
+
         const res = await apiRequest("/Auth/UpdateProfile", {
             method: "POST",
-            body: {
-                Name: name,
-                EmailVerificationCode: emailVerificationCode,
-                MobileVerificationCode: mobileVerificationCode,
-            },
+            body,
         });
 
         const payload = res?.ServiceResponse ?? {};
@@ -188,7 +204,6 @@ export async function updateProfile({ name, emailVerificationCode = "", mobileVe
         return { success: false, message: "Network error. Please try again." };
     }
 }
-
 
 export async function logoutUser() {
     try {

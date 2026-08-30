@@ -137,7 +137,6 @@ export function formatOffMessage(message?: string) {
     return message.replace(/[\d,.]+/, (m) => formatPrice(Math.round(Number(m.replace(/,/g, "")))));
 }
 export function primaryFareAmount(fare: FareInfo): number {
-    // Flight result cards always display the gross price, regardless of FareDisplayType.
     const { gross } = getDisplayFareValues(fare);
     return gross;
 }

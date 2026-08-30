@@ -52,7 +52,6 @@ export default function LoginPage() {
     };
 
     const handleDigitChange = (index, value) => {
-        // only allow single digit
         const digit = value.replace(/[^0-9]/g, "").slice(-1);
 
         const next = [...otpDigits];

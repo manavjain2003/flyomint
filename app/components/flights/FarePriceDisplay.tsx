@@ -15,7 +15,6 @@ export default function FarePriceDisplay({
     const { gross, message } = getDisplayFareValues(fare);
     const priceClass = size === "lg" ? "text-xl font-bold" : "text-sm font-bold";
 
-    // Flight result cards always show the gross price, regardless of FareDisplayType.
     const offLabel = formatOffMessage(message);
     return (
         <div className="text-right">

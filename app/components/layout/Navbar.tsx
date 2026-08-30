@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { HiMenu, HiX, HiSupport, HiSun, HiMoon } from "react-icons/hi";
 import { HiOutlineUserCircle, HiOutlineUser, HiOutlineArrowRightOnRectangle, HiChevronDown } from "react-icons/hi2";
 import { MdFlight } from "react-icons/md";
@@ -27,11 +27,11 @@ export default function Navbar() {
     const [menuOpen, setMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement | null>(null);
     const pathname = usePathname();
+    const router = useRouter();
     const { theme, toggleTheme } = useTheme();
 
     const visibleNavLinks = NAV_LINKS.filter((link) => !link.authOnly || loggedIn);
 
-    // Check on mount + when other tabs/pages log in
     useEffect(() => {
         const check = () => setLoggedIn(isLoggedInSession());
         check();
@@ -54,7 +54,6 @@ export default function Navbar() {
         }
     }, [loginOpen]);
 
-    // Fetch the logged-in user's name for the navbar dropdown
     useEffect(() => {
         if (!loggedIn) {
             setProfileName("");
@@ -69,7 +68,6 @@ export default function Navbar() {
         };
     }, [loggedIn]);
 
-    // Close the dropdown on outside click
     useEffect(() => {
         if (!menuOpen) return;
         function onClickOutside(e: MouseEvent) {
@@ -103,6 +101,7 @@ export default function Navbar() {
         window.dispatchEvent(new Event("flyomint:logout"));
         setLoggedIn(false);
         setProfileName("");
+        router.push("/");
     }
 
     return (

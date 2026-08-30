@@ -143,17 +143,17 @@ export async function pollAvailability(
 }
 
 // Index values come from the FareInfo.Index field of the chosen fare in the
-
+//
 //   Oneway (Domestic or International)
-//     SearchType: "ON" 
+//     SearchType: "ON"
 //
 //   Roundtrip International
-//     SearchType: "RS"   
-
+//     Called TWICE — once per leg, each with SearchType: "RS" and its own Index
+//
 //   Roundtrip Domestic
-//     Called TWICE - once per leg, each with its own SearchType/Index:
-//     SearchType: "ON"  
-//     SearchType: "RT" 
+//     Called TWICE — once per leg, each with its own SearchType/Index:
+//     SearchType: "ON"
+//     SearchType: "RT"
 export async function getAirlinePricing({ tokenId, bookingId = "", index, searchType }) {
     try {
         const res = await apiRequest("/Flights/AirlinePricing", {
@@ -201,7 +201,39 @@ export async function getAirlinePricing({ tokenId, bookingId = "", index, search
     }
 }
 
+/**
+ * Pricing for a two-index trip (Roundtrip Domestic or Roundtrip International).
+ *
+ *   Roundtrip Domestic:      legs = [{ index: onwardIndex, searchType: "ON" }, { index: returnIndex, searchType: "RT" }]
+ *   Roundtrip International: legs = [{ index: leg1Index,  searchType: "RS" }, { index: leg2Index,  searchType: "RS" }]
+ *
+ * Each call reuses the TokenID/BookingID returned by the previous call, since the
+ * gateway may rotate them between requests.
+ */
+export async function getRoundtripPricing({ tokenId, bookingId = "", legs }) {
+    const results = [];
+    let currentTokenId = tokenId;
+    let currentBookingId = bookingId;
 
+    for (const leg of legs) {
+        const result = await getAirlinePricing({
+            tokenId: currentTokenId,
+            bookingId: currentBookingId,
+            index: leg.index,
+            searchType: leg.searchType,
+        });
+
+        if (!result.success) {
+            return { success: false, message: result.message, results };
+        }
+
+        results.push(result.pricing);
+        currentTokenId = result.pricing.tokenId || currentTokenId;
+        currentBookingId = result.pricing.bookingId || currentBookingId;
+    }
+
+    return { success: true, message: null, results };
+}
 
 export async function getAirlineFareRule({ tokenId, index, searchType }) {
     try {
@@ -324,7 +356,7 @@ export async function getAirlineSSR({ tokenId, bookingId }) {
                     toCity: seg.ArrivalCityName,
                     departureTime: seg.DepartureTime,
                     arrivalTime: seg.ArrivalTime,
-                    mealOptions: ssrList.filter((s) => s.SSRType === "1").map(mapSSR),// Kept for reference
+                    mealOptions: ssrList.filter((s) => s.SSRType === "1").map(mapSSR),
                     baggageOptions: ssrList.filter((s) => s.SSRType === "2").map(mapSSR),
                 };
             });
@@ -364,6 +396,7 @@ export async function getAirlineTrvlItinerary({
   tokenId,
   bookingId,
   contactInfo,
+  billInfo,
   travelers,
   ssrl,
 }) {
@@ -381,6 +414,13 @@ export async function getAirlineTrvlItinerary({
           GSTMobile: contactInfo.gstMobile || "",
           GSTEmail: contactInfo.gstEmail || "",
           GSTAddress: contactInfo.gstAddress || "",
+        },
+        BillInfo: {
+          ProfileUpdate: billInfo?.profileUpdate ?? false,
+          PINCode: billInfo?.pinCode || "",
+          Address: billInfo?.address || "",
+          City: billInfo?.city || "",
+          State: billInfo?.state || "",
         },
         Travelers: travelers.map((t, i) => ({
           PaxID: t.paxId ?? i + 1,
@@ -423,29 +463,31 @@ export async function getAirlineTrvlItinerary({
       tokenId: payload.TokenID,
       transactionId: payload.TransactionID,
       bookingId: payload.BookingID,
-      fareInfo: (payload.FareInfo || []).map((f) => ({
-       pgDetails: {
-  pgId: f.PGDetails?.PGID,
-  pgCode: f.PGDetails?.PGCode,
-  pgName: f.PGDetails?.PGName,
-  pgDescription: f.PGDetails?.PGDescription,
-},
-        baseFare: f.BaseFare,
-        tax: f.Tax,
-        convenienceFee: f.ConvenienceFee,
-        discount: f.Discount,
-        instantOff: f.InstantOff,
-        markUp: f.MarkUp,
-        addOns: f.AddOns,
-        addOnDetails: f.AddOnDetails || [],
-        wallet: f.Wallet,
-        amountToBePaid: f.AmountToBePaid,
-        ptcFares: (f.PTCFares || []).map((p) => ({
-          ptc: p.PTC,
-          fare: p.Fare,
-          tax: p.Tax,
+      fareInfo: (payload.FareInfo || [])
+        .filter((f) => f != null) 
+        .map((f) => ({
+          pgDetails: {
+            pgId: f.PGDetails?.PGID,
+            pgCode: f.PGDetails?.PGCode,
+            pgName: f.PGDetails?.PGName,
+            pgDescription: f.PGDetails?.PGDescription,
+          },
+          baseFare: f.BaseFare,
+          tax: f.Tax,
+          convenienceFee: f.ConvenienceFee,
+          discount: f.Discount,
+          instantOff: f.InstantOff,
+          markUp: f.MarkUp,
+          addOns: f.AddOns,
+          addOnDetails: f.AddOnDetails || [],
+          wallet: f.Wallet,
+          amountToBePaid: f.AmountToBePaid,
+          ptcFares: (f.PTCFares || []).map((p) => ({
+            ptc: p.PTC,
+            fare: p.Fare,
+            tax: p.Tax,
+          })),
         })),
-      })),
     };
   } catch (error) {
     if (error instanceof ApiError) {
@@ -489,4 +531,445 @@ export async function getAirlinePaymentUrl({ tokenId, transactionId, pgId, pgCod
         }
         return { success: false, message: "Network error. Please try again.", paymentUrl: null };
     }
+}
+
+
+
+
+export async function getPaymentStatus(transactionId) {
+    try {
+        const res = await apiRequest(`/Payment/PaymentStatus/${transactionId}`, {
+            method: "GET",
+        });
+
+        const payload = res?.ServiceResponse ?? {};
+        const status = (payload.Status || "").toLowerCase();
+
+        if (payload.ErrorCode) {
+            return {
+                success: false,
+                status: "failed",
+                message: payload.Message || "Payment failed",
+            };
+        }
+
+        return {
+            success: true,
+            // treat anything that isn't explicitly success/pending as a
+            // terminal failure, instead of passing the raw string through
+            status: status === "success" ? "success" : status === "pending" ? "pending" : "failed",
+            message: payload.Message || null,
+        };
+    } catch (error) {
+        if (error instanceof ApiError) {
+            return { success: false, status: "failed", message: error.message };
+        }
+        return { success: false, status: "failed", message: "Network error. Please try again." };
+    }
+}
+
+export async function getBookingStatus(transactionId) {
+    try {
+        const res = await apiRequest(`/Utility/BookingStatus/${transactionId}`, {
+            method: "GET",
+        });
+
+        const payload = res?.ServiceResponse ?? {};
+        const status = (payload.Status || "").toLowerCase();
+
+        if (payload.ErrorCode) {
+            return {
+                success: false,
+                status: "failed",
+                message: payload.Message || "Booking could not be confirmed",
+            };
+        }
+
+        return {
+            success: true,
+            status: status === "success" ? "success" : status === "pending" ? "pending" : "failed",
+            message: payload.Message || null,
+        };
+    } catch (error) {
+        if (error instanceof ApiError) {
+            return { success: false, status: "failed", message: error.message };
+        }
+        return { success: false, status: "failed", message: "Network error. Please try again." };
+    }
+}
+ 
+
+export async function pollBookingConfirmation(
+    transactionId,
+    { intervalMs = 2000, maxDurationMs = 45000 } = {}
+) {
+    const startedAt = Date.now();
+ 
+    while (Date.now() - startedAt < maxDurationMs) {
+        const pay = await getPaymentStatus(transactionId);
+ 
+        if (!pay.success || pay.status === "failed") {
+            return { stage: "payment", status: "failed", message: pay.message };
+        }
+        if (pay.status === "success") break;
+ 
+        await new Promise((r) => setTimeout(r, intervalMs));
+    }
+ 
+    if (Date.now() - startedAt >= maxDurationMs) {
+        return { stage: "payment", status: "timeout", message: "Payment confirmation is taking longer than usual." };
+    }
+ 
+    while (Date.now() - startedAt < maxDurationMs) {
+        const booking = await getBookingStatus(transactionId);
+ 
+        if (!booking.success || booking.status === "failed") {
+            return { stage: "booking", status: "failed", message: booking.message };
+        }
+        if (booking.status === "success") {
+            return { stage: "booking", status: "success", message: booking.message };
+        }
+ 
+        await new Promise((r) => setTimeout(r, intervalMs));
+    }
+ 
+    return { stage: "booking", status: "timeout", message: "Booking confirmation is taking longer than usual." };
+}
+ 
+
+function pick(obj, keys) {
+    if (!obj) return undefined;
+    const objKeys = Object.keys(obj);
+    for (const k of keys) {
+        const found = objKeys.find((ok) => ok.toLowerCase() === k.toLowerCase());
+        if (found !== undefined && obj[found] !== undefined && obj[found] !== null) {
+            return obj[found];
+        }
+    }
+    return undefined;
+}
+ 
+export async function getAirlineBookingRetrieve({ transactionId, pnr = "", referenceNo = "" }) {
+    try {
+        const res = await apiRequest("/Utility/AirlineBookingRetrieve", {
+            method: "POST",
+            body: {
+                TransactionID: Number(transactionId),  
+                PNR: pnr,
+                ReferenceNo: referenceNo,
+            },
+        });
+
+        const payload = res?.ServiceResponse ?? res ?? {};
+
+        if (payload.ErrorCode) {
+            return {
+                success: false,
+                message: payload.Message || "Could not retrieve booking details",
+                pnr: null,
+                referenceNo: null,
+                raw: payload,
+            };
+        }
+
+        return {
+            success: true,
+            message: pick(payload, ["Message"]) || null,
+            transactionId: pick(payload, ["TransactionID"]) ?? transactionId,
+            pnr: pick(payload, ["PNR"]) || null,
+            referenceNo: pick(payload, ["ReferenceNo"]) || null,
+            bookingId: pick(payload, ["BookingID"]) || null,
+            raw: payload,
+        };
+    } catch (error) {
+        if (error instanceof ApiError) {
+            return { success: false, message: error.message, pnr: null, referenceNo: null };
+        }
+        return { success: false, message: "Network error. Please try again.", pnr: null, referenceNo: null };
+    }
+}
+ 
+
+
+export async function getTravelers() {
+    try {
+        const res = await apiRequest("/Utility/GetTravelers", {
+            method: "GET",
+        });
+
+        const payload = res?.ServiceResponse ?? {};
+
+        if (payload.ErrorCode) {
+            return { success: false, message: payload.Message || "Could not fetch saved travelers", travelers: [] };
+        }
+
+        return {
+            success: true,
+            message: payload.Message || null,
+            travelers: (payload.TravelerDetails || []).map((t) => ({
+                travelerId: t.TravelerId,
+                title: t.Title,
+                firstName: t.FirstName,
+                lastName: t.LastName,
+                gender: t.Gender,
+                dob: t.DOB,
+                documentId: t.DocumentId,
+                nationalityCode: t.NationalityCode,
+                passportNo: t.PassportNo,
+                pic: t.PIC,
+                pdoe: t.PDOE,
+                pdoi: t.PDOI,
+                ffNo: t.FFNO,
+            })),
+        };
+    } catch (error) {
+        if (error instanceof ApiError) {
+            return { success: false, message: error.message, travelers: [] };
+        }
+        return { success: false, message: "Network error. Please try again.", travelers: [] };
+    }
+}
+
+
+
+export async function getAirlineInvoice({ transactionId, pnr = "", referenceNo = "", type = "P" }) {
+    try {
+        const body = { TransactionID: String(transactionId), Type: type };
+        if (pnr) body.PNR = pnr;
+        if (referenceNo) body.ReferenceNo = referenceNo;
+
+        const res = await apiRequest("/Utility/AirlineInvoice", { method: "POST", body });
+
+
+        if (res?.__blob) {
+            return { success: true, message: null, data: { blob: res.__blob, contentType: res.__contentType } };
+        }
+
+        const payload = res?.ServiceResponse ?? res ?? {};
+
+        if (payload.ErrorCode || (Array.isArray(payload) && payload[0]?.includes?.("Object reference"))) {
+            return {
+                success: false,
+                message: Array.isArray(payload) ? payload[0] : (payload.Message || "Could not download invoice"),
+                data: null,
+            };
+        }
+
+        return { success: true, message: payload.Message || null, data: payload };
+    } catch (error) {
+        if (error instanceof ApiError) {
+            return { success: false, message: error.message, data: null };
+        }
+        return { success: false, message: "Network error. Please try again.", data: null };
+    }
+}
+
+export async function getETicketCopy({ transactionId, pnr = "", referenceNo = "", type = "P" }) {
+    try {
+        const body = { TransactionID: String(transactionId), Type: type };
+        if (pnr) body.PNR = pnr;
+        if (referenceNo) body.ReferenceNo = referenceNo;
+
+        const res = await apiRequest("/Utility/ETicketCopy", { method: "POST", body });
+
+
+        if (res?.__blob) {
+            return { success: true, message: null, data: { blob: res.__blob, contentType: res.__contentType } };
+        }
+
+        const payload = res?.ServiceResponse ?? res ?? {};
+        if (payload.ErrorCode || (Array.isArray(payload) && payload[0]?.includes?.("Object reference"))) {
+            return {
+                success: false,
+                message: Array.isArray(payload) ? payload[0] : (payload.Message || "Could not download e-ticket"),
+                data: null,
+            };
+        }
+
+        return { success: true, message: payload.Message || null, data: payload };
+    } catch (error) {
+        if (error instanceof ApiError) return { success: false, message: error.message, data: null };
+        return { success: false, message: "Network error. Please try again.", data: null };
+    }
+}
+
+
+export async function updateTravelerDetail({
+    travelerId,
+    firstName,
+    lastName,
+    gender,
+    dob,
+    documentId = "",
+    nationalityCode,
+    passportNo = "",
+    pic = "",
+    pdoe = "",
+    pdoi = "",
+    ffNo = "",
+}) {
+    try {
+        const res = await apiRequest("/Utility/UpdateTravelerDetail", {
+            method: "POST",
+            body: {
+                TravelerId: travelerId,
+                FirstName: firstName,
+                LastName: lastName,
+                Gender: gender,
+                DOB: dob,
+                DocumentId: documentId,
+                NationalityCode: nationalityCode,
+                PassportNo: passportNo,
+                PIC: pic,
+                PDOE: pdoe,
+                PDOI: pdoi,
+                FFNO: ffNo,
+            },
+        });
+ 
+        const payload = res?.ServiceResponse ?? {};
+ 
+        if (payload.ErrorCode) {
+            return { success: false, message: payload.Message || "Could not update traveler." };
+        }
+ 
+        return { success: true, message: payload.Message || "Traveler updated successfully." };
+    } catch (error) {
+        if (error instanceof ApiError) {
+            return { success: false, message: error.message };
+        }
+        return { success: false, message: "Network error. Please try again." };
+    }
+}
+ 
+
+export async function insertTravelerDetail({
+    firstName,
+    lastName,
+    gender,
+    dob,
+    documentId = "",
+    nationalityCode,
+    passportNo = "",
+    pic = "",
+    pdoe = "",
+    pdoi = "",
+    ffNo = "",
+}) {
+    try {
+        const res = await apiRequest("/Utility/InsertTravelerDetail", {
+            method: "POST",
+            body: {
+                FirstName: firstName,
+                LastName: lastName,
+                Gender: gender,
+                DOB: dob,
+                DocumentId: documentId,
+                NationalityCode: nationalityCode,
+                PassportNo: passportNo,
+                PIC: pic,
+                PDOE: pdoe,
+                PDOI: pdoi,
+                FFNO: ffNo,
+            },
+        });
+ 
+        const payload = res?.ServiceResponse ?? {};
+ 
+        if (payload.ErrorCode) {
+            return { success: false, message: payload.Message || "Could not add traveler.", travelerId: null };
+        }
+ 
+        return {
+            success: true,
+            message: payload.Message || "Traveler added successfully.",
+            travelerId: payload.TravelerId ?? payload.TravelerID ?? null,
+        };
+    } catch (error) {
+        if (error instanceof ApiError) {
+            return { success: false, message: error.message, travelerId: null };
+        }
+        return { success: false, message: "Network error. Please try again.", travelerId: null };
+    }
+}
+ 
+
+export async function getTransactionHistory({ tabId = 1, pageNumber = 1, pageSize = 30 } = {}) {
+    try {
+        const res = await apiRequest("/Reports/TransactionHistory", {
+            method: "POST",
+            body: {
+                TabId: tabId,
+                PageNumber: pageNumber,
+                PageSize: pageSize,
+            },
+        });
+ 
+        const payload = res?.ServiceResponse ?? {};
+ 
+        if (payload.ErrorCode) {
+            return { success: false, message: payload.Message || "Could not fetch bookings.", bookings: [], hasMore: false };
+        }
+ 
+        const rows = payload.History || [];
+ 
+        const grouped = new Map();
+ 
+        for (const h of rows) {
+            const ref = h.ReferenceNo || String(h.TransactionId);
+ 
+            if (!grouped.has(ref)) {
+                grouped.set(ref, {
+                    referenceNo: h.ReferenceNo || "",
+                    transactionId: h.TransactionId,
+                    crsPnr: h.CRSPNR || "",
+                    airlinePnr: h.AirlinePNR || "",
+                    createdDate: h.CreatedDate || "",
+                    bookingStatus: h.BookingStatus || "",
+                    currentStatus: h.CurrentStatus || "",
+                    travelerName: h.FirstTravelerName || "",
+                    totalPax: h.TotalPax ?? null,
+                    adt: h.Adt ?? 0,
+                    chd: h.Chd ?? 0,
+                    inf: h.Inf ?? 0,
+                    cabin: h.Cabin || "",
+                    legs: [],
+                });
+            }
+ 
+            grouped.get(ref).legs.push({
+                searchType: h.SearchType || "",
+                sector: h.Sector || "",
+                date: h.Date || "",
+            });
+        }
+ 
+        // Onward ("ON") before return ("RT") within each booking.
+        const legOrder = { ON: 0, RT: 1 };
+        const bookings = Array.from(grouped.values()).map((b) => ({
+            ...b,
+            legs: b.legs.sort((a, c) => (legOrder[a.searchType] ?? 9) - (legOrder[c.searchType] ?? 9)),
+        }));
+ 
+        // Most recently created first.
+        bookings.sort((a, b) => new Date(b.createdDate) - new Date(a.createdDate));
+ 
+        return {
+            success: true,
+            message: payload.Message || null,
+            bookings,
+            hasMore: rows.length >= pageSize,
+            pageNumber,
+            pageSize,
+        };
+    } catch (error) {
+        if (error instanceof ApiError) {
+            return { success: false, message: error.message, bookings: [], hasMore: false };
+        }
+        return { success: false, message: "Network error. Please try again.", bookings: [], hasMore: false };
+    }
+}
+ 
+export async function pollTransactionHistoryPage({ tabId = 1, pageNumber, pageSize = 30 }) {
+    return getTransactionHistory({ tabId, pageNumber, pageSize });
 }

@@ -11,8 +11,8 @@ import { AiOutlineLoading3Quarters } from "react-icons/ai";
 import { getAirlineSSR } from "@/app/lib/flightsapi";
 
 export type AddOnPassenger = {
-    id: string;    
-    label: string;  
+    id: string;
+    label: string;
     type: "ADT" | "CHD" | "INF";
 };
 
@@ -50,15 +50,18 @@ export type FlightAddOnsProps = {
     tripSummary: { from: string; to: string; date: string; isRoundtrip: boolean };
     baseFareTotal: number;
     onBack: () => void;
-    onContinue: (data: { addOnTotal: number;  selections: {
-             passengerId: string;
-             paxId: number;
-             code: string;
-             charge: number;
+    onContinue: (data: {
+        addOnTotal: number;
+        selections: {
+            passengerId: string;
+            paxId: number;
+            code: string;
+            charge: number;
             label: string;
-             sid: string | number;
-             ssrType: string;
-         }[] }) => void;
+            sid: string | number;
+            ssrType: string;
+        }[];
+    }) => void;
 };
 
 function formatPrice(amount: number) {
@@ -67,6 +70,20 @@ function formatPrice(amount: number) {
 
 function optionsForPax(options: SSROption[], paxType: string) {
     return options.filter((o) => o.paxType === paxType);
+}
+
+function formatDateLabel(iso: string | undefined) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString("en-US", { weekday: "short", day: "2-digit", month: "short" });
+}
+
+function formatTimeLabel(iso: string | undefined) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 export default function FlightAddOns({
@@ -78,18 +95,31 @@ export default function FlightAddOns({
     onBack,
     onContinue,
 }: FlightAddOnsProps) {
+
+    useEffect(() => {
+        window.scrollTo({
+            top: 0,
+            behavior: "instant",
+        });
+    }, []);
+
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [legs, setLegs] = useState<Leg[]>([]);
 
     const [activeLegIndex, setActiveLegIndex] = useState(0);
-    const [activeTab, setActiveTab] = useState<"baggage" | "meal">("meal");
+    const [activeTab, setActiveTab] = useState<"meal" | "baggage">("meal");
     const [activePassengerId, setActivePassengerId] = useState(passengers[0]?.id ?? "");
-const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
+    const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
     const [baggage, setBaggage] = useState<BaggageSelection>({});
     const [meals, setMeals] = useState<MealSelection>({});
+    const [addOnsExpanded, setAddOnsExpanded] = useState(true);
+    const hasFetchedSSR = useRef(false);
+
+    const activeLeg = legs[activeLegIndex];
 
     const autoSkipped = useRef(false);
+
     const hasAnyBaggage = useMemo(
         () => legs.some((l) => l.baggageOptions.length > 0),
         [legs]
@@ -99,6 +129,27 @@ const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
         [legs]
     );
 
+    // Legs that actually have something to offer for the currently active tab.
+    // A leg with zero baggage options (on the Baggage tab) or zero segments with
+    // meal options (on the Meal tab) shouldn't get its own pill.
+    const legsToShow = useMemo(() => {
+        return legs
+            .map((leg, i) => ({ leg, i }))
+            .filter(({ leg }) =>
+                activeTab === "baggage"
+                    ? leg.baggageOptions.length > 0
+                    : leg.segments.some((s) => s.mealOptions.length > 0)
+            );
+    }, [legs, activeTab]);
+
+    const availableMealSegments = useMemo(() => {
+        if (!activeLeg) return [];
+        const paxType = passengers.find((p) => p.id === activePassengerId)?.type ?? "ADT";
+        return activeLeg.segments
+            .map((seg, i) => ({ seg, i }))
+            .filter(({ seg }) => optionsForPax(seg.mealOptions, paxType).length > 0);
+    }, [activeLeg, activePassengerId, passengers]);
+
     useEffect(() => {
         if (activeTab === "baggage" && !hasAnyBaggage && hasAnyMeals) {
             setActiveTab("meal");
@@ -106,6 +157,16 @@ const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
             setActiveTab("baggage");
         }
     }, [activeTab, hasAnyBaggage, hasAnyMeals]);
+
+    // Whenever the active tab changes (or legs load), make sure activeLegIndex
+    // points at a leg that has value for that tab. If not, snap to the first one that does.
+    useEffect(() => {
+        if (legsToShow.length === 0) return;
+        const stillValid = legsToShow.some(({ i }) => i === activeLegIndex);
+        if (!stillValid) {
+            setActiveLegIndex(legsToShow[0].i);
+        }
+    }, [activeTab, legsToShow, activeLegIndex]);
 
     useEffect(() => {
         if (loading || error || legs.length === 0 || autoSkipped.current) return;
@@ -122,12 +183,13 @@ const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
     }, [legs, loading, error, onContinue]);
 
     useEffect(() => {
-        let cancelled = false;
+        if (hasFetchedSSR.current) return;
+        hasFetchedSSR.current = true;
+
         async function load() {
             setLoading(true);
             setError(null);
             const res = await getAirlineSSR({ tokenId, bookingId });
-            if (cancelled) return;
             setLoading(false);
             if (!res.success) {
                 setError(res.message || "Could not fetch add-on options.");
@@ -136,16 +198,19 @@ const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
             setLegs(res.legs as Leg[]);
         }
         load();
-        return () => {
-            cancelled = true;
-        };
     }, [tokenId, bookingId]);
 
-    useEffect(() => {
-        setActiveSegmentIndex(0);
-    }, [activeLegIndex]);
 
-    const activeLeg = legs[activeLegIndex];
+    useEffect(() => {
+        if (availableMealSegments.length === 0) {
+            setActiveSegmentIndex(0);
+            return;
+        }
+        const stillValid = availableMealSegments.some((s) => s.i === activeSegmentIndex);
+        if (!stillValid) {
+            setActiveSegmentIndex(availableMealSegments[0].i);
+        }
+    }, [activeLegIndex, activePassengerId, availableMealSegments]);
 
     function toggleBaggage(passengerId: string, legIndex: number, code: string) {
         setBaggage((prev) => {
@@ -154,7 +219,7 @@ const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
                 ...prev,
                 [passengerId]: {
                     ...prev[passengerId],
-                    [legIndex]: current === code ? null : code, // re-clicking the same tier removes it
+                    [legIndex]: current === code ? null : code, 
                 },
             };
         });
@@ -176,31 +241,35 @@ const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
     }
 
     const selectionList = useMemo(() => {
-                const list: {
-             passengerId: string;
-             paxId: number;
-             code: string;
-             charge: number;
-             label: string;
-             sid: string | number;
+        const list: {
+            passengerId: string;
+            paxId: number;
+            code: string;
+            charge: number;
+            label: string;
+            desc: string;
+            sid: string | number;
             ssrType: string;
-         }[] = [];
+        }[] = [];
 
         legs.forEach((leg, legIndex) => {
             passengers.forEach((p, paxIdx) => {
                 const selectedCode = baggage[p.id]?.[legIndex];
                 if (!selectedCode) return;
                 const opt = leg.baggageOptions.find((o) => o.code === selectedCode);
-                  if (opt) list.push({
-                                    passengerId: p.id,
-                                    paxId: paxIdx + 1,
-                                    code: opt.code,
-                                    charge: opt.charge,
-                                    label: `${p.label} · ${leg.from}-${leg.to} · ${opt.desc}`,
-                                    sid: leg.segments[0]?.sid ?? 1,
-                                    ssrType: "2",
-                                });
-                                });
+                if (opt) {
+                    list.push({
+                        passengerId: p.id,
+                        paxId: paxIdx + 1,
+                        code: opt.code,
+                        charge: opt.charge,
+                        label: `${leg.from}-${leg.to} · ${opt.desc}`,
+                        desc: opt.desc,
+                        sid: leg.segments[0]?.sid ?? 1,
+                        ssrType: "2",
+                    });
+                }
+            });
 
             leg.segments.forEach((seg) => {
                 passengers.forEach((p, paxIdx) => {
@@ -208,15 +277,18 @@ const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
                     if (!codes || codes.size === 0) return;
                     codes.forEach((code) => {
                         const opt = seg.mealOptions.find((o) => o.code === code);
-                               if (opt) list.push({
-                                            passengerId: p.id,
-                                           paxId: paxIdx + 1,
-                                            code: opt.code,
-                                            charge: opt.charge,
-                                           label: `${p.label} · ${seg.from}-${seg.to} · ${opt.desc}`,
-                                            sid: seg.sid,
-                                            ssrType: "1",
-                                       });
+                        if (opt) {
+                            list.push({
+                                passengerId: p.id,
+                                paxId: paxIdx + 1,
+                                code: opt.code,
+                                charge: opt.charge,
+                                label: `${seg.from}-${seg.to} · ${opt.desc}`,
+                                desc: opt.desc,
+                                sid: seg.sid,
+                                ssrType: "1",
+                            });
+                        }
                     });
                 });
             });
@@ -240,7 +312,7 @@ const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
     }
 
     return (
-        <div className="min-h-screen bg-dark dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 pb-28">
+        <div className="min-h-screen bg-dark dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex flex-col">
             <div className="bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 px-4 sm:px-8 py-4 flex items-center gap-3">
                 <button type="button" onClick={onBack} className="flex items-center gap-1 text-sm font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300">
                     <HiOutlineChevronLeft className="w-4 h-4" /> Back
@@ -252,85 +324,24 @@ const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
                 </div>
             </div>
 
-            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6 items-start">
-                {/* Left column */}
-                <div className="space-y-5">
-                    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-bold text-gray-900 dark:text-gray-100">Your Flight</span>
-                            <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">{tripSummary.isRoundtrip ? "Round Trip" : "One Way"}</span>
-                        </div>
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">{tripSummary.date}</p>
-                        <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-                            <HiOutlinePaperAirplane className="w-4 h-4 text-[#1c8fc7] -rotate-45" />
-                            {tripSummary.from} <HiOutlineArrowRight className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600" /> {tripSummary.to}
-                        </div>
-                    </div>
-
-                    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
-                        <p className="text-sm font-bold text-gray-900 dark:text-gray-100 mb-3">Travellers</p>
-                        <ul className="space-y-1.5">
-                            {passengers.map((p, i) => (
-                                <li key={p.id} className="text-xs text-gray-600 dark:text-gray-300">
-                                    {i + 1}. {p.label} <span className="text-gray-400 dark:text-gray-500">({p.type})</span>
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
-
-                    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
-                        <div className="flex items-center justify-between mb-3">
-                            <span className="text-sm font-bold text-gray-900 dark:text-gray-100">Fare Summary</span>
-                            <span className="text-xs text-gray-400 dark:text-gray-500">{passengers.length} Traveller{passengers.length > 1 ? "s" : ""}</span>
-                        </div>
-                        <div className="space-y-2 text-sm">
-                            <div className="flex items-center justify-between">
-                                <span className="text-gray-500 dark:text-gray-400">Base fare + taxes</span>
-                                <span className="font-semibold text-gray-900 dark:text-gray-100">{formatPrice(baseFareTotal)}</span>
-                            </div>
-                            <div>
-                                <div className="flex items-center justify-between">
-                                    <span className="text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                                        Add-ons <HiOutlineChevronDown className="w-3 h-3" />
-                                    </span>
-                                    <span className="font-semibold text-gray-900 dark:text-gray-100">{formatPrice(addOnTotal)}</span>
-                                </div>
-                                {selectionList.length > 0 && (
-                                    <ul className="mt-1.5 space-y-1">
-                                        {selectionList.map((s, i) => (
-                                            <li key={i} className="flex items-center justify-between text-[11px] text-gray-400 dark:text-gray-500">
-                                                <span className="truncate pr-2">{s.label}</span>
-                                                <span className="shrink-0">{formatPrice(s.charge)}</span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
-                            </div>
-                        </div>
-                        <div className="flex items-center justify-between pt-3 mt-3 border-t border-gray-100 dark:border-gray-800">
-                            <span className="text-sm font-bold text-gray-900 dark:text-gray-100">Total Amount</span>
-                            <span className="text-lg font-bold text-[#1c8fc7]">{formatPrice(grandTotal)}</span>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Right column */}
-                <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 min-w-0">
-                    <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+            <div className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-[750px_1fr] gap-6 items-start">
+              {/* Left column */}
+                <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 min-w-0 order-1 lg:order-1">
+                    <div className="flex items-center justify-between flex-wrap gap-3 mb-4 pb-3 border-b border-gray-100 dark:border-gray-800">
                         {(() => {
-                            const tabs = (["baggage", "meal"] as const).filter((t) =>
+                            const tabs = (["meal", "baggage"] as const).filter((t) =>
                                 t === "baggage" ? hasAnyBaggage : hasAnyMeals
                             );
                             return (
                                 <>
                                     {tabs.length > 1 ? (
-                                        <div className="flex gap-2">
+                                        <div className="flex gap-5">
                                             {tabs.map((tab) => (
                                                 <button
                                                     key={tab}
                                                     type="button"
                                                     onClick={() => setActiveTab(tab)}
-                                                    className={`text-sm font-semibold pb-1 border-b-2 transition-colors ${
+                                                    className={`text-sm font-semibold pb-2 border-b-2 transition-colors ${
                                                         activeTab === tab
                                                             ? "text-[#1c8fc7] border-[#1c8fc7]"
                                                             : "text-gray-400 dark:text-gray-500 border-transparent"
@@ -340,14 +351,13 @@ const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
                                                 </button>
                                             ))}
                                         </div>
-                                                                      ) : tabs.length === 1 ? (
-                                        <div className="flex gap-2">
-                                            <span className="text-sm font-semibold pb-1 border-b-2 border-[#1c8fc7] text-[#1c8fc7]">
+                                    ) : tabs.length === 1 ? (
+                                        <div className="flex gap-5">
+                                            <span className="text-sm font-semibold pb-2 border-b-2 border-[#1c8fc7] text-[#1c8fc7]">
                                                 {tabs[0] === "baggage" ? "Baggage" : "Meal"}
                                             </span>
                                         </div>
                                     ) : null}
-
 
                                     {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
                                 </>
@@ -355,22 +365,45 @@ const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
                         })()}
                     </div>
 
-                    {legs.length > 1 && (
-                        <div className="flex gap-2 mb-4 flex-wrap">
-                            {legs.map((leg, i) => (
-                                <button
-                                    key={i}
-                                    type="button"
-                                    onClick={() => setActiveLegIndex(i)}
-                                    className={`text-xs font-semibold rounded-full px-4 py-1.5 border transition-colors ${
-                                        activeLegIndex === i
-                                            ? "bg-[#e8f4fb] text-[#1c8fc7] border-[#1c8fc7]"
-                                            : "bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700"
-                                    }`}
-                                >
-                                    {leg.from}-{leg.to}
-                                </button>
-                            ))}
+                    {(legsToShow.length > 1 || (activeTab === "meal" && availableMealSegments.length > 1)) && (
+                        <div className="flex items-center gap-2 mb-4 overflow-x-auto flex-nowrap scrollbar-hide">
+                            {legsToShow.length > 1 &&
+                                legsToShow.map(({ leg, i }) => (
+                                    <button
+                                        key={`leg-${i}`}
+                                        type="button"
+                                        onClick={() => setActiveLegIndex(i)}
+                                        className={`text-xs font-semibold rounded-full px-4 py-1.5 border transition-colors whitespace-nowrap shrink-0 ${
+                                            activeLegIndex === i
+                                                ? "bg-[#e8f4fb] text-[#1c8fc7] border-[#1c8fc7]"
+                                                : "bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700"
+                                        }`}
+                                    >
+                                        {leg.from}-{leg.to}
+                                    </button>
+                                ))}
+
+                            {activeTab === "meal" && availableMealSegments.length > 1 && (
+                                <>
+                                    {legsToShow.length > 1 && (
+                                        <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 shrink-0" />
+                                    )}
+                                    {availableMealSegments.map(({ seg, i }) => (
+                                        <button
+                                            key={`seg-${seg.sid}`}
+                                            type="button"
+                                            onClick={() => setActiveSegmentIndex(i)}
+                                            className={`text-xs font-semibold rounded-full px-4 py-1.5 border transition-colors whitespace-nowrap shrink-0 ${
+                                                activeSegmentIndex === i
+                                                    ? "bg-[#1c8fc7] text-white border-[#1c8fc7]"
+                                                    : "bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700"
+                                            }`}
+                                        >
+                                            {seg.from}-{seg.to}
+                                        </button>
+                                    ))}
+                                </>
+                            )}
                         </div>
                     )}
 
@@ -379,7 +412,9 @@ const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
                             {passengers.map((p) => {
                                 const count =
                                     activeTab === "baggage"
-                                        ? (baggage[p.id]?.[activeLegIndex] ? 1 : 0)
+                                        ? baggage[p.id]?.[activeLegIndex]
+                                            ? 1
+                                            : 0
                                         : (activeLeg?.segments ?? []).reduce(
                                               (sum, seg) => sum + (meals[p.id]?.[seg.sid]?.size ?? 0),
                                               0
@@ -396,7 +431,11 @@ const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
                                         }`}
                                     >
                                         {p.label}
-                                        {count > 0 && <span className="ml-1">· {count} {activeTab === "baggage" ? "Bag" : "Meal"}</span>}
+                                        {count > 0 && (
+                                            <span className="ml-1">
+                                                · {count} {activeTab === "baggage" ? "Bag" : "Meal"}
+                                            </span>
+                                        )}
                                     </button>
                                 );
                             })}
@@ -409,16 +448,19 @@ const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
 
                     {activeLeg && activeTab === "baggage" && (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {optionsForPax(activeLeg.baggageOptions, passengers.find((p) => p.id === activePassengerId)?.type ?? "ADT").map((opt) => {
+                            {optionsForPax(
+                                activeLeg.baggageOptions,
+                                passengers.find((p) => p.id === activePassengerId)?.type ?? "ADT"
+                            ).map((opt) => {
                                 const selected = baggage[activePassengerId]?.[activeLegIndex] === opt.code;
                                 return (
                                     <div
                                         key={opt.code}
                                         className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 ${
-                                             selected
+                                            selected
                                                 ? "border-[#1c8fc7] bg-[#e8f4fb] dark:bg-gray-900"
                                                 : "border-gray-200 dark:border-gray-700"
-                                         }`}
+                                        }`}
                                     >
                                         <div>
                                             <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{opt.desc}</p>
@@ -438,108 +480,219 @@ const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
                                     </div>
                                 );
                             })}
-                            {optionsForPax(activeLeg.baggageOptions, passengers.find((p) => p.id === activePassengerId)?.type ?? "ADT").length === 0 && (
-                                <p className="text-sm text-gray-400 dark:text-gray-500 sm:col-span-2">No baggage add-ons available for this traveller.</p>
+                            {optionsForPax(
+                                activeLeg.baggageOptions,
+                                passengers.find((p) => p.id === activePassengerId)?.type ?? "ADT"
+                            ).length === 0 && (
+                                <p className="text-sm text-gray-400 dark:text-gray-500 sm:col-span-2">
+                                    No baggage add-ons available for this traveller.
+                                </p>
                             )}
                         </div>
                     )}
 
-{activeLeg && activeTab === "meal" && (
-    <div>
-        {/* Segment tabs — always show as rounded pills */}
-        <div className="flex gap-2 mb-4 flex-wrap">
-            {activeLeg.segments.map((seg, i) => {
-                const count = meals[activePassengerId]?.[seg.sid]?.size ?? 0;
-                const isSingle = activeLeg.segments.length === 1;
-                return (
-                    <button
-                        key={seg.sid}
-                        type="button"
-                        onClick={() => setActiveSegmentIndex(i)}
-                        disabled={isSingle}
-                        className={`text-xs font-semibold rounded-full px-4 py-1.5 border transition-colors ${
-                            activeSegmentIndex === i
-                                ? "bg-[#e8f4fb] text-[#1c8fc7] border-[#1c8fc7]"
-                                : "bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700"
-                        } ${isSingle ? "cursor-default" : ""}`}
-                    >
-                        {seg.from}-{seg.to}
-                        {count > 0 && <span className="ml-1">· {count} Meal</span>}
-                    </button>
-                );
-            })}
-        </div>
+                    {activeTab === "meal" &&
+    activeLeg &&
+    (() => {
+        const seg = activeLeg.segments[activeSegmentIndex];
+        if (!seg) return null;
+        const paxType = passengers.find((p) => p.id === activePassengerId)?.type ?? "ADT";
+        const options = optionsForPax(seg.mealOptions, paxType);
+        const selectedCodes = meals[activePassengerId]?.[seg.sid] ?? new Set<string>();
 
-        {/* Render only the active segment */}
-        {(() => {
-            const seg = activeLeg.segments[activeSegmentIndex];
-            if (!seg) return null;
-            const paxType = passengers.find((p) => p.id === activePassengerId)?.type ?? "ADT";
-            const options = optionsForPax(seg.mealOptions, paxType);
-            const selectedCodes = meals[activePassengerId]?.[seg.sid] ?? new Set<string>();
-
+        if (options.length === 0) {
             return (
-                <div>
-                   
-                    {options.length === 0 ? (
-                        <p className="text-sm text-gray-400 dark:text-gray-500">No meal add-ons available on this segment.</p>
-                    ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {options.map((opt) => {
-                                const selected = selectedCodes.has(opt.code);
+                <p className="text-sm text-gray-400 dark:text-gray-500">
+                    No meal add-ons available on this segment.
+                </p>
+            );
+        }
+
+        return (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8">
+                {options.map((opt) => {
+                    const selected = selectedCodes.has(opt.code);
+                    return (
+                        <div
+                            key={opt.code}
+                            className="flex items-center gap-3 py-2.5 border-b border-gray-50 dark:border-gray-800 last:border-b-0"
+                        >
+                            {/* Generic placeholder — API doesn't return per-meal imagery */}
+                            <div
+                                className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-base shrink-0"
+                                aria-hidden="true"
+                            >
+                                🍽️
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate uppercase tracking-tight">
+                                    {opt.desc}
+                                </p>
+                                <p className="text-xs text-gray-400 dark:text-gray-500">{formatPrice(opt.charge)}</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => toggleMeal(activePassengerId, seg.sid, opt.code)}
+                                className={`text-xs font-semibold rounded-md px-4 py-1.5 border shrink-0 transition-colors ${
+                                    selected
+                                        ? "border-[#FF7626] text-[#FF7626] bg-white dark:bg-gray-900"
+                                        : "border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800"
+                                }`}
+                            >
+                                {selected ? "Remove" : "Add"}
+                            </button>
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    })()}
+                </div>
+               
+                {/* Right column */}
+                <div className="space-y-5 order-1 lg:order-1">
+                    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+                        <div className="flex items-center justify-between mb-3">
+                            <span className="text-sm font-bold text-gray-900 dark:text-gray-100">Your Flight</span>
+                            <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">
+                                {tripSummary.isRoundtrip ? "Round Trip" : "One Way"}
+                            </span>
+                        </div>
+
+                        <div className="space-y-4">
+                            {legs.map((leg, i) => {
+                                const firstSeg = leg.segments[0];
+                                const lastSeg = leg.segments[leg.segments.length - 1];
+                                const stops = leg.segments.length - 1;
                                 return (
-                                    <div
-                                        key={opt.code}
-                                        className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 ${
-                                            selected
-                                                ? "border-[#1c8fc7] bg-[#e8f4fb] dark:bg-gray-900"
-                                                : "border-gray-200 dark:border-gray-700"
-                                        }`}
-                                    >
-                                        <div>
-                                            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{opt.desc}</p>
-                                            <p className="text-xs text-gray-400 dark:text-gray-500">{formatPrice(opt.charge)}</p>
+                                    <div key={`itinerary-${i}`}>
+                                        {i > 0 && <div className="h-px bg-gray-100 dark:bg-gray-800 my-4" />}
+                                        <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 mb-2">
+                                            {formatDateLabel(firstSeg?.departureTime)}
+                                        </p>
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div>
+                                                <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                                                    {formatTimeLabel(firstSeg?.departureTime)}
+                                                </p>
+                                                <p className="text-xs text-gray-400 dark:text-gray-500">{leg.from}</p>
+                                            </div>
+                                            <div className="flex-1 flex flex-col items-center pt-1.5">
+                                                <span className="text-[11px] text-gray-400 dark:text-gray-500">{leg.duration}</span>
+                                                <div className="w-full flex items-center gap-1 my-1">
+                                                    <span className="h-1.5 w-1.5 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" />
+                                                    <span className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+                                                    <HiOutlinePaperAirplane className="w-3 h-3 text-[#1c8fc7] -rotate-45 shrink-0" />
+                                                    <span className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+                                                    <span className="h-1.5 w-1.5 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" />
+                                                </div>
+                                                <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                                                    {stops > 0 ? `${stops} stop${stops > 1 ? "s" : ""}` : "Nonstop"}
+                                                </span>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                                                    {formatTimeLabel(lastSeg?.arrivalTime)}
+                                                </p>
+                                                <p className="text-xs text-gray-400 dark:text-gray-500">{leg.to}</p>
+                                            </div>
                                         </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => toggleMeal(activePassengerId, seg.sid, opt.code)}
-                                            className={`text-xs font-semibold rounded-full px-4 py-1.5 border shrink-0 transition-colors ${
-                                                selected
-                                                    ? "border-[#FF7626] text-[#FF7626] bg-white dark:bg-gray-900"
-                                                    : "border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
-                                            }`}
-                                        >
-                                            {selected ? "Remove" : "Add"}
-                                        </button>
                                     </div>
                                 );
                             })}
+                            {legs.length === 0 && (
+                                <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                    <HiOutlinePaperAirplane className="w-4 h-4 text-[#1c8fc7] -rotate-45" />
+                                    {tripSummary.from} <HiOutlineArrowRight className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600" /> {tripSummary.to}
+                                </div>
+                            )}
                         </div>
-                    )}
-                </div>
-            );
-        })()}
-    </div>
-)}
+                    </div>
+
+                    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+                        <p className="text-sm font-bold text-gray-900 dark:text-gray-100 mb-3">Travellers</p>
+                        <ul className="space-y-1.5">
+                            {passengers.map((p, i) => (
+                                <li key={p.id} className="text-xs text-gray-600 dark:text-gray-300">
+                                    {i + 1}. {p.label} <span className="text-gray-400 dark:text-gray-500">({p.type})</span>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+
+                    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+                        <div className="flex items-center justify-between mb-3">
+                            <span className="text-sm font-bold text-gray-900 dark:text-gray-100">Fare Summary</span>
+                            <span className="text-xs text-gray-400 dark:text-gray-500">
+                                {passengers.length} Traveller{passengers.length > 1 ? "s" : ""}
+                            </span>
+                        </div>
+                        <div className="space-y-2 text-sm">
+                            <div className="flex items-center justify-between">
+                                <span className="text-gray-500 dark:text-gray-400">Base fare + taxes</span>
+                                <span className="font-semibold text-gray-900 dark:text-gray-100">{formatPrice(baseFareTotal)}</span>
+                            </div>
+                            <div>
+                                <button
+                                    type="button"
+                                    onClick={() => setAddOnsExpanded((v) => !v)}
+                                    disabled={selectionList.length === 0}
+                                    className="w-full flex items-center justify-between disabled:cursor-default"
+                                >
+                                    <span className="text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                                        Add-ons{" "}
+                                        {selectionList.length > 0 && (
+                                            <HiOutlineChevronDown
+                                                className={`w-3 h-3 transition-transform ${addOnsExpanded ? "rotate-180" : ""}`}
+                                            />
+                                        )}
+                                    </span>
+                                    <span className="font-semibold text-gray-900 dark:text-gray-100">{formatPrice(addOnTotal)}</span>
+                                </button>
+                                {selectionList.length > 0 && addOnsExpanded && (
+                                    <ul className="mt-1.5 space-y-1">
+                                        {selectionList.map((s, i) => (
+                                            <li key={i} className="flex items-center justify-between text-[11px] text-gray-400 dark:text-gray-500">
+                                                <span className="truncate pr-2">{s.label}</span>
+                                                <span className="shrink-0">{formatPrice(s.charge)}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-between pt-3 mt-3 border-t border-gray-100 dark:border-gray-800">
+                            <span className="text-sm font-bold text-gray-900 dark:text-gray-100">Total Amount</span>
+                            <span className="text-lg font-bold text-[#1c8fc7]">{formatPrice(grandTotal)}</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            {/* Sticky bottom bar */}
-            <div className="fixed bottom-0 inset-x-0 bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 px-4 sm:px-8 py-4 flex items-center justify-between gap-4 z-40">
-                <div>
-                    <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                        {formatPrice(grandTotal)}{" "}
-                        {addOnTotal > 0 && <span className="text-sm text-gray-400 dark:text-gray-500 line-through ml-1">{formatPrice(baseFareTotal)}</span>}
-                    </p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500">{passengers.length} Traveller{passengers.length > 1 ? "s" : ""}</p>
+       
+            <div className="sticky bottom-0 z-40 w-full">
+                <div className="max-w-6xl mx-auto px-4 sm:px-6">
+                   <div className="bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] rounded-2xl py-4 px-4 flex items-center justify-between gap-4 mb-4">
+                        <div>
+                            <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                                {formatPrice(grandTotal)}{" "}
+                                {addOnTotal > 0 && (
+                                    <span className="text-sm text-gray-400 dark:text-gray-500 line-through ml-1">{formatPrice(baseFareTotal)}</span>
+                                )}
+                            </p>
+                            <p className="text-xs text-gray-400 dark:text-gray-500">
+                                {passengers.length} Traveller{passengers.length > 1 ? "s" : ""}
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => onContinue({ addOnTotal, selections: selectionList })}
+                            className="h-12 px-6 rounded-full text-sm font-bold flex items-center gap-2 bg-[#FF7626] hover:bg-[#e6661f] text-white transition-colors"
+                        >
+                            Next <HiOutlineArrowRight className="w-4 h-4" />
+                        </button>
+                    </div>
                 </div>
-                <button
-                    type="button"
-                    onClick={() => onContinue({ addOnTotal, selections: selectionList })}
-                    className="h-12 px-6 rounded-full text-sm font-bold flex items-center gap-2 bg-[#FF7626] hover:bg-[#e6661f] text-white transition-colors"
-                >
-                    Next <HiOutlineArrowRight className="w-4 h-4" />
-                </button>
             </div>
         </div>
     );

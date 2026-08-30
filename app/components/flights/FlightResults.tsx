@@ -424,11 +424,7 @@ const onwardJourneys = trips[0]?.Journey ?? [];
         );
     }, [combinedOnwardJourneys, combinedReturnJourneys]);
 
-    // Combined (RS) view uses a completely different dataset — combinedPairs,
-    // built from combinedTrips — not the split-search `trips`/allJourneys above.
-    // filterOptions was previously being reused for both views, which meant the
-    // sidebar in Combined View showed options derived from the split search
-    // (often empty or mismatched), not from the pairs actually on screen.
+
     const combinedFilterOptions = useMemo(() => {
         let min = Infinity;
         let max = 0;
@@ -440,9 +436,7 @@ const onwardJourneys = trips[0]?.Journey ?? [];
             min = Math.min(min, amount);
             max = Math.max(max, amount);
 
-            // Combined trips have two legs; bucket by the higher stop-count of
-            // the two so the label ("Non Stop" / "1 Stop") reflects what a
-            // person filtering by stops would expect to see excluded/included.
+
             const stopsKey = Math.max(pair.onward.Stops, pair.ret.Stops);
             const prevStop = stopsMap.get(stopsKey);
             stopsMap.set(stopsKey, prevStop != null ? Math.min(prevStop, amount) : amount);
@@ -487,7 +481,7 @@ const onwardJourneys = trips[0]?.Journey ?? [];
                     ? "combined"
                     : "split";
 
-    // Whichever dataset is actually rendered on screen right now drives the sidebar.
+
     const activeFilterOptions = effectiveView === "combined" ? combinedFilterOptions : filterOptions;
 
     useEffect(() => {
