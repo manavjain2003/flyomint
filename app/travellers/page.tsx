@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   HiOutlineUserGroup,
   HiOutlinePlus,
@@ -74,6 +74,17 @@ function initials(first?: string, last?: string) {
   return (a + b).toUpperCase() || "—";
 }
 
+/**
+ * Country picker whose input always DISPLAYS the full country name, but whose
+ * `onChange` always emits the 2-letter code — that code is the only thing
+ * that should ever land in the payload.
+ *
+ * `value` (the prop) is treated as the code of record. If the parent hands
+ * us a code we haven't resolved to a name yet (e.g. loading an existing
+ * traveler for edit), we look it up via getCountryDetails and swap the
+ * display text for the full name. Selecting from the dropdown does this
+ * instantly since we already have the full country object.
+ */
 function CountryCodeField({
   label,
   value,
@@ -87,16 +98,48 @@ function CountryCodeField({
   const [results, setResults] = useState<CountryOption[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [resolving, setResolving] = useState(false);
+  // Tracks which `value` we've already resolved a display name for, so we
+  // don't re-fetch on every render once it's settled.
+  const resolvedFor = useRef<string | null>(null);
 
+  // Resolve an incoming code into a full country name for display.
+  // Skipped while the user is actively typing/searching (open === true) so
+  // it never overwrites what they're mid-typing.
   useEffect(() => {
+    if (open) return;
+
     if (!value) {
       setQuery("");
+      resolvedFor.current = null;
       return;
     }
-    if (!query || query === value) {
-      setQuery(value);
-    }
-  }, [value]);
+
+    if (resolvedFor.current === value) return;
+
+    let cancelled = false;
+    setResolving(true);
+
+    getCountryDetails({ searchText: value }).then((res) => {
+      if (cancelled) return;
+      setResolving(false);
+      resolvedFor.current = value;
+
+      const match = res.success
+        ? res.countries.find(
+              (c) => c.codeShort.toUpperCase() === value.toUpperCase()
+          )
+        : null;
+
+      // Fallback to showing the raw value only if we couldn't resolve it
+      // (e.g. legacy saved data that wasn't a valid ISO code to begin with).
+      setQuery(match ? match.name : value);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [value, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -116,6 +159,7 @@ function CountryCodeField({
   }, [query, open]);
 
   function handleSelect(country: CountryOption) {
+    resolvedFor.current = country.codeShort;
     onChange(country.codeShort);
     setQuery(country.name);
     setOpen(false);
@@ -126,19 +170,25 @@ function CountryCodeField({
       <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
         {label}
       </label>
-      <input
-        value={query}
-        onChange={(e) => {
-          setQuery(e.target.value);
-          onChange("");
-          setOpen(true);
-        }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder="Start typing a country"
-        autoComplete="off"
-        className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-700 px-3 text-sm dark:bg-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#0284c7]/25 focus:border-[#0284c7]"
-      />
+      <div className="relative">
+        <input
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            onChange("");
+            resolvedFor.current = null;
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder="Start typing a country"
+          autoComplete="off"
+          className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-700 px-3 pr-8 text-sm dark:bg-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#0284c7]/25 focus:border-[#0284c7]"
+        />
+        {resolving && !open && (
+          <AiOutlineLoading3Quarters className="w-4 h-4 text-gray-400 animate-spin absolute right-2.5 top-1/2 -translate-y-1/2" />
+        )}
+      </div>
       {open && query.trim().length >= 2 && (
         <div className="absolute z-20 mt-1 w-full max-h-48 overflow-auto bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
           {loading && (
@@ -182,10 +232,16 @@ export default function MyTravelersPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
-  async function loadTravelers() {
+  async function loadTravelers(signal?: AbortSignal) {
     setLoading(true);
     setLoadError("");
-    const res = await getTravelers();
+    let res;
+    try {
+      res = await getTravelers({ signal });
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") return;
+      throw err;
+    }
     setLoading(false);
 
     if (!res.success) {
@@ -196,7 +252,9 @@ export default function MyTravelersPage() {
   }
 
   useEffect(() => {
-    loadTravelers();
+    const controller = new AbortController();
+    loadTravelers(controller.signal);
+    return () => controller.abort();
   }, []);
 
   function openAddForm() {
@@ -332,7 +390,7 @@ export default function MyTravelersPage() {
                     </p>
                     <button
                       type="button"
-                      onClick={loadTravelers}
+                      onClick={() => loadTravelers()}
                       className="mt-4 h-9 px-4 rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                     >
                       Retry

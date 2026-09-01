@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { HiOutlineUser } from "react-icons/hi2";
 import { AiOutlineLoading3Quarters } from "react-icons/ai";
 import AccountSidebar from "@/app/components/booking/AccountSidebar";
@@ -47,11 +47,19 @@ export default function MyProfilePage() {
     const [saveError, setSaveError] = useState("");
     const [saveSuccess, setSaveSuccess] = useState("");
 
+    // Tracks the AbortController for the most recent loadProfile() call.
+    // Both the mount effect and the "flyomint:login" listener call
+    // loadProfile — sharing this ref means a new call always cancels any
+    // still-in-flight previous one, so at most one UserProfile request is
+    // ever live at a time.
+    const activeProfileControllerRef = useRef<AbortController | null>(null);
+
     useEffect(() => {
         function handleLogin() {
             loadProfile();
         }
         function handleLogout() {
+            activeProfileControllerRef.current?.abort();
             setFullName("");
             setEmail("");
             setMobile("");
@@ -79,9 +87,22 @@ export default function MyProfilePage() {
     }, []);
 
     async function loadProfile() {
+        // Cancel any previous in-flight profile load before starting a new one.
+        activeProfileControllerRef.current?.abort();
+        const controller = new AbortController();
+        activeProfileControllerRef.current = controller;
+
         setLoadingProfile(true);
         setLoadError("");
-        const res = await getUserProfile();
+        let res;
+        try {
+            res = await getUserProfile({ signal: controller.signal });
+        } catch (err) {
+            if (err instanceof Error && err.name === "AbortError") return;
+            throw err;
+        }
+        // A newer loadProfile() call has since taken over — ignore this stale result.
+        if (activeProfileControllerRef.current !== controller) return;
         setLoadingProfile(false);
 
         if (!res.success) {
@@ -98,6 +119,9 @@ export default function MyProfilePage() {
 
     useEffect(() => {
         loadProfile();
+        return () => {
+            activeProfileControllerRef.current?.abort();
+        };
     }, []);
 
     function onEmailChange(value: string) {

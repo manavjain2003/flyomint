@@ -324,7 +324,7 @@ export default function FlightAddOns({
                 </div>
             </div>
 
-            <div className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-[750px_1fr] gap-6 items-start">
+            <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-[850px_1fr] gap-6 items-start">
               {/* Left column */}
                 <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 min-w-0 order-1 lg:order-1">
                     <div className="flex items-center justify-between flex-wrap gap-3 mb-4 pb-3 border-b border-gray-100 dark:border-gray-800">

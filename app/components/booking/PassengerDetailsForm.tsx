@@ -237,12 +237,42 @@ function NationalityField({
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
 
+    // Tracks the code whose name is already correctly reflected in `query`,
+    // so we don't refetch after the user's own click-to-select.
+    const resolvedCodeRef = useRef<string | null>(null);
+
     useEffect(() => {
         if (!value) {
+            resolvedCodeRef.current = null;
             setQuery("");
-        } else if (!query) {
-            setQuery(value);
+            return;
         }
+
+        // Already resolved locally (e.g. user just picked it from the dropdown)
+        if (resolvedCodeRef.current === value) return;
+
+        let cancelled = false;
+        (async () => {
+            const res = await getCountryDetails({ searchText: value });
+            if (cancelled) return;
+            if (res.success) {
+                const match = res.countries.find(
+                    (c) => c.codeShort.toLowerCase() === value.toLowerCase()
+                );
+                if (match) {
+                    resolvedCodeRef.current = value;
+                    setQuery(match.name);
+                    return;
+                }
+            }
+            // fallback if lookup fails — at least don't leave it blank
+            resolvedCodeRef.current = value;
+            setQuery(value);
+        })();
+
+        return () => {
+            cancelled = true;
+        };
     }, [value]);
 
     useEffect(() => {
@@ -263,6 +293,7 @@ function NationalityField({
     }, [query, open]);
 
     function handleSelect(country: CountryOption) {
+        resolvedCodeRef.current = country.codeShort;
         onChange(country.codeShort);
         setQuery(country.name);
         setOpen(false);
@@ -276,6 +307,7 @@ function NationalityField({
             <input
                 value={query}
                 onChange={(e) => {
+                    resolvedCodeRef.current = null;
                     setQuery(e.target.value);
                     onChange("");
                     setOpen(true);

@@ -63,37 +63,54 @@ export async function verifyLoginOtp({ mobile, userKey, otp }) {
     }
 }
 
-export async function getUserProfile() {
-    try {
-        if (!getStoredUniqueKey()) return { success: false, message: "Not logged in." };
+// Two independent parts of the UI can legitimately ask for the profile at
+// nearly the same moment (e.g. the Navbar's name-in-dropdown fetch and the
+// /my-profile page's own load, both firing on the same page load). Rather
+// than have every call site coordinate with every other, share one in-flight
+// request the same way api.js already does for the auth-token fetch.
+let inFlightProfileRequest = null;
 
-        const res = await apiRequest("/Auth/UserProfile", {
-            method: "GET",
-        });
+export async function getUserProfile({ signal } = {}) {
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
-        const payload = res?.ServiceResponse ?? {};
+    if (!inFlightProfileRequest) {
+        inFlightProfileRequest = (async () => {
+            try {
+                if (!getStoredUniqueKey()) return { success: false, message: "Not logged in." };
 
-        if (payload.ErrorCode) {
-            return { success: false, message: payload.Message || "Could not load profile." };
-        }
+                const res = await apiRequest("/Auth/UserProfile", {
+                    method: "GET",
+                });
 
-        return {
-            success: true,
-            name: payload.Name,
-            email: payload.Email,
-            mobile: payload.Mobile,
-            balance: payload.Balance,
-            billing: {
-                pinCode: payload.PINCode ?? "",
-                address: payload.Address ?? "",
-                city: payload.City ?? "",
-                state: payload.State ?? "",
-            },
-        };
-    } catch (error) {
-        if (error instanceof ApiError) return { success: false, message: error.message };
-        return { success: false, message: "Network error. Please try again." };
+                const payload = res?.ServiceResponse ?? {};
+
+                if (payload.ErrorCode) {
+                    return { success: false, message: payload.Message || "Could not load profile." };
+                }
+
+                return {
+                    success: true,
+                    name: payload.Name,
+                    email: payload.Email,
+                    mobile: payload.Mobile,
+                    balance: payload.Balance,
+                    billing: {
+                        pinCode: payload.PINCode ?? "",
+                        address: payload.Address ?? "",
+                        city: payload.City ?? "",
+                        state: payload.State ?? "",
+                    },
+                };
+            } catch (error) {
+                if (error instanceof ApiError) return { success: false, message: error.message };
+                return { success: false, message: "Network error. Please try again." };
+            } finally {
+                inFlightProfileRequest = null;
+            }
+        })();
     }
+
+    return inFlightProfileRequest;
 }
 
 export async function requestProfileOtp({ mobile, email } = {}) {

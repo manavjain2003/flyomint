@@ -97,10 +97,16 @@ export default function MyBookingsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
-  async function loadBookings(pageNumber: number) {
+  async function loadBookings(pageNumber: number, signal?: AbortSignal) {
     setLoading(true);
     setLoadError("");
-    const res: any = await getTransactionHistory({ tabId: 1, pageNumber, pageSize: PAGE_SIZE });
+    let res: any;
+    try {
+      res = await getTransactionHistory({ tabId: 1, pageNumber, pageSize: PAGE_SIZE, signal });
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") return;
+      throw err;
+    }
     setLoading(false);
 
     if (!res.success) {
@@ -112,7 +118,9 @@ export default function MyBookingsPage() {
   }
 
   useEffect(() => {
-    loadBookings(page);
+    const controller = new AbortController();
+    loadBookings(page, controller.signal);
+    return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
 
@@ -214,9 +222,9 @@ export default function MyBookingsPage() {
                             }}
                             className="cursor-pointer border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 align-top"
                           >
-                            <td className="py-3 pr-4 font-medium text-gray-900 dark:text-gray-100">
-                              {b.airlinePnr || b.crsPnr || b.referenceNo}
-                            </td>
+                          <td className="py-3 pr-4 font-medium text-gray-900 dark:text-gray-100">
+  {b.referenceNo}
+</td>
                             <td className="py-3 pr-4 text-gray-700 dark:text-gray-300">{b.travelerName || "—"}</td>
                             <td className="py-3 pr-4 text-gray-700 dark:text-gray-300">
                               {b.legs.map((leg, i) => (

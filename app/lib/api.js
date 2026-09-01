@@ -194,7 +194,7 @@ export async function getUniqueKey({ forceRefresh = false } = {}) {
     return key.uniqueKey;
 }
 
-async function doFetch(endpoint, { method, body, headers, authHeader }) {
+async function doFetch(endpoint, { method, body, headers, authHeader, signal }) {
     const config = {
         method,
         headers: {
@@ -203,12 +203,16 @@ async function doFetch(endpoint, { method, body, headers, authHeader }) {
             ...authHeader,
         },
         ...(body && { body: JSON.stringify(body) }),
+        ...(signal && { signal }),
     };
 
     let response;
     try {
         response = await fetch(`${BASE_URL}${endpoint}`, config);
-    } catch {
+    } catch (err) {
+        if (err?.name === "AbortError") {
+            throw err;
+        }
         throw new ApiError(0, "NetworkError", null, "Network error. Please check your connection and try again.");
     }
 
@@ -232,8 +236,12 @@ async function doFetch(endpoint, { method, body, headers, authHeader }) {
 }
 
 export async function apiRequest(endpoint, options = {}) {
-    const { method = "GET", body, token, headers = {}, skipAuth = false } = options;
+    const { method = "GET", body, token, headers = {}, skipAuth = false, signal } = options;
     const needsAuth = !skipAuth && endpoint !== "/Auth/Signature";
+
+    if (signal?.aborted) {
+        throw new DOMException("Aborted", "AbortError");
+    }
 
     let authHeader = {};
     if (needsAuth) {
@@ -241,7 +249,7 @@ export async function apiRequest(endpoint, options = {}) {
         authHeader = { UniqueKey: key };
     }
 
-    let { response, data } = await doFetch(endpoint, { method, body, headers, authHeader });
+    let { response, data } = await doFetch(endpoint, { method, body, headers, authHeader, signal });
 
     if (needsAuth && response.status === 401) {
         const freshKey = await getUniqueKey({ forceRefresh: true });
@@ -250,6 +258,7 @@ export async function apiRequest(endpoint, options = {}) {
             body,
             headers,
             authHeader: { UniqueKey: freshKey },
+            signal,
         }));
     }
 

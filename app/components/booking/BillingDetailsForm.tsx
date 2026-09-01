@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { HiOutlineHome } from "react-icons/hi2";
-import { getUserProfile , updateProfile } from "@/app/lib/authApi"; 
+import { AiOutlineLoading3Quarters } from "react-icons/ai";
+import { getUserProfile } from "@/app/lib/authApi";
+import { getPinCodeDetails } from "@/app/lib/flightsapi";
 
 export type BillingAddress = {
     pinCode: string;
     address: string;
     city: string;
-    state: string;
+    state: string;     
+    stateCode: string; 
     profileUpdate: boolean;
 };
 
@@ -25,6 +28,7 @@ function emptyBilling(initial?: Partial<BillingAddress>): BillingAddress {
         address: initial?.address ?? "",
         city: initial?.city ?? "",
         state: initial?.state ?? "",
+        stateCode: initial?.stateCode ?? "",
         profileUpdate: initial?.profileUpdate ?? false,
     };
 }
@@ -51,16 +55,16 @@ export default function BillingAddressForm({
     onChange,
 }: BillingAddressFormProps) {
     const [billing, setBilling] = useState<BillingAddress>(() => emptyBilling(initial));
-    const [loadingProfile, setLoadingProfile] = useState(false);
-    const [savingProfile, setSavingProfile] = useState(false);
-    const [saveError, setSaveError] = useState<string | null>(null);
-    const [saveSuccess, setSaveSuccess] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [pinLoading, setPinLoading] = useState(false);
+    const [pinError, setPinError] = useState("");
+    const lastLookedUpPin = useRef<string>("");
 
     useEffect(() => {
         if (skipProfileFetch || hasAnyValue(emptyBilling(initial))) return;
 
         let cancelled = false;
-        setLoadingProfile(true);
+        setLoading(true);
 
         getUserProfile()
             .then((result) => {
@@ -70,12 +74,16 @@ export default function BillingAddressForm({
                         ? prev
                         : {
                               ...result.billing,
+                              stateCode: (result.billing as any).stateCode ?? prev.stateCode,
                               profileUpdate: prev.profileUpdate,
                           }
                 );
+                if (result.billing.pinCode) {
+                    lastLookedUpPin.current = result.billing.pinCode;
+                }
             })
             .finally(() => {
-                if (!cancelled) setLoadingProfile(false);
+                if (!cancelled) setLoading(false);
             });
 
         return () => {
@@ -83,54 +91,52 @@ export default function BillingAddressForm({
         };
     }, []);
 
+    // Look up state from PIN code once 6 digits are entered
+    useEffect(() => {
+        const pin = billing.pinCode.trim();
+
+        if (pin.length !== 6) {
+            setPinError("");
+            return;
+        }
+        if (pin === lastLookedUpPin.current) return;
+
+        let cancelled = false;
+        const timer = setTimeout(async () => {
+            setPinLoading(true);
+            setPinError("");
+
+            const result = await getPinCodeDetails(pin);
+
+            if (cancelled) return;
+            setPinLoading(false);
+
+            if (!result.success) {
+                setPinError(result.message || "Invalid PIN code");
+                setBilling((prev) => ({ ...prev, state: "", stateCode: "" }));
+                return;
+            }
+
+            lastLookedUpPin.current = pin;
+            setBilling((prev) => ({
+                ...prev,
+                state: result.stateName,
+                stateCode: result.stateCode,
+            }));
+        }, 300); // debounce so we don't fire on every keystroke
+
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [billing.pinCode]);
+
     useEffect(() => {
         onChange(billing);
     }, [billing]);
 
     function update(patch: Partial<BillingAddress>) {
         setBilling((prev) => ({ ...prev, ...patch }));
-    }
-
-    async function handleProfileUpdateToggle(checked: boolean) {
-        setSaveError(null);
-        setSaveSuccess(false);
-        update({ profileUpdate: checked });
-
-        if (!checked) return; 
-
-        const pin = billing.pinCode.trim();
-        const address = billing.address.trim();
-        const city = billing.city.trim();
-        const state = billing.state.trim();
-
-        if (!address || !city || !state || !/^\d{6}$/.test(pin)) {
-            setSaveError("Please fill address, city, state and a valid 6-digit PIN code before saving to profile.");
-            update({ profileUpdate: false });
-            return;
-        }
-
-        setSavingProfile(true);
-        try {
-       const res = await updateProfile({
-    address,
-    city,
-    state,
-    pinCode: pin,
-});
-
-            if (!res.success) {
-                setSaveError(res.message || "Could not save billing details to profile.");
-                update({ profileUpdate: false });
-                return;
-            }
-
-            setSaveSuccess(true);
-        } catch {
-            setSaveError("Network error. Could not save to profile.");
-            update({ profileUpdate: false });
-        } finally {
-            setSavingProfile(false);
-        }
     }
 
     return (
@@ -142,7 +148,7 @@ export default function BillingAddressForm({
                 <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
                     Billing Address
                 </h3>
-                {loadingProfile && (
+                {loading && (
                     <span className="text-xs text-gray-400 dark:text-gray-500 ml-1">Loading saved address…</span>
                 )}
             </div>
@@ -173,54 +179,49 @@ export default function BillingAddressForm({
 
                 <div>
                     <label className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1 block">
-                        State{mandatory ? " *" : ""}
+                        PIN Code{mandatory ? " *" : ""}
                     </label>
-                    <input
-                        value={billing.state}
-                        onChange={(e) => update({ state: e.target.value })}
-                        className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-700 px-3 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-[#1c8fc7]"
-                    />
+                    <div className="relative">
+                        <input
+                            value={billing.pinCode}
+                            maxLength={6}
+                            inputMode="numeric"
+                            onChange={(e) => update({ pinCode: e.target.value.replace(/\D/g, "") })}
+                            className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-700 px-3 pr-8 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-[#1c8fc7]"
+                        />
+                        {pinLoading && (
+                            <AiOutlineLoading3Quarters className="w-4 h-4 text-gray-400 animate-spin absolute right-2.5 top-1/2 -translate-y-1/2" />
+                        )}
+                    </div>
+                    {pinError && (
+                        <p className="text-[11px] text-red-500 mt-1">{pinError}</p>
+                    )}
                 </div>
 
                 <div>
                     <label className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1 block">
-                        PIN Code{mandatory ? " *" : ""}
+                        State{mandatory ? " *" : ""}
                     </label>
                     <input
-                        value={billing.pinCode}
-                        maxLength={6}
-                        inputMode="numeric"
-                        onChange={(e) => update({ pinCode: e.target.value.replace(/\D/g, "") })}
-                        className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-700 px-3 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-[#1c8fc7]"
+                        value={billing.state}
+                        readOnly
+                        placeholder="Auto-filled from PIN code"
+                        className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-700 px-3 text-sm text-gray-900 dark:text-gray-100 outline-none bg-gray-50 dark:bg-gray-800 cursor-not-allowed"
                     />
                 </div>
             </div>
 
-            {/* Confirm & save to profile */}
             <label className="mt-4 flex items-start gap-2.5 cursor-pointer select-none">
                 <input
                     type="checkbox"
                     checked={billing.profileUpdate}
-                    disabled={savingProfile}
-                    onChange={(e) => handleProfileUpdateToggle(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-[#1c8fc7] focus:ring-[#1c8fc7] cursor-pointer disabled:opacity-50"
+                    onChange={(e) => update({ profileUpdate: e.target.checked })}
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-[#1c8fc7] focus:ring-[#1c8fc7] cursor-pointer"
                 />
                 <span className="text-[13px] text-gray-600 dark:text-gray-300 leading-[1.4]">
-                    Confirm and save billing details to your profile
-                    {savingProfile && (
-                        <span className="ml-1.5 text-xs text-gray-400">Saving…</span>
-                    )}
+                    Save billing details to your profile
                 </span>
             </label>
-
-            {saveError && (
-                <p className="mt-2 text-[12px] text-red-600 dark:text-red-400 leading-[1.4]">{saveError}</p>
-            )}
-            {saveSuccess && !saveError && (
-                <p className="mt-2 text-[12px] text-emerald-600 dark:text-emerald-400 leading-[1.4]">
-                    Billing details saved to your profile.
-                </p>
-            )}
         </div>
     );
 }

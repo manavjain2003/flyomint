@@ -416,7 +416,7 @@ export async function getAirlineTrvlItinerary({
           GSTAddress: contactInfo.gstAddress || "",
         },
         BillInfo: {
-          ProfileUpdate: billInfo?.profileUpdate ?? false,
+          ProfileUpdate: true,
           PINCode: billInfo?.pinCode || "",
           Address: billInfo?.address || "",
           City: billInfo?.city || "",
@@ -536,104 +536,118 @@ export async function getAirlinePaymentUrl({ tokenId, transactionId, pgId, pgCod
 
 
 
-export async function getPaymentStatus(transactionId) {
-    try {
-        const res = await apiRequest(`/Payment/PaymentStatus/${transactionId}`, {
-            method: "GET",
-        });
-
-        const payload = res?.ServiceResponse ?? {};
-        const status = (payload.Status || "").toLowerCase();
-
-        if (payload.ErrorCode) {
-            return {
-                success: false,
-                status: "failed",
-                message: payload.Message || "Payment failed",
-            };
-        }
-
-        return {
-            success: true,
-            // treat anything that isn't explicitly success/pending as a
-            // terminal failure, instead of passing the raw string through
-            status: status === "success" ? "success" : status === "pending" ? "pending" : "failed",
-            message: payload.Message || null,
-        };
-    } catch (error) {
-        if (error instanceof ApiError) {
-            return { success: false, status: "failed", message: error.message };
-        }
-        return { success: false, status: "failed", message: "Network error. Please try again." };
-    }
+function normalizeServicePayload(res) {
+  const raw = res?.ServiceResponse ?? res ?? {};
+  // API sometimes returns a plain string error in ServiceResponse
+  if (typeof raw === "string") {
+    return {
+      ErrorCode: "AUTH_OR_API_ERROR",
+      Message: raw,
+      Status: "failed",
+    };
+  }
+  return raw && typeof raw === "object" ? raw : {};
 }
 
-export async function getBookingStatus(transactionId) {
-    try {
-        const res = await apiRequest(`/Utility/BookingStatus/${transactionId}`, {
-            method: "GET",
-        });
+export async function getPaymentStatus(transactionId, { signal } = {}) {
+  try {
+    const res = await apiRequest(`/Payment/PaymentStatus/${transactionId}`, {
+      method: "GET",
+      signal,
+    });
 
-        const payload = res?.ServiceResponse ?? {};
-        const status = (payload.Status || "").toLowerCase();
+    const payload = normalizeServicePayload(res);
+    const status = String(payload.Status || "").toLowerCase();
+    const message =
+      payload.Message ||
+      (typeof res?.ServiceResponse === "string" ? res.ServiceResponse : null) ||
+      null;
 
-        if (payload.ErrorCode) {
-            return {
-                success: false,
-                status: "failed",
-                message: payload.Message || "Booking could not be confirmed",
-            };
-        }
-
-        return {
-            success: true,
-            status: status === "success" ? "success" : status === "pending" ? "pending" : "failed",
-            message: payload.Message || null,
-        };
-    } catch (error) {
-        if (error instanceof ApiError) {
-            return { success: false, status: "failed", message: error.message };
-        }
-        return { success: false, status: "failed", message: "Network error. Please try again." };
+    // Explicit error from gateway (login, session, etc.)
+    if (payload.ErrorCode || status === "failed" || /not a valid login|unauthorized|session/i.test(message || "")) {
+      return {
+        success: false,
+        status: "failed",
+        message: message || "Payment status check failed",
+      };
     }
+
+    return {
+      success: true,
+      status: status === "success" ? "success" : status === "pending" ? "pending" : "failed",
+      message,
+    };
+  } catch (error) {
+    if (error?.name === "AbortError") throw error;
+    if (error instanceof ApiError) {
+      return { success: false, status: "failed", message: error.message };
+    }
+    return { success: false, status: "failed", message: "Network error. Please try again." };
+  }
 }
- 
 
-export async function pollBookingConfirmation(
-    transactionId,
-    { intervalMs = 2000, maxDurationMs = 45000 } = {}
-) {
-    const startedAt = Date.now();
- 
-    while (Date.now() - startedAt < maxDurationMs) {
-        const pay = await getPaymentStatus(transactionId);
- 
-        if (!pay.success || pay.status === "failed") {
-            return { stage: "payment", status: "failed", message: pay.message };
-        }
-        if (pay.status === "success") break;
- 
-        await new Promise((r) => setTimeout(r, intervalMs));
+export async function getBookingStatus(transactionId, { signal } = {}) {
+  try {
+    const res = await apiRequest(`/Utility/BookingStatus/${transactionId}`, {
+      method: "GET",
+      signal,
+    });
+
+    const payload = normalizeServicePayload(res);
+    const status = String(payload.Status || "").toLowerCase();
+    const message =
+      payload.Message ||
+      (typeof res?.ServiceResponse === "string" ? res.ServiceResponse : null) ||
+      null;
+
+    if (payload.ErrorCode || status === "failed" || /not a valid login|unauthorized|session/i.test(message || "")) {
+      return {
+        success: false,
+        status: "failed",
+        message: message || "Booking could not be confirmed",
+      };
     }
- 
-    if (Date.now() - startedAt >= maxDurationMs) {
-        return { stage: "payment", status: "timeout", message: "Payment confirmation is taking longer than usual." };
+
+    return {
+      success: true,
+      status: status === "success" ? "success" : status === "pending" ? "pending" : "failed",
+      message,
+    };
+  } catch (error) {
+    if (error?.name === "AbortError") throw error;
+    if (error instanceof ApiError) {
+      return { success: false, status: "failed", message: error.message };
     }
- 
-    while (Date.now() - startedAt < maxDurationMs) {
-        const booking = await getBookingStatus(transactionId);
- 
-        if (!booking.success || booking.status === "failed") {
-            return { stage: "booking", status: "failed", message: booking.message };
-        }
-        if (booking.status === "success") {
-            return { stage: "booking", status: "success", message: booking.message };
-        }
- 
-        await new Promise((r) => setTimeout(r, intervalMs));
+    return { success: false, status: "failed", message: "Network error. Please try again." };
+  }
+}
+
+export async function pollBookingConfirmation(transactionId, { signal } = {}) {
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+
+    const pay = await getPaymentStatus(transactionId, { signal });
+
+    if (!pay.success || pay.status === "failed") {
+        return { stage: "payment", status: "failed", message: pay.message };
     }
- 
-    return { stage: "booking", status: "timeout", message: "Booking confirmation is taking longer than usual." };
+    if (pay.status === "pending") {
+        return { stage: "payment", status: "pending", message: pay.message };
+    }
+
+    // Payment succeeded — do one lightweight booking-status check.
+    // (The caller still does a fuller AirlineBookingRetrieve afterwards;
+    // this is just an early signal, so it should not loop either.)
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+
+    const booking = await getBookingStatus(transactionId, { signal });
+
+    if (!booking.success || booking.status === "failed") {
+        return { stage: "booking", status: "failed", message: booking.message };
+    }
+    if (booking.status === "pending") {
+        return { stage: "booking", status: "pending", message: booking.message };
+    }
+    return { stage: "booking", status: "success", message: booking.message };
 }
  
 
@@ -649,7 +663,7 @@ function pick(obj, keys) {
     return undefined;
 }
  
-export async function getAirlineBookingRetrieve({ transactionId, pnr = "", referenceNo = "" }) {
+export async function getAirlineBookingRetrieve({ transactionId, pnr = "", referenceNo = "", signal }) {
     try {
         const res = await apiRequest("/Utility/AirlineBookingRetrieve", {
             method: "POST",
@@ -658,6 +672,7 @@ export async function getAirlineBookingRetrieve({ transactionId, pnr = "", refer
                 PNR: pnr,
                 ReferenceNo: referenceNo,
             },
+            signal,
         });
 
         const payload = res?.ServiceResponse ?? res ?? {};
@@ -682,6 +697,7 @@ export async function getAirlineBookingRetrieve({ transactionId, pnr = "", refer
             raw: payload,
         };
     } catch (error) {
+        if (error?.name === "AbortError") throw error;
         if (error instanceof ApiError) {
             return { success: false, message: error.message, pnr: null, referenceNo: null };
         }
@@ -691,10 +707,11 @@ export async function getAirlineBookingRetrieve({ transactionId, pnr = "", refer
  
 
 
-export async function getTravelers() {
+export async function getTravelers({ signal } = {}) {
     try {
         const res = await apiRequest("/Utility/GetTravelers", {
             method: "GET",
+            signal,
         });
 
         const payload = res?.ServiceResponse ?? {};
@@ -723,6 +740,7 @@ export async function getTravelers() {
             })),
         };
     } catch (error) {
+        if (error?.name === "AbortError") throw error;
         if (error instanceof ApiError) {
             return { success: false, message: error.message, travelers: [] };
         }
@@ -734,12 +752,14 @@ export async function getTravelers() {
 
 export async function getAirlineInvoice({ transactionId, pnr = "", referenceNo = "", type = "P" }) {
     try {
-        const body = { TransactionID: String(transactionId), Type: type };
-        if (pnr) body.PNR = pnr;
-        if (referenceNo) body.ReferenceNo = referenceNo;
+        const body = {
+            TransactionID: String(transactionId),  
+            PNR: pnr,
+            ReferenceNo: referenceNo,
+            Type: type,
+        };
 
         const res = await apiRequest("/Utility/AirlineInvoice", { method: "POST", body });
-
 
         if (res?.__blob) {
             return { success: true, message: null, data: { blob: res.__blob, contentType: res.__contentType } };
@@ -764,14 +784,16 @@ export async function getAirlineInvoice({ transactionId, pnr = "", referenceNo =
     }
 }
 
-export async function getETicketCopy({ transactionId, pnr = "", referenceNo = "", type = "P" }) {
+export async function getETicketCopy({ transactionId, type = "P" }) {
     try {
-        const body = { TransactionID: String(transactionId), Type: type };
-        if (pnr) body.PNR = pnr;
-        if (referenceNo) body.ReferenceNo = referenceNo;
+        const body = {
+            TransactionID: String(transactionId),
+            PNR: "",
+            ReferenceNo: "",
+            Type: type,
+        };
 
         const res = await apiRequest("/Utility/ETicketCopy", { method: "POST", body });
-
 
         if (res?.__blob) {
             return { success: true, message: null, data: { blob: res.__blob, contentType: res.__contentType } };
@@ -894,7 +916,10 @@ export async function insertTravelerDetail({
 }
  
 
-export async function getTransactionHistory({ tabId = 1, pageNumber = 1, pageSize = 30 } = {}) {
+/**
+ * @param {{ tabId?: number, pageNumber?: number, pageSize?: number, signal?: AbortSignal }} [options]
+ */
+export async function getTransactionHistory({ tabId = 1, pageNumber = 1, pageSize = 30, signal } = {}) {
     try {
         const res = await apiRequest("/Reports/TransactionHistory", {
             method: "POST",
@@ -903,6 +928,7 @@ export async function getTransactionHistory({ tabId = 1, pageNumber = 1, pageSiz
                 PageNumber: pageNumber,
                 PageSize: pageSize,
             },
+            signal,
         });
  
         const payload = res?.ServiceResponse ?? {};
@@ -963,6 +989,7 @@ export async function getTransactionHistory({ tabId = 1, pageNumber = 1, pageSiz
             pageSize,
         };
     } catch (error) {
+        if (error?.name === "AbortError") throw error;
         if (error instanceof ApiError) {
             return { success: false, message: error.message, bookings: [], hasMore: false };
         }
@@ -972,4 +999,40 @@ export async function getTransactionHistory({ tabId = 1, pageNumber = 1, pageSiz
  
 export async function pollTransactionHistoryPage({ tabId = 1, pageNumber, pageSize = 30 }) {
     return getTransactionHistory({ tabId, pageNumber, pageSize });
+}
+
+
+export async function getPinCodeDetails(pinCode, { signal } = {}) {
+    try {
+        const res = await apiRequest(`/Utility/PinCodeDetails/${pinCode}`, {
+            method: "GET",
+            signal,
+        });
+
+        const payload = res?.ServiceResponse ?? {};
+
+        if (payload.ErrorCode || !payload.PinCodeDetails?.length) {
+            return {
+                success: false,
+                message: payload.Message || "Invalid PIN code",
+                stateCode: null,
+                stateName: null,
+            };
+        }
+
+        const detail = payload.PinCodeDetails[0];
+
+        return {
+            success: true,
+            message: payload.Message || null,
+            stateCode: detail.StateCode,
+            stateName: detail.StateName,
+        };
+    } catch (error) {
+        if (error?.name === "AbortError") throw error;
+        if (error instanceof ApiError) {
+            return { success: false, message: error.message, stateCode: null, stateName: null };
+        }
+        return { success: false, message: "Network error. Please try again.", stateCode: null, stateName: null };
+    }
 }

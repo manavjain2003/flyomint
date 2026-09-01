@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { pollBookingConfirmation, getAirlineBookingRetrieve } from "@/app/lib/flightsapi";
+import { pollBookingConfirmation, getAirlineBookingRetrieve, getETicketCopy, getAirlineInvoice } from "@/app/lib/flightsapi";
 import { HiOutlineCreditCard, HiOutlinePaperAirplane } from "react-icons/hi2";
 
 type SSR = {
@@ -94,7 +94,45 @@ const CABIN_LABELS: Record<string, string> = {
   J: "Business",
   F: "First",
 };
+function getMessageExpiry(paymentTime?: string): Date | null {
+  if (!paymentTime) return null;
+  const base = new Date(paymentTime);
+  if (isNaN(base.getTime())) return null;
+  return new Date(base.getTime() + 20 * 60 * 1000); // PaymentTime + 20 min
+}
 
+function ClockIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CountdownTimer({ expiresAt }: { expiresAt: Date }) {
+  const [remainingMs, setRemainingMs] = useState(() => expiresAt.getTime() - Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setRemainingMs(expiresAt.getTime() - Date.now());
+    }, 1000);
+    return () => clearInterval(id);
+  }, [expiresAt]);
+
+  if (remainingMs <= 0) return null;
+
+  const totalSeconds = Math.floor(remainingMs / 1000);
+  const mm = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
+  const ss = String(totalSeconds % 60).padStart(2, "0");
+
+  return (
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-sm font-bold tabular-nums flex-shrink-0">
+      <ClockIcon className="w-4 h-4" />
+      {mm}:{ss}
+    </span>
+  );
+}
 const PENDING_STATUSES = ["PENDING", "BOOKING INITIATE", "INITIATE", "IN PROGRESS"];
 
 function isPendingStatus(status?: string) {
@@ -173,18 +211,18 @@ function BookingConfirmationPage() {
 
   const [failReason, setFailReason] = useState<string>("Something went wrong. Please try again.");
   const [failedAt, setFailedAt] = useState<Date | null>(null);
-
   const [booking, setBooking] = useState<ServiceResponse | null>(null);
-  const [pendingSince, setPendingSince] = useState<Date | null>(null);
   const [copied, setCopied] = useState(false);
 
   const [panel, setPanel] = useState<"cancel" | "reschedule" | "fareRules" | null>(null);
   const [panelVisible, setPanelVisible] = useState(false);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
-  const [paymentTime, setPaymentTime] = useState<string | null>(null);
-
+  const [downloadingTicket, setDownloadingTicket] = useState(false);
+  const [downloadingInvoice, setDownloadingInvoice] = useState(false);
   const pollCountRef = useRef(0);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const checkPaymentRef = useRef<(() => Promise<void>) | null>(null);
+  const [manualChecking, setManualChecking] = useState(false);
 
   const [selectedJourneys, setSelectedJourneys] = useState<Set<number>>(new Set());
   const [selectedTravelers, setSelectedTravelers] = useState<Set<number>>(new Set());
@@ -211,7 +249,61 @@ function BookingConfirmationPage() {
       return next;
     });
   }
+  async function handleDownloadTicket() {
+    if (!booking?.TransactionID || downloadingTicket) return;
+    setDownloadingTicket(true);
+    try {
+      const pnr = booking.Journey?.[0]?.AirlinePNR || "";
+      const refNo = booking.ReferenceNo || "";
+      const res = await getETicketCopy({
+        transactionId: String(booking.TransactionID),
+        pnr,
+        referenceNo: refNo,
+      });
+      if (!res.success || !res.data?.blob) {
+        alert(res.message || "Could not download e-ticket. Please try again.");
+        return;
+      }
+      const url = window.URL.createObjectURL(res.data.blob);
+     const a = document.createElement("a");
+      a.href = url;
+      a.download = `e-ticket-${refNo || booking.TransactionID}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } finally {
+      setDownloadingTicket(false);
+    }
+  }
 
+  async function handleDownloadInvoice() {
+    if (!booking?.TransactionID || downloadingInvoice) return;
+    setDownloadingInvoice(true);
+    try {
+      const pnr = booking.Journey?.[0]?.AirlinePNR || "";
+      const refNo = booking.ReferenceNo || "";
+      const res = await getAirlineInvoice({
+        transactionId: String(booking.TransactionID),
+        pnr,
+        referenceNo: refNo,
+      });
+      if (!res.success || !res.data?.blob) {
+        alert(res.message || "Could not download invoice. Please try again.");
+        return;
+      }
+      const url = window.URL.createObjectURL(res.data.blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `invoice-${refNo || booking.TransactionID}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } finally {
+      setDownloadingInvoice(false);
+    }
+  }
   function toggleTraveler(paxId: number) {
     setSelectedTravelers((prev) => {
       const next = new Set(prev);
@@ -231,19 +323,25 @@ function BookingConfirmationPage() {
     }
 
     let cancelled = false;
+    const controller = new AbortController();
 
 async function runBookingRetrieve() {
   if (!transactionId || cancelled) return;
 
-  const retrieved: any = await getAirlineBookingRetrieve({
-    transactionId: transactionId!,
-  });
+  let retrieved: any;
+  try {
+    retrieved = await getAirlineBookingRetrieve({
+      transactionId: transactionId!,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") return;
+    throw err;
+  }
 
   if (cancelled) return;
 
   if (!retrieved?.success) {
-    // Booking record may not have propagated yet right after payment
-    // succeeds. Retry a few times before treating this as a real failure.
     if (pollCountRef.current < 5) {
       pollCountRef.current += 1;
       setBookingStatus("pending");
@@ -254,8 +352,6 @@ async function runBookingRetrieve() {
       return;
     }
 
-    // Genuinely stuck after retries — this is a booking-confirmation
-    // problem, NOT a payment failure (payment already succeeded).
     setBookingStatus("failed");
     setFailReason(
       retrieved?.message ||
@@ -278,20 +374,15 @@ async function runBookingRetrieve() {
 
     if (hasPendingJourney) {
       if (pendingJourneyWithMessage) {
-        // Message exists → show message + timer
+        // Message exists → show the airline-provided pending message
         setPendingMessage(pendingJourneyWithMessage.Message || null);
-        // PaymentTime is at root level
-        setPaymentTime(payload.PaymentTime || null);
       } else {
-        // Pending but no message → hide both timer and message
         setPendingMessage(null);
-        setPaymentTime(null);
       }
 
       setBookingStatus("pending");
       setStage("landing");
 
-      // Polling: first 5 calls every 1 min, then every 5 min
       pollCountRef.current += 1;
       const nextDelay = pollCountRef.current <= 5 ? 60_000 : 300_000;
       pollTimerRef.current = setTimeout(() => {
@@ -301,12 +392,10 @@ async function runBookingRetrieve() {
       // All journeys confirmed
       setBookingStatus("success");
       setPendingMessage(null);
-      setPaymentTime(null);
       setStage("landing");
       sessionStorage.removeItem("pendingBooking");
     }
   } else {
-    // No journey data yet → keep polling as pending
     setBookingStatus("pending");
     setStage("landing");
 
@@ -318,28 +407,33 @@ async function runBookingRetrieve() {
   }
 }
 
-async function run() {
+
+async function checkPayment() {
+  if (cancelled) return;
   setCheckStep("payment");
-  const result: any = await pollBookingConfirmation(transactionId!);
+
+  let pay: any;
+  try {
+    pay = await pollBookingConfirmation(transactionId!, { signal: controller.signal });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") return;
+    throw err;
+  }
   if (cancelled) return;
 
-  if (result.stage === "payment") {
-    if (result.status === "success") {
+  if (pay.stage === "payment") {
+    if (pay.status === "success") {
       setPaymentStatus("success");
-    } else if (result.status === "pending") {
+    } else if (pay.status === "pending") {
       setPaymentStatus("pending");
       setBookingStatus("pending");
-      setPendingSince(new Date());
       setStage("landing");
       return;
     } else {
-      // Real payment failure or payment-stage timeout
       setPaymentStatus("failed");
       setFailReason(
-        result.message ||
-          (result.status === "timeout"
-            ? "This is taking longer than expected. If any amount was deducted, it will be refunded automatically if the booking didn't go through."
-            : "We're having trouble processing your payment. Please try again or contact support for further queries.")
+        pay.message ||
+          "We're having trouble processing your payment. Please try again or contact support for further queries."
       );
       setFailedAt(new Date());
       setStage("paymentFailed");
@@ -347,7 +441,8 @@ async function run() {
     }
   } else {
     // stage === "booking" → payment already succeeded by definition.
-    // Don't treat a failed/timed-out booking-status check as a payment failure.
+    // Don't treat a failed/pending booking-status check as a payment failure;
+    // runBookingRetrieve below does the fuller, authoritative check.
     setPaymentStatus("success");
   }
 
@@ -356,15 +451,27 @@ async function run() {
   await runBookingRetrieve();
 }
 
-    run();
+    checkPaymentRef.current = checkPayment;
+    checkPayment();
 
     return () => {
       cancelled = true;
+      controller.abort();
       if (pollTimerRef.current) {
         clearTimeout(pollTimerRef.current);
       }
     };
   }, [transactionId]);
+
+  async function handleManualRecheck() {
+    if (manualChecking || !checkPaymentRef.current) return;
+    setManualChecking(true);
+    try {
+      await checkPaymentRef.current();
+    } finally {
+      setManualChecking(false);
+    }
+  }
 
   function copyBookingId() {
     if (!booking?.ReferenceNo) return;
@@ -378,10 +485,18 @@ async function run() {
   }
 
 if (stage === "paymentFailed") {
+  const isAuthError = /not a valid login|unauthorized|session|token|login/i.test(
+    failReason || ""
+  );
+
   return (
     <PaymentFailedCard
-      title="Oh no! Payment Failed."
-      message={failReason}
+      title={isAuthError ? "Session expired" : "Oh no! Payment Failed."}
+      message={
+        isAuthError
+          ? "Your session is no longer valid. Please log in again and retry from your bookings."
+          : failReason
+      }
       cfLinkId={transactionId ?? "—"}
       dateTime={
         failedAt
@@ -395,7 +510,14 @@ if (stage === "paymentFailed") {
             })
           : ""
       }
-      onTryAgain={() => window.location.reload()}
+      buttonLabel={isAuthError ? "Login" : "Contact Support"}
+      onTryAgain={() => {
+        if (isAuthError) {
+          router.push("/login");
+        } else {
+          router.push("/contact");
+        }
+      }}
     />
   );
 }
@@ -418,12 +540,14 @@ if (stage === "bookingFailed") {
             })
           : ""
       }
-      onTryAgain={() => window.location.reload()}
+      buttonLabel="Contact Support"
+      onTryAgain={() => router.push("/contact")}
     />
   );
 }
 
   if (!booking && stage !== "landing") return null;
+const messageExpiry = getMessageExpiry(booking?.PaymentTime);
 
   const isFullyConfirmed =
     paymentStatus === "success" &&
@@ -498,24 +622,36 @@ if (stage === "bookingFailed") {
             </div>
           )}
 
-          {/* Pending with message + 20-min timer */}
-          {(isPaymentPending || isBookingPending) && (
-            <PendingTimerBanner
-              paymentTime={paymentTime}
-              since={pendingSince}
-              message={pendingMessage}
-              referenceNo={booking?.ReferenceNo}
-            />
-          )}
+          {/* Pending status */}
+   {(isPaymentPending || isBookingPending) && (
+  <PendingStatusBanner
+    message={pendingMessage}
+    referenceNo={booking?.ReferenceNo}
+    onRecheck={isPaymentPending ? handleManualRecheck : undefined}
+    rechecking={manualChecking}
+    expiresAt={pendingMessage ? messageExpiry : null}
+  />
+)}
 
           <div className="grid grid-cols-1 lg:grid-cols-[750px_1fr] gap-6 items-start">
-            {/* Left column */}
             <div className="min-w-0 order-1 lg:order-1 space-y-4">
-              <div className="grid grid-cols-3 gap-3">
-                <ActionCard label="Web Check-in" sublabel="Complete before airport" />
-                <ActionCard label="E-Ticket" sublabel="Download PDF" />
-                <ActionCard label="Invoice" sublabel="View & download" />
-              </div>
+              {!isPaymentPending && (
+                <div className="grid grid-cols-3 gap-3">
+                  <ActionCard label="Web Check-in" sublabel="Complete before airport" />
+                             <ActionCard
+                    label="E-Ticket"
+                    sublabel={downloadingTicket ? "Downloading…" : "Download PDF"}
+                    onClick={handleDownloadTicket}
+                    disabled={downloadingTicket}
+                 />
+                 <ActionCard
+                    label="Invoice"
+                    sublabel={downloadingInvoice ? "Downloading…" : "View & download"}
+                    onClick={handleDownloadInvoice}
+                   disabled={downloadingInvoice}
+                  />
+                </div>
+              )}
 
               {booking?.Journey.map((journey, jIdx) => {
                 const cabin = cabinLabel(journey.Segments?.[0]?.Cabin);
@@ -552,13 +688,14 @@ if (stage === "bookingFailed") {
                     </div>
 
                     {/* Show the specific message for this pending journey */}
-                    {journeyIsPending && journey.Message?.trim() && (
-                      <div className="mt-3 mb-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 px-3.5 py-2.5">
-                        <p className="text-sm text-blue-800 dark:text-blue-200">
-                          {journey.Message}
-                        </p>
-                      </div>
-                    )}
+                  {journeyIsPending && journey.Message?.trim() && (
+  <div className="mt-3 mb-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 px-3.5 py-2.5 flex items-start justify-between gap-3">
+    <p className="text-sm text-blue-800 dark:text-blue-200">
+      {journey.Message}
+    </p>
+    {messageExpiry && <CountdownTimer expiresAt={messageExpiry} />}
+  </div>
+)}
 
                     <div className="space-y-3 mb-4 mt-4">
                       {journey.Segments.map((seg, sIdx) => (
@@ -614,8 +751,9 @@ if (stage === "bookingFailed") {
                         <div className="grid grid-cols-4 text-xs font-semibold text-gray-400 uppercase tracking-wide pb-2">
                           <span>Traveller</span>
                           <span>PNR</span>
-                          <span>Meal</span>
                           <span>Baggage</span>
+                          <span>Meal</span>
+                         
                         </div>
                         {journey.Travelers.map((t) => (
                           <div
@@ -626,8 +764,9 @@ if (stage === "bookingFailed") {
                             <span className="text-gray-400 font-mono">
                               {journeyIsConfirmed ? journey.AirlinePNR || "—" : "Pending"}
                             </span>
-                            <span className="text-gray-400">{findSSR(t, "1")}</span>
                             <span className="text-gray-400">{findSSR(t, "2")}</span>
+                            <span className="text-gray-400">{findSSR(t, "1")}</span>
+                           
                           </div>
                         ))}
                       </div>
@@ -807,12 +946,14 @@ function PaymentFailedCard({
   cfLinkId,
   dateTime,
   onTryAgain,
+  buttonLabel = "Contact Support",
 }: {
   title?: string;
   message: string;
   cfLinkId: string;
   dateTime: string;
   onTryAgain: () => void;
+  buttonLabel?: string;
 }) {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center px-4">
@@ -834,40 +975,26 @@ function PaymentFailedCard({
           onClick={onTryAgain}
           className="w-full h-11 rounded-full border border-gray-200 dark:border-gray-700 text-[#FF7626] font-semibold text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
         >
-          Try again
+          {buttonLabel}
         </button>
       </div>
     </div>
   );
 }
 
-function PendingTimerBanner({
-  paymentTime,
-  since,
+function PendingStatusBanner({
   message,
   referenceNo,
+  onRecheck,
+  rechecking,
+  expiresAt,
 }: {
-  paymentTime: string | null;
-  since: Date | null;
   message: string | null;
   referenceNo?: string;
+  onRecheck?: () => void;
+  rechecking?: boolean;
+  expiresAt?: Date | null;
 }) {
-  const deadline =
-    (paymentTime ? new Date(paymentTime).getTime() : since ? since.getTime() : Date.now()) +
-    20 * 60 * 1000;
-
-  const [remaining, setRemaining] = useState(() => Math.max(0, deadline - Date.now()));
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setRemaining(Math.max(0, deadline - Date.now()));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [deadline]);
-
-  const mins = Math.floor(remaining / 60000);
-  const secs = Math.floor((remaining % 60000) / 1000);
-
   return (
     <div className="rounded-2xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900 px-5 py-5 flex items-start gap-3 mb-4">
       <div className="w-9 h-9 rounded-full bg-[#1c8fc7] flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -876,21 +1003,33 @@ function PendingTimerBanner({
           <path d="M12 7v5l3 3" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </div>
-      <div>
-        <p className="text-lg font-extrabold text-[#1c8fc7]">
-          {message ? "Booking In Progress" : "Payment Pending"}
-        </p>
+      <div className="flex-1">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-lg font-extrabold text-[#1c8fc7]">
+            {message ? "Booking In Progress" : "Payment Pending"}
+          </p>
+          {expiresAt && <CountdownTimer expiresAt={expiresAt} />}
+        </div>
         <p className="text-sm text-blue-900/70 dark:text-blue-300/80 mt-0.5">
           {message ||
             "We're still waiting for confirmation from your bank. Your PNR and ticket number will be added here automatically once payment is confirmed"}
-          {remaining > 0
-            ? ` — expected within ${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`
-            : " — taking longer than expected, please contact support."}
         </p>
         {referenceNo && (
           <p className="mt-3 text-sm font-bold text-gray-900 dark:text-gray-100">
             Booking Ref: <span className="font-mono">{referenceNo}</span>
           </p>
+        )}
+        {onRecheck && (
+          <button
+            onClick={onRecheck}
+            disabled={rechecking}
+            className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-[#1c8fc7] hover:text-[#166f9c] disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <svg viewBox="0 0 24 24" fill="none" className={`w-4 h-4 ${rechecking ? "animate-spin" : ""}`} stroke="currentColor" strokeWidth="2">
+              <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            {rechecking ? "Checking..." : "Check status again"}
+          </button>
         )}
       </div>
     </div>
@@ -1054,9 +1193,23 @@ function ModifyBookingPanel({
   );
 }
 
-function ActionCard({ label, sublabel }: { label: string; sublabel: string }) {
+function ActionCard({
+  label,
+  sublabel,
+  onClick,
+  disabled,
+}: {
+  label: string;
+  sublabel: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
   return (
-    <button className="rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 px-3 py-3 text-left hover:border-[#1c8fc7]/50 transition-colors">
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 px-3 py-3 text-left hover:border-[#1c8fc7]/50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+    >
       <p className="text-xs font-bold text-gray-900 dark:text-gray-100 leading-tight">{label}</p>
       <p className="text-[11px] text-gray-400 leading-tight mt-0.5">{sublabel}</p>
     </button>

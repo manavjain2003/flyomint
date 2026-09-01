@@ -350,13 +350,12 @@ export default function PaymentStep({
 
   const hasFetchedRef = useRef(false);
 
-  useEffect(() => {
-    if (hasFetchedRef.current) return;
-    hasFetchedRef.current = true;
+useEffect(() => {
+  if (hasFetchedRef.current) return;
+  hasFetchedRef.current = true;
 
-    let cancelled = false;
-
-    async function load() {
+  async function load() {
+    try {
       const ssrl = (addOnData?.selections ?? []).map((s: any) => ({
         sid: Number(s.sid),
         paxId: s.paxId,
@@ -376,12 +375,11 @@ export default function PaymentStep({
         passportIssuingCountry: p.passportIssuingCountry || "",
         paxType: p.ptc === "INF" ? "I" : p.ptc === "CHD" ? "C" : "A",
       }));
-
       const contact = bookingData.contact ?? {};
 
       const rawRes = await getAirlineTrvlItinerary({
-        tokenId: reviewPayload.tokenId,
-        bookingId: bookingData.bookingId || reviewPayload.bookingId,
+        tokenId: reviewPayload?.tokenId,
+        bookingId: bookingData.bookingId || reviewPayload?.bookingId,
         contactInfo: {
           mobile: contact.mobile || "",
           email: contact.email || "",
@@ -402,11 +400,7 @@ export default function PaymentStep({
         ssrl: ssrl.length ? ssrl : undefined,
       });
 
-      if (cancelled) return;
-
       const res = normalizeServiceResponse(rawRes);
-
-      setLoading(false);
 
       if (!res.success) {
         setError(res.message || "Could not create itinerary");
@@ -414,16 +408,18 @@ export default function PaymentStep({
       }
 
       setFareInfo(res.fareInfo);
-      setTokenId(res.tokenId ?? reviewPayload.tokenId ?? null);
+      setTokenId(res.tokenId ?? reviewPayload?.tokenId ?? null);
       setTransactionId(res.transactionId ?? null);
+    } catch (e) {
+      console.error("PaymentStep load() failed:", e);
+      setError(e instanceof Error ? e.message : "Something went wrong while loading payment options.");
+    } finally {
+      setLoading(false);
     }
+  }
 
-    load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  load();
+}, []);
 
   const selected = fareInfo[selectedIndex];
 
@@ -458,7 +454,7 @@ export default function PaymentStep({
       groups.get(cat.key)!.options.push({ index, f });
     });
 
-    return Array.from(groups.values()).filter((g) => g.options.length > 1);
+return Array.from(groups.values()).filter((g) => g.options.length > 1);
   }, [fareInfo]);
 
   useEffect(() => {
@@ -650,7 +646,7 @@ export default function PaymentStep({
           <>
           
             {(bookingData?.pricing?.onward || travellers.length > 0) && (
-              <div className="max-w-5xl mx-auto px-4 pt-5">
+              <div className="max-w-7xl mx-auto px-4 pt-5">
                 <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden">
        {(bookingData?.pricing?.onward || bookingData?.pricing?.ret) && (
   <div className="flex items-center justify-end px-5 pt-3.5">
@@ -746,7 +742,7 @@ export default function PaymentStep({
               </div>
             )}
 
-            <div className="max-w-5xl mx-auto px-4 pt-5 grid grid-cols-[minmax(0,1fr)_650px] sm:grid-cols-[minmax(0,1fr)_300px] gap-3 sm:gap-5 items-start">
+            <div className="max-w-7xl mx-auto px-4 pt-5 grid grid-cols-[minmax(0,1fr)_620px] sm:grid-cols-[minmax(0,1fr)_350px] gap-3 sm:gap-5 items-start">
               <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden sticky top-[76px]">
                 <div className="px-5 py-4 flex items-center gap-2 border-b border-gray-100 dark:border-gray-800">
                   <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-[#1c8fc7]">
@@ -795,38 +791,40 @@ export default function PaymentStep({
                           )}
                         </button>
 
-                        <div className="px-5 pb-3 space-y-1.5">
-                          {group.options.map(({ index, f }) => {
-                            const isSelected = index === selectedIndex;
-                            return (
-                              <button
-                                key={index}
-                                onClick={() => setSelectedIndex(index)}
-                                className={`w-full flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
-                                  isSelected
-                                    ? "border-[#1c8fc7] bg-[#1c8fc7]/5 dark:bg-[#1c8fc7]/10"
-                                    : "border-gray-200 dark:border-gray-800 hover:border-gray-300"
-                                }`}
-                              >
-                                <span className="flex items-center gap-2 min-w-0">
-                                  <span
-                                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                                      isSelected ? "border-[#1c8fc7]" : "border-gray-300 dark:border-gray-700"
-                                    }`}
-                                  >
-                                    {isSelected && <span className="w-2 h-2 rounded-full bg-[#1c8fc7]" />}
-                                  </span>
-                                  <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate">
-                                    {f.pgDetails?.pgDescription || f.pgDetails?.pgName || "Payment option"}
-                                  </span>
-                                </span>
-                                <span className="text-xs font-bold text-gray-900 dark:text-gray-100 tabular-nums flex-shrink-0">
-                                  {currency(f.amountToBePaid)}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
+                     {!isSingle && (
+  <div className="px-5 pb-3 space-y-1.5">
+    {group.options.map(({ index, f }) => {
+      const isSelected = index === selectedIndex;
+      return (
+        <button
+          key={index}
+          onClick={() => setSelectedIndex(index)}
+          className={`w-full flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+            isSelected
+              ? "border-[#1c8fc7] bg-[#1c8fc7]/5 dark:bg-[#1c8fc7]/10"
+              : "border-gray-200 dark:border-gray-800 hover:border-gray-300"
+          }`}
+        >
+          <span className="flex items-center gap-2 min-w-0">
+            <span
+              className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                isSelected ? "border-[#1c8fc7]" : "border-gray-300 dark:border-gray-700"
+              }`}
+            >
+              {isSelected && <span className="w-2 h-2 rounded-full bg-[#1c8fc7]" />}
+            </span>
+            <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate">
+              {f.pgDetails?.pgDescription || f.pgDetails?.pgName || "Payment option"}
+            </span>
+          </span>
+          <span className="text-xs font-bold text-gray-900 dark:text-gray-100 tabular-nums flex-shrink-0">
+            {currency(f.amountToBePaid)}
+          </span>
+        </button>
+      );
+    })}
+  </div>
+)}
                       </div>
                     );
                   })}
@@ -917,32 +915,36 @@ export default function PaymentStep({
         )
       )}
 
-      {selected && (
-        <div className="fixed bottom-0 inset-x-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 px-4 py-3">
-          <div className="max-w-5xl mx-auto flex items-center gap-4">
-            <div className="flex-1">
-              <p className="text-[11px] text-gray-500 dark:text-gray-400">Total payable</p>
-              <p className="text-lg font-bold text-gray-900 dark:text-gray-100 tabular-nums leading-tight">
-                {currency(selected.amountToBePaid)}
-              </p>
-            </div>
-            <button
-              onClick={handlePayNow}
-              disabled={paying}
-              className="h-12 px-8 rounded-full bg-[#FF7626] text-white font-semibold text-sm hover:bg-[#e6661f] disabled:opacity-60 transition-colors flex items-center gap-2"
-            >
-              {paying ? (
-                <>
-                  <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  Redirecting…
-                </>
-              ) : (
-                "Proceed to pay"
-              )}
-            </button>
-          </div>
+  {selected && (
+  <div className="sticky bottom-0 z-40 w-full mt-4">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6">
+      <div className="bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] rounded-2xl py-4 px-4 flex items-center justify-between gap-4 mb-4">
+        <div>
+          <p className="text-lg font-bold text-gray-900 dark:text-gray-100 tabular-nums">
+            {currency(selected.amountToBePaid)}
+          </p>
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            {travellers.length} Traveller{travellers.length > 1 ? "s" : ""}
+          </p>
         </div>
-      )}
+        <button
+          onClick={handlePayNow}
+          disabled={paying}
+          className="h-12 px-6 rounded-full text-sm font-bold flex items-center gap-2 bg-[#FF7626] hover:bg-[#e6661f] disabled:opacity-60 text-white transition-colors"
+        >
+          {paying ? (
+            <>
+              <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+              Redirecting…
+            </>
+          ) : (
+            "Proceed to pay"
+          )}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 }
