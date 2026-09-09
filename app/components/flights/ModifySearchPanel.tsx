@@ -161,13 +161,15 @@ const [hoveredFare, setHoveredFare] = useState<Exclude<SpecialFare, "regular"> |
         setToAirportDetail(fromAirportDetail);
     }
 
-    const maxChildren = Math.min(draft.adults * 2, 9 - draft.adults);
-    const maxInfants = draft.adults;
+    const isSpecialFareActive = draft.specialFare !== "regular";
+
+    const maxChildren = isSpecialFareActive ? 0 : Math.min(draft.adults * 2, 9 - draft.adults);
+    const maxInfants = isSpecialFareActive ? 0 : draft.adults;
     const maxAdults = Math.min(9 - draft.children, 9);
 
     function handleAdultsChange(v: number) {
         setDraft((d) => {
-            const newMaxChildren = Math.min(v * 2, 9 - v);
+            const newMaxChildren = isSpecialFareActive ? 0 : Math.min(v * 2, 9 - v);
             return {
                 ...d,
                 adults: v,
@@ -185,34 +187,55 @@ const [hoveredFare, setHoveredFare] = useState<Exclude<SpecialFare, "regular"> |
         setDraft((d) => ({ ...d, infants: v }));
     }
 
-    function submit() {
-        if (!draft.from.trim() || !draft.to.trim()) return;
+    function selectSpecialFare(key: Exclude<SpecialFare, "regular">) {
+        const selected = draft.specialFare === key;
+        const nextSpecialFare: SpecialFare = selected ? "regular" : key;
+        const nextDraft: SearchCriteria = {
+            ...draft,
+            specialFare: nextSpecialFare,
+            children: nextSpecialFare === "regular" ? draft.children : 0,
+            infants: nextSpecialFare === "regular" ? draft.infants : 0,
+        };
+        setDraft(nextDraft);
+        applySearch(nextDraft);
+    }
 
-        const finalReturn = draft.tripType === "roundtrip" ? draftReturn : null;
+    function applySearch(
+        nextDraft: SearchCriteria,
+        nextDeparture: Date = draftDeparture,
+        nextReturn: Date | null = draftReturn
+    ) {
+        if (!nextDraft.from.trim() || !nextDraft.to.trim()) return;
+
+        const finalReturn = nextDraft.tripType === "roundtrip" ? nextReturn : null;
 
         writeCachedSearch({
-            tripType: draft.tripType,
-            flightType: draft.directOnly ? "direct" : "all",
-            specialFare: draft.specialFare,
-            from: draft.from,
-            to: draft.to,
-            fromCity: draft.fromCity,
-            toCity: draft.toCity,
+            tripType: nextDraft.tripType,
+            flightType: nextDraft.directOnly ? "direct" : "all",
+            specialFare: nextDraft.specialFare,
+            from: nextDraft.from,
+            to: nextDraft.to,
+            fromCity: nextDraft.fromCity,
+            toCity: nextDraft.toCity,
             ...(fromAirportDetail ? { fromAirport: fromAirportDetail } : {}),
             ...(toAirportDetail ? { toAirport: toAirportDetail } : {}),
-            departureDate: toApiDate(draftDeparture),
+            departureDate: toApiDate(nextDeparture),
             returnDate: finalReturn ? toApiDate(finalReturn) : null,
-            adults: draft.adults,
-            children: draft.children,
-            infants: draft.infants,
-            cabinClass: draft.cabinClass,
+            adults: nextDraft.adults,
+            children: nextDraft.children,
+            infants: nextDraft.infants,
+            cabinClass: nextDraft.cabinClass,
         });
 
         onApply(
-            { ...draft, fromAirport: fromAirportDetail, toAirport: toAirportDetail },
-            draftDeparture,
+            { ...nextDraft, fromAirport: fromAirportDetail, toAirport: toAirportDetail },
+            nextDeparture,
             finalReturn
         );
+    }
+
+    function submit() {
+        applySearch(draft);
     }
 
     const totalTravelers = draft.adults + draft.children + draft.infants;
@@ -431,6 +454,12 @@ const [hoveredFare, setHoveredFare] = useState<Exclude<SpecialFare, "regular"> |
                                     onChange={handleInfantsChange}
                                 />
 
+                                {isSpecialFareActive && (
+                                    <p className="text-[11px] text-amber-600 dark:text-amber-400 -mt-1 mb-2 leading-snug">
+                                        Children/Infants aren&apos;t available with {SPECIAL_FARE_LABEL[draft.specialFare as Exclude<SpecialFare, "regular">]} fare. Remove the special fare to add them.
+                                    </p>
+                                )}
+
                                 <div className="bg-gray-50 dark:bg-gray-900 rounded-lg px-2 py-1.5 flex items-center justify-between gap-1.5 mb-2">
                                     <div className="flex items-center gap-1.5">
                                         <HiOutlineUserGroup className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
@@ -504,9 +533,7 @@ const [hoveredFare, setHoveredFare] = useState<Exclude<SpecialFare, "regular"> |
             >
                 <button
                     type="button"
-                    onClick={() =>
-                        setDraft((d) => ({ ...d, specialFare: selected ? "regular" : key }))
-                    }
+                    onClick={() => selectSpecialFare(key)}
                     className={`px-3.5 py-1.5 rounded-full border text-xs font-medium transition-colors ${
                         selected
                             ? "border-[#1c8fc7] text-[#1c8fc7] bg-[#1c8fc7]/5"

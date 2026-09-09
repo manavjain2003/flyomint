@@ -107,11 +107,28 @@ type Category = {
 
 const CATEGORY_DEFS: { key: string; label: string; subtitle: string; match: RegExp }[] = [
   { key: "upi", label: "Pay via any UPI app", subtitle: "Scan and pay with UPI", match: /upi/i },
+   { key: "credit-card",
+    label: "Credit Card",
+    subtitle: "Visa, Mastercard, Amex & more",
+    match: /credit ?card/i,
+  },
   {
     key: "card",
-    label: "Credit / Debit / ATM Card",
+    label: "Debit Card",
+    subtitle: "Visa, Mastercard, RuPay & more",
+    match: /debit ?card/i,
+  },
+  {
+    key: "debit-atm",
+    label: "Debit with ATM",
+    subtitle: "Pay with your ATM-cum-debit card",
+    match: /debit ?with ?atm|atm ?card/i,
+  },
+  {
+    key: "card",
+    label: "Cards",
     subtitle: "Visa, Mastercard, Amex, RuPay & more",
-    match: /credit ?card|debit ?card|debit ?with ?atm|atm ?card|\bcard\b|visa|master|rupay|amex|maestro/i,
+    match: /\bcard\b|visa|master|rupay|amex|maestro/i,
   },
   {
     key: "paylater",
@@ -186,7 +203,23 @@ function CategoryIcon({ categoryKey, className }: { categoryKey: string; classNa
           <path d="M3 10h18M7 14h4" strokeLinecap="round" />
         </svg>
       );
-    case "card":
+    case "credit-card":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={common} stroke="currentColor" strokeWidth="1.7">
+          <rect x="2.5" y="5.5" width="19" height="13" rx="2.2" />
+          <path d="M2.5 9.5h19" strokeLinecap="round" />
+          <path d="M6 14.5h4" strokeLinecap="round" />
+        </svg>
+      );
+          case "debit-card":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={common} stroke="currentColor" strokeWidth="1.7">
+          <rect x="2.5" y="5.5" width="19" height="13" rx="2.2" />
+          <path d="M2.5 9.5h19" strokeLinecap="round" />
+          <path d="M6 14.5h4" strokeLinecap="round" />
+        </svg>
+      );
+          case "debit-atm":
       return (
         <svg viewBox="0 0 24 24" fill="none" className={common} stroke="currentColor" strokeWidth="1.7">
           <rect x="2.5" y="5.5" width="19" height="13" rx="2.2" />
@@ -241,9 +274,7 @@ function CategoryIcon({ categoryKey, className }: { categoryKey: string; classNa
   }
 }
 
-// ---- Traveller + flight-leg summary helpers ---------------------------------
 
-/** Adult/child titles map to gender for the "F"/"M" column in the traveller list. */
 function genderFromTitle(title?: string): string {
   const t = (title || "").toLowerCase();
   if (t === "mr" || t === "mstr") return "M";
@@ -343,7 +374,7 @@ export default function PaymentStep({
   const [tokenId, setTokenId] = useState<string | null>(null);
   const [transactionId, setTransactionId] = useState<number | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [breakdownOpen, setBreakdownOpen] = useState(false);
+  const [breakdownOpen, setBreakdownOpen] = useState(true);
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
   const [legDetailsOpen, setLegDetailsOpen] = useState(true);
@@ -363,18 +394,19 @@ useEffect(() => {
         ssrType: s.ssrType,
       }));
 
-      const travelers = (bookingData.passengers ?? []).map((p: any, i: number) => ({
-        paxId: i + 1,
-        title: p.title,
-        firstName: p.firstName,
-        lastName: p.lastName,
-        dob: p.dob,
-        nationality: p.nationality || "IN",
-        passportNo: p.passportNo || "",
-        passportExpiry: p.passportExpiry || "",
-        passportIssuingCountry: p.passportIssuingCountry || "",
-        paxType: p.ptc === "INF" ? "I" : p.ptc === "CHD" ? "C" : "A",
-      }));
+const travelers = (bookingData.passengers ?? []).map((p: any, i: number) => ({
+  paxId: i + 1,
+  title: p.title,
+  firstName: p.firstName,
+  lastName: p.lastName,
+  dob: p.dob,
+  nationality: p.nationality || "IN",
+  passportNo: p.passportNo || "",
+  pic: p.passportIssuingCountry || "",  
+  pdoe: p.passportExpiry || "",    
+  pdoi: "",                            
+  paxType: p.ptc === "INF" ? "I" : p.ptc === "CHD" ? "C" : "A",
+}));
       const contact = bookingData.contact ?? {};
 
       const rawRes = await getAirlineTrvlItinerary({
@@ -454,12 +486,25 @@ useEffect(() => {
       groups.get(cat.key)!.options.push({ index, f });
     });
 
-return Array.from(groups.values()).filter((g) => g.options.length > 1);
+return Array.from(groups.values()).map((g) => {
+  if (g.options.length === 1) {
+    const desc = (g.options[0].f.pgDetails?.pgDescription || "").trim();
+    if (desc && desc.toLowerCase() !== g.label.toLowerCase()) {
+      return { ...g, label: desc, subtitle: "Secure checkout" };
+    }
+  }
+  return g;
+});
   }, [fareInfo]);
 
   useEffect(() => {
     if (groupedMethods.length > 0) {
-      setSelectedIndex(groupedMethods[0].options[0].index);
+         const cheapest = groupedMethods
+        .flatMap((g) => g.options)
+        .reduce((min, o) =>
+          (o.f.amountToBePaid ?? Infinity) < (min.f.amountToBePaid ?? Infinity) ? o : min
+        );
+      setSelectedIndex(cheapest.index);
     }
   }, [groupedMethods]);
 
@@ -642,277 +687,285 @@ return Array.from(groups.values()).filter((g) => g.options.length > 1);
           </div>
         </div>
       ) : (
-        selected && (
-          <>
-          
-            {(bookingData?.pricing?.onward || travellers.length > 0) && (
-              <div className="max-w-7xl mx-auto px-4 pt-5">
-                <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden">
-       {(bookingData?.pricing?.onward || bookingData?.pricing?.ret) && (
-  <div className="flex items-center justify-end px-5 pt-3.5">
-    <button
-      type="button"
-      onClick={() => setLegDetailsOpen((v) => !v)}
-      className="inline-flex items-center gap-1 text-xs font-bold text-[#1c8fc7] hover:underline"
-    >
-      {legDetailsOpen ? "HIDE DETAILS" : "SHOW DETAILS"}
-      {legDetailsOpen ? (
-        <HiOutlineChevronUp className="w-3.5 h-3.5" />
-      ) : (
-        <HiOutlineChevronDown className="w-3.5 h-3.5" />
-      )}
-    </button>
-  </div>
-)}
-{bookingData?.pricing?.onward && (
-  <TripLegSummaryRow leg={bookingData.pricing.onward} showDetails={legDetailsOpen} />
-)}
-{bookingData?.pricing?.ret && (
-  <TripLegSummaryRow leg={bookingData.pricing.ret} showDetails={legDetailsOpen} />
-)}
-
-{travellers.length > 0 && (
-  <div className="px-5 py-3.5 border-t border-gray-100 dark:border-gray-800">
-    {legDetailsOpen ? (
-      <>
-        <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-3">
-          Travellers ({travellers.length})
-        </p>
-        <div className="divide-y divide-gray-100 dark:divide-gray-800">
-          {travellers.map((p: any, i: number) => {
-            const fullName = [p.firstName, p.lastName].filter(Boolean).join(" ").toUpperCase();
-            const gender = genderFromTitle(p.title);
-            return (
-              <div
-                key={i}
-                className="grid grid-cols-[28px_1fr_28px_72px] items-center gap-3 py-2.5 first:pt-0 last:pb-0"
-              >
-                <span className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-[11px] font-bold text-gray-500 dark:text-gray-400 flex-shrink-0">
-                  {i + 1}
-                </span>
-                <span className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">
-                  {fullName || `Traveller ${i + 1}`}
-                </span>
-                <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 text-center">
-                  {gender || "—"}
-                </span>
-                <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 text-right">
-                  {ptcLabel(p.ptc)}
-                </span>
+       selected && (
+  <>
+    <div className="max-w-7xl mx-auto px-4 pt-5 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-3 sm:gap-5 items-start">
+      {/* LEFT COLUMN: trip/traveller details + payment methods */}
+      <div className="space-y-4 min-w-0">
+        {(bookingData?.pricing?.onward || travellers.length > 0) && (
+          <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden">
+            {(bookingData?.pricing?.onward || bookingData?.pricing?.ret) && (
+              <div className="flex items-center justify-end px-5 pt-3.5">
+                <button
+                  type="button"
+                  onClick={() => setLegDetailsOpen((v) => !v)}
+                  className="inline-flex items-center gap-1 text-xs font-bold text-[#1c8fc7] hover:underline"
+                >
+                  {legDetailsOpen ? "HIDE DETAILS" : "SHOW DETAILS"}
+                  {legDetailsOpen ? (
+                    <HiOutlineChevronUp className="w-3.5 h-3.5" />
+                  ) : (
+                    <HiOutlineChevronDown className="w-3.5 h-3.5" />
+                  )}
+                </button>
               </div>
-            );
-          })}
-        </div>
-      </>
-    ) : (
-      <div className="flex items-center gap-2 min-w-0">
-        <HiOutlineUser className="w-4 h-4 text-gray-400 flex-shrink-0" />
-        <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 truncate">
-          {travellers
-            .map((p: any) => [p.firstName, p.lastName].filter(Boolean).join(" ").toUpperCase())
-            .filter(Boolean)
-            .join(", ")}
-        </p>
-      </div>
-    )}
-  </div>
-)}
+            )}
+            {bookingData?.pricing?.onward && (
+              <TripLegSummaryRow leg={bookingData.pricing.onward} showDetails={legDetailsOpen} />
+            )}
+            {bookingData?.pricing?.ret && (
+              <TripLegSummaryRow leg={bookingData.pricing.ret} showDetails={legDetailsOpen} />
+            )}
 
-{(bookingData?.contact?.mobile || bookingData?.contact?.email) && (
-  <div className="flex items-start gap-3 px-5 py-3.5 border-t border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-950/40">
-    <span className="mt-0.5 w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 dark:text-gray-400 flex-shrink-0">
-      <HiOutlineChatBubbleLeftRight className="w-4 h-4" />
-    </span>
-    <div className="min-w-0">
-      <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
-        Booking details will be sent to:{" "}
-        {[travellers[0]?.firstName, travellers[0]?.lastName].filter(Boolean).join(" ")}
-        {travellers.length > 1
-          ? `, +${travellers.length - 1} traveller${travellers.length - 1 > 1 ? "s" : ""}`
-          : ""}
-      </p>
-      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-        {bookingData.contact.countryCode ? `${bookingData.contact.countryCode}-` : ""}
-        {bookingData.contact.mobile}
-      </p>
-    </div>
-  </div>
-)}
-                </div>
+            {travellers.length > 0 && (
+              <div className="px-5 py-3.5 border-t border-gray-100 dark:border-gray-800">
+                {legDetailsOpen ? (
+                  <>
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-3">
+                      Travellers ({travellers.length})
+                    </p>
+                    <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                      {travellers.map((p: any, i: number) => {
+                        const fullName = [p.firstName, p.lastName].filter(Boolean).join(" ").toUpperCase();
+                        const gender = genderFromTitle(p.title);
+                        return (
+                          <div
+                            key={i}
+                            className="grid grid-cols-[28px_1fr_28px_72px] items-center gap-3 py-2.5 first:pt-0 last:pb-0"
+                          >
+                            <span className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-[11px] font-bold text-gray-500 dark:text-gray-400 flex-shrink-0">
+                              {i + 1}
+                            </span>
+                            <span className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">
+                              {fullName || `Traveller ${i + 1}`}
+                            </span>
+                            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 text-center">
+                              {gender || "—"}
+                            </span>
+                            <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 text-right">
+                              {ptcLabel(p.ptc)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <HiOutlineUser className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 truncate">
+                      {travellers
+                        .map((p: any) => [p.firstName, p.lastName].filter(Boolean).join(" ").toUpperCase())
+                        .filter(Boolean)
+                        .join(", ")}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
-            <div className="max-w-7xl mx-auto px-4 pt-5 grid grid-cols-[minmax(0,1fr)_620px] sm:grid-cols-[minmax(0,1fr)_350px] gap-3 sm:gap-5 items-start">
-              <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden sticky top-[76px]">
-                <div className="px-5 py-4 flex items-center gap-2 border-b border-gray-100 dark:border-gray-800">
-                  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-[#1c8fc7]">
-                    <path d="M12 2l2.9 6.3 6.9.6-5.2 4.6 1.6 6.8L12 16.9 5.8 20.3l1.6-6.8-5.2-4.6 6.9-.6z" />
-                  </svg>
-                  <div>
-                    <p className="text-sm font-bold text-[#1c8fc7] leading-tight">Recommended</p>
-                    <p className="text-xs text-gray-400 leading-tight">Recently Used Methods</p>
-                  </div>
+            {(bookingData?.contact?.mobile || bookingData?.contact?.email) && (
+              <div className="flex items-start gap-3 px-5 py-3.5 border-t border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-950/40">
+                <span className="mt-0.5 w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 dark:text-gray-400 flex-shrink-0">
+                  <HiOutlineChatBubbleLeftRight className="w-4 h-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                    Booking details will be sent to:{" "}
+                    {[travellers[0]?.firstName, travellers[0]?.lastName].filter(Boolean).join(" ")}
+                    {travellers.length > 1
+                      ? `, +${travellers.length - 1} traveller${travellers.length - 1 > 1 ? "s" : ""}`
+                      : ""}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    {bookingData.contact.countryCode ? `${bookingData.contact.countryCode}-` : ""}
+                    {bookingData.contact.mobile}
+                  </p>
                 </div>
-
-                <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-[70vh] overflow-y-auto">
-                  {groupedMethods.map((group) => {
-                    const isSingle = group.options.length === 1;
-                    const groupSelected = group.options.some((o) => o.index === selectedIndex);
-
-                    return (
-                      <div key={group.key}>
-                        <button
-                          onClick={() => setSelectedIndex(group.options[0].index)}
-                          className={`w-full flex items-center justify-between gap-3 px-5 py-4 text-left transition-colors ${
-                            groupSelected
-                              ? "bg-[#1c8fc7]/5 dark:bg-[#1c8fc7]/10"
-                              : "bg-gray-50 dark:bg-gray-950/30 hover:bg-gray-100 dark:hover:bg-gray-800/60"
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <span
-                              className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                                groupSelected
-                                  ? "bg-[#1c8fc7]/10 text-[#1c8fc7]"
-                                  : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
-                              }`}
-                            >
-                              <CategoryIcon categoryKey={group.key} />
-                            </span>
-                            <div className="min-w-0">
-                              <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">{group.label}</p>
-                              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{group.subtitle}</p>
-                            </div>
-                          </div>
-                          {isSingle && (
-                            <span className="text-sm font-bold text-gray-900 dark:text-gray-100 tabular-nums flex-shrink-0">
-                              {currency(group.options[0].f.amountToBePaid)}
-                            </span>
-                          )}
-                        </button>
-
-                     {!isSingle && (
-  <div className="px-5 pb-3 space-y-1.5">
-    {group.options.map(({ index, f }) => {
-      const isSelected = index === selectedIndex;
-      return (
-        <button
-          key={index}
-          onClick={() => setSelectedIndex(index)}
-          className={`w-full flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
-            isSelected
-              ? "border-[#1c8fc7] bg-[#1c8fc7]/5 dark:bg-[#1c8fc7]/10"
-              : "border-gray-200 dark:border-gray-800 hover:border-gray-300"
-          }`}
-        >
-          <span className="flex items-center gap-2 min-w-0">
-            <span
-              className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                isSelected ? "border-[#1c8fc7]" : "border-gray-300 dark:border-gray-700"
-              }`}
-            >
-              {isSelected && <span className="w-2 h-2 rounded-full bg-[#1c8fc7]" />}
-            </span>
-            <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate">
-              {f.pgDetails?.pgDescription || f.pgDetails?.pgName || "Payment option"}
-            </span>
-          </span>
-          <span className="text-xs font-bold text-gray-900 dark:text-gray-100 tabular-nums flex-shrink-0">
-            {currency(f.amountToBePaid)}
-          </span>
-        </button>
-      );
-    })}
-  </div>
-)}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {payError && (
-                  <div className="mx-5 mb-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-600 dark:text-red-400">
-                    {payError}
-                  </div>
-                )}
-
-                <p className="text-xs text-gray-400 text-center px-5 pb-5 leading-relaxed">
-                  You'll be redirected to a secure payment page to complete this transaction. Your card and bank details
-                  are never stored by us.
-                </p>
               </div>
+            )}
+          </div>
+        )}
 
-              <div className="space-y-4">
-                <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden">
+        <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden">
+          <div className="px-5 py-4 flex items-center gap-2 border-b border-gray-100 dark:border-gray-800">
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-[#1c8fc7]">
+              <path d="M12 2l2.9 6.3 6.9.6-5.2 4.6 1.6 6.8L12 16.9 5.8 20.3l1.6-6.8-5.2-4.6 6.9-.6z" />
+            </svg>
+            <div>
+              <p className="text-sm font-bold text-[#1c8fc7] leading-tight">Recommended</p>
+              <p className="text-xs text-gray-400 leading-tight">Recently Used Methods</p>
+            </div>
+          </div>
+
+          <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-[70vh] overflow-y-auto">
+            {groupedMethods.map((group) => {
+              const isSingle = group.options.length === 1;
+              const groupSelected = group.options.some((o) => o.index === selectedIndex);
+
+              return (
+                <div key={group.key}>
                   <button
-                    onClick={() => setBreakdownOpen((v) => !v)}
-                    className="w-full flex items-start justify-between p-5 text-left"
+                    onClick={() => setSelectedIndex(group.options[0].index)}
+                    className={`w-full flex items-center justify-between gap-3 px-5 py-4 text-left transition-colors ${
+                      groupSelected
+                        ? "bg-[#1c8fc7]/5 dark:bg-[#1c8fc7]/10"
+                        : "bg-gray-50 dark:bg-gray-950/30 hover:bg-gray-100 dark:hover:bg-gray-800/60"
+                    }`}
                   >
-                    <div>
-                      <p className="text-lg font-bold text-gray-900 dark:text-gray-100">Fare Summary</p>
-                      <p className="mt-2 text-sm font-semibold text-gray-500 dark:text-gray-400">Amount To Be Paid</p>
-                      <div className="mt-0.5 flex items-baseline gap-2">
-                        <span className="text-2xl font-extrabold text-gray-900 dark:text-gray-100 tabular-nums">
-                          {currency(selected.amountToBePaid)}
-                        </span>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span
+                        className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                          groupSelected
+                            ? "bg-[#1c8fc7]/10 text-[#1c8fc7]"
+                            : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
+                        }`}
+                      >
+                        <CategoryIcon categoryKey={group.key} />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">{group.label}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{group.subtitle}</p>
                       </div>
-                      {selected.convenienceFee > 0 && (
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          ({currency(selected.convenienceFee)} conv. fee included)
-                        </p>
-                      )}
                     </div>
-                    <span className={`mt-1 text-gray-400 transition-transform ${breakdownOpen ? "rotate-180" : ""}`}>▾</span>
+                    {isSingle && (
+                      <span className="text-sm font-bold text-gray-900 dark:text-gray-100 tabular-nums flex-shrink-0">
+                        {currency(group.options[0].f.amountToBePaid)}
+                      </span>
+                    )}
                   </button>
 
-                  {savings > 0 && (
-                    <div className="mx-5 mb-4 -mt-1 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 px-4 py-2.5 text-sm font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
-                      <span>🎉</span>
-                      <span>Yay! You saved {currency(savings)} on this booking</span>
-                    </div>
-                  )}
-
-                  {breakdownOpen && (
-                    <div className="border-t border-gray-100 dark:border-gray-800 px-5 py-4 space-y-3 bg-gray-50/60 dark:bg-gray-950/40">
-                      {(selected.ptcFares || []).map((p: any, idx: number) => (
-                        <div key={idx} className="flex items-center justify-between text-sm">
-                          <span className="text-gray-600 dark:text-gray-400">{PTC_LABEL[p.ptc] || p.ptc} fare</span>
-                          <span className="text-gray-900 dark:text-gray-200 tabular-nums">{currency(p.fare)}</span>
-                        </div>
-                      ))}
-                      <FareRow label="Taxes & fees" value={selected.tax} />
-                      <FareRow label="Convenience fee" value={selected.convenienceFee} />
-                      {selected.addOns > 0 && <FareRow label="Add-ons" value={selected.addOns} />}
-                      {selected.markUp > 0 && <FareRow label="Markup" value={selected.markUp} />}
-                      {selected.discount > 0 && <FareRow label="Discount" value={-selected.discount} positiveIsGood />}
-                      {selected.instantOff > 0 && (
-                        <FareRow label="Instant discount" value={-selected.instantOff} positiveIsGood />
-                      )}
-                      {selected.wallet > 0 && <FareRow label="Wallet applied" value={-selected.wallet} positiveIsGood />}
-                      <div className="pt-2 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between text-sm font-bold">
-                        <span className="text-gray-900 dark:text-gray-100">Total payable</span>
-                        <span className="text-gray-900 dark:text-gray-100 tabular-nums">
-                          {currency(selected.amountToBePaid)}
-                        </span>
-                      </div>
+                  {!isSingle && (
+                    <div className="px-5 pb-3 space-y-1.5">
+                      {group.options.map(({ index, f }) => {
+                        const isSelected = index === selectedIndex;
+                        return (
+                          <button
+                            key={index}
+                            onClick={() => setSelectedIndex(index)}
+                            className={`w-full flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                              isSelected
+                                ? "border-[#1c8fc7] bg-[#1c8fc7]/5 dark:bg-[#1c8fc7]/10"
+                                : "border-gray-200 dark:border-gray-800 hover:border-gray-300"
+                            }`}
+                          >
+                            <span className="flex items-center gap-2 min-w-0">
+                              <span
+                                className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                                  isSelected ? "border-[#1c8fc7]" : "border-gray-300 dark:border-gray-700"
+                                }`}
+                              >
+                                {isSelected && <span className="w-2 h-2 rounded-full bg-[#1c8fc7]" />}
+                              </span>
+                              <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate">
+                                {f.pgDetails?.pgDescription || f.pgDetails?.pgName || "Payment option"}
+                              </span>
+                            </span>
+                            <span className="text-xs font-bold text-gray-900 dark:text-gray-100 tabular-nums flex-shrink-0">
+                              {currency(f.amountToBePaid)}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
+              );
+            })}
+          </div>
 
-                <div className="text-center py-2">
-                  <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2">100% Safe Payment Process</p>
-                  <div className="flex items-center justify-center flex-wrap gap-x-4 gap-y-2 text-xs font-semibold text-gray-400">
-                    <span>VERIFIED by VISA</span>
-                    <span>Mastercard SecureCode</span>
-                    <span>RuPay</span>
-                    <span>Diners Club</span>
-                    <span>PCI DSS</span>
-                  </div>
+          {payError && (
+            <div className="mx-5 mb-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-600 dark:text-red-400">
+              {payError}
+            </div>
+          )}
+
+          <p className="text-xs text-gray-400 text-center px-5 pb-5 leading-relaxed">
+            You'll be redirected to a secure payment page to complete this transaction. Your card and bank details
+            are never stored by us.
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-4 lg:sticky lg:top-[76px]">
+        <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden">
+          <button
+            onClick={() => setBreakdownOpen((v) => !v)}
+            className="w-full flex items-start justify-between p-5 text-left group"
+          >
+            <div>
+              <p className="text-lg font-bold text-gray-900 dark:text-gray-100">Fare Summary</p>
+              <p className="mt-2 text-sm font-semibold text-gray-500 dark:text-gray-400">Amount To Be Paid</p>
+              <div className="mt-0.5 flex items-baseline gap-2">
+                <span className="text-2xl font-extrabold text-gray-900 dark:text-gray-100 tabular-nums">
+                  {currency(selected.amountToBePaid)}
+                </span>
+              </div>
+              {selected.convenienceFee > 0 && (
+                <p className="text-xs text-gray-400 mt-0.5">
+                  ({currency(selected.convenienceFee)} conv. fee included)
+                </p>
+              )}
+            </div>
+            <span className="mt-1 flex items-center gap-1.5 rounded-full border border-gray-200 dark:border-gray-700 pl-1.5 pr-1.5 py-1.5 text-xs font-bold text-[#1c8fc7] transition-colors group-hover:bg-[#1c8fc7]/5 group-hover:border-[#1c8fc7]/40 flex-shrink-0">
+              <span
+                className={`flex items-center justify-center w-5 h-5 rounded-full bg-[#1c8fc7]/10 text-[#1c8fc7] transition-transform duration-200 ${
+                  breakdownOpen ? "rotate-180" : ""
+                }`}
+              >
+                <HiOutlineChevronDown className="w-3 h-3" />
+              </span>
+            </span>
+          </button>
+
+          {savings > 0 && (
+            <div className="mx-5 mb-4 -mt-1 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 px-4 py-2.5 text-sm font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
+              <span>🎉</span>
+              <span>Yay! You saved {currency(savings)} on this booking</span>
+            </div>
+          )}
+
+          {breakdownOpen && (
+            <div className="border-t border-gray-100 dark:border-gray-800 px-5 py-4 space-y-3 bg-gray-50/60 dark:bg-gray-950/40">
+              {(selected.ptcFares || []).map((p: any, idx: number) => (
+                <div key={idx} className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600 dark:text-gray-400">{PTC_LABEL[p.ptc] || p.ptc} fare</span>
+                  <span className="text-gray-900 dark:text-gray-200 tabular-nums">{currency(p.fare)}</span>
                 </div>
+              ))}
+              <FareRow label="Taxes & fees" value={selected.tax} />
+              <FareRow label="Convenience fee" value={selected.convenienceFee} />
+              {selected.addOns > 0 && <FareRow label="Add-ons" value={selected.addOns} />}
+              {selected.markUp > 0 && <FareRow label="Markup" value={selected.markUp} />}
+              {selected.discount > 0 && <FareRow label="Discount" value={-selected.discount} positiveIsGood />}
+              {selected.instantOff > 0 && (
+                <FareRow label="Instant discount" value={-selected.instantOff} positiveIsGood />
+              )}
+              {selected.wallet > 0 && <FareRow label="Wallet applied" value={-selected.wallet} positiveIsGood />}
+              <div className="pt-2 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between text-sm font-bold">
+                <span className="text-gray-900 dark:text-gray-100">Total payable</span>
+                <span className="text-gray-900 dark:text-gray-100 tabular-nums">
+                  {currency(selected.amountToBePaid)}
+                </span>
               </div>
             </div>
-          </>
-        )
+          )}
+        </div>
+
+        <div className="text-center py-2">
+          <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2">100% Safe Payment Process</p>
+          <div className="flex items-center justify-center flex-wrap gap-x-4 gap-y-2 text-xs font-semibold text-gray-400">
+            <span>VERIFIED by VISA</span>
+            <span>Mastercard SecureCode</span>
+            <span>RuPay</span>
+            <span>Diners Club</span>
+            <span>PCI DSS</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </>
+)
       )}
 
   {selected && (

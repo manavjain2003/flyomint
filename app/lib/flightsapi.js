@@ -343,13 +343,16 @@ export async function getAirlineSSR({ tokenId, bookingId }) {
         });
 
         const legs = (payload.Journey || []).map((journey) => {
-            const segments = (journey.Segments || []).map((seg) => {
+                      const segments = (journey.Segments || []).map((seg) => {
                 const ssrList = seg.SSRList || [];
                 return {
                     sid: seg.SID,
                     flightNo: seg.FlightNo,
                     airlineCode: seg.AirlineCode,
                     airlineName: seg.AirlineName,
+                    vacLogo: seg.VACLogo,
+                    macLogo: seg.MACLogo,
+                    oacLogo: seg.OACLogo,
                     from: seg.DepartureAirportCode,
                     to: seg.ArrivalAirportCode,
                     fromCity: seg.DepartureCityName,
@@ -416,7 +419,7 @@ export async function getAirlineTrvlItinerary({
           GSTAddress: contactInfo.gstAddress || "",
         },
         BillInfo: {
-          ProfileUpdate: true,
+          ProfileUpdate: billInfo?.profileUpdate ?? false,
           PINCode: billInfo?.pinCode || "",
           Address: billInfo?.address || "",
           City: billInfo?.city || "",

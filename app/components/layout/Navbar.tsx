@@ -18,6 +18,8 @@ const NAV_LINKS = [
     { href: "/support", label: "Support", icon: HiSupport },
 ];
 
+const PROFILE_NAME_STORAGE = "profileName";
+
 export default function Navbar() {
     const [scrolled, setScrolled] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
@@ -54,15 +56,28 @@ export default function Navbar() {
         }
     }, [loginOpen]);
 
+
     useEffect(() => {
         if (!loggedIn) {
             setProfileName("");
             return;
         }
+
+        const cached = localStorage.getItem(PROFILE_NAME_STORAGE);
+        if (cached) setProfileName(cached);
+
         let cancelled = false;
         getUserProfile().then((res) => {
-            if (!cancelled && res.success) setProfileName(res.name || "");
+            if (cancelled || !res.success) return;
+            const name = res.name || "";
+            setProfileName(name);
+            if (name) {
+                localStorage.setItem(PROFILE_NAME_STORAGE, name);
+            } else {
+                localStorage.removeItem(PROFILE_NAME_STORAGE);
+            }
         });
+
         return () => {
             cancelled = true;
         };
@@ -101,6 +116,7 @@ export default function Navbar() {
         window.dispatchEvent(new Event("flyomint:logout"));
         setLoggedIn(false);
         setProfileName("");
+        localStorage.removeItem(PROFILE_NAME_STORAGE);
         router.push("/");
     }
 

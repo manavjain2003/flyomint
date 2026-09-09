@@ -159,7 +159,7 @@ const [addOnData, setAddOnData] = useState<any>(null);
       }
     );
 
-    return (
+       return (
       <FlightAddOns
         tokenId={reviewPayload.tokenId}
         bookingId={bookingData.bookingId || reviewPayload.bookingId}
@@ -170,11 +170,17 @@ const [addOnData, setAddOnData] = useState<any>(null);
           date: reviewPayload.onward?.journey?.DepartureDateTime || "",
           isRoundtrip: tripType === "roundtrip",
         }}
-        baseFareTotal={
-          (reviewPayload.onward?.fare?.GrossFare || 0) +
-          (reviewPayload.ret?.fare?.GrossFare || 0)
-        }
-        onBack={goToResults}
+        baseFareTotal={bookingData.totalAmount}
+        baseFare={bookingData.baseFareTotal}
+        taxTotal={bookingData.taxTotal}
+        grossFareTotal={bookingData.grossFareTotal}
+        netFareTotal={bookingData.netFareTotal}
+        fareDisplayType={bookingData.fareDisplayType}
+        onBack={() => {
+          const p = new URLSearchParams(params.toString());
+          p.set("bookingStep", "review");
+          router.replace(`/flights-results?${p.toString()}`, { scroll: false });
+        }}
         onContinue={goToPayment}
       />
     );

@@ -176,7 +176,7 @@ const resolvedDirectOnly = directOnlyProp ?? prev.directOnly;
         });
     }, [fromProp, toProp, fromCityProp, toCityProp, fromAirportProp, toAirportProp, directOnlyProp]);
 
-    const { from, to, fromCity, toCity, tripType, adults, children, infants, cabinClass, directOnly } = criteria;
+ const { from, to, fromCity, toCity, tripType, adults, children, infants, cabinClass, directOnly, specialFare } = criteria;
     const fromLabel = formatAirportCodeLabel(from, fromAirportProp?.CityName || fromCity);
     const toLabel = formatAirportCodeLabel(to, toAirportProp?.CityName || toCity);
 
@@ -329,7 +329,7 @@ useEffect(() => {
     }
     run();
     return () => { ignore = true; };
-}, [selectedDate, returnDate, tripType, adults, children, infants, cabinClass, directOnly, from, to]);
+}, [selectedDate, returnDate, tripType, adults, children, infants, cabinClass, directOnly, from, to , specialFare]);
 
 const onwardJourneys = trips[0]?.Journey ?? [];
     const returnJourneys = trips[1]?.Journey ?? [];

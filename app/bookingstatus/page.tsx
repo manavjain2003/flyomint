@@ -41,12 +41,24 @@ type Segment = {
   Layover?: string;
 };
 
+type PTCFare = {
+  PTC: string; // "ADT" | "CHD" | "INF"
+  Fare: number;
+  Tax: number;
+  Discount: number;
+  GrossFare: number;
+  NetFare: number;
+  ConvFee?: number;
+};
+
 type FareInfo = {
   BaseFare: number;
   Tax: number;
   Discount: number;
   GrossFare: number;
   NetFare: number;
+  ConvenienceFee?: number;
+  PTCFare?: PTCFare[];
 };
 
 type Journey = {
@@ -133,11 +145,28 @@ function CountdownTimer({ expiresAt }: { expiresAt: Date }) {
     </span>
   );
 }
-const PENDING_STATUSES = ["PENDING", "BOOKING INITIATE", "INITIATE", "IN PROGRESS"];
+const PENDING_STATUSES = [
+  "PENDING",
+  "BOOKING INITIATE",
+  "INITIATE",
+  "IN PROGRESS",
+  "BOOKING NOT INITIATED",
+  "NOT INITIATED",
+];
+
+const CONFIRMED_STATUSES = ["CONFIRMED", "SUCCESS", "TICKETED", "BOOKED"];
 
 function isPendingStatus(status?: string) {
   if (!status) return false;
   return PENDING_STATUSES.includes(status.toUpperCase().trim());
+}
+
+// Explicit allow-list: a journey is only "confirmed" if the API says so.
+// Anything unrecognized (new/typo'd statuses from the airline) falls through
+// as "not confirmed" instead of silently being treated as confirmed.
+function isConfirmedStatus(status?: string) {
+  if (!status) return false;
+  return CONFIRMED_STATUSES.includes(status.toUpperCase().trim());
 }
 
 function formatDate(iso?: string) {
@@ -550,23 +579,103 @@ if (stage === "bookingFailed") {
 const messageExpiry = getMessageExpiry(booking?.PaymentTime);
 
   const isFullyConfirmed =
-    paymentStatus === "success" &&
-    bookingStatus === "success" &&
-    !!booking?.Journey?.length &&
-    booking.Journey.every((j) => !isPendingStatus(j.BookingStatus));
+paymentStatus === "success" &&
+bookingStatus === "success" &&
+!!booking?.Journey?.length &&
+booking.Journey.every((j) => !isPendingStatus(j.BookingStatus))
 
   const isPaymentPending = paymentStatus === "pending";
   const isBookingPending = bookingStatus === "pending" && !!pendingMessage;
 
-  const totalFare = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.NetFare ?? 0), 0) ?? 0;
-  const totalBase = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.BaseFare ?? 0), 0) ?? 0;
-  const totalTax = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.Tax ?? 0), 0) ?? 0;
-  const totalDiscount = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.Discount ?? 0), 0) ?? 0;
+const totalFare =
+  booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.NetFare ?? 0), 0) ?? 0;
+const totalBase =
+  booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.BaseFare ?? 0), 0) ?? 0;
+const totalTax =
+  booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.Tax ?? 0), 0) ?? 0;
+const totalDiscount =
+  booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.Discount ?? 0), 0) ?? 0;
+const totalGross =
+  booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.GrossFare ?? 0), 0) ?? 0;
+const totalConvenience =
+  booking?.Journey.reduce(
+    (sum, j) => sum + (j.FareInfo?.ConvenienceFee ?? 0),
+    0
+  ) ?? 0;
+
+// Maps API PaxType codes to PTCFare's PTC codes.
+const paxTypeToPTC: Record<string, string> = { A: "ADT", C: "CHD", I: "INF" };
+
+// Per-PTC base fare totals (sum across journeys).
+// PTCFare gives a PER-PASSENGER amount for a type, so it must be multiplied
+// by the actual number of travellers of that type in the journey — otherwise
+// a journey with 2 adults only counts one adult's fare.
+const ptcTotals = (() => {
+  const map: Record<string, number> = { ADT: 0, CHD: 0, INF: 0 };
+  booking?.Journey.forEach((j) => {
+    const ptcList = j.FareInfo?.PTCFare;
+    if (!ptcList?.length) return;
+    const counts: Record<string, number> = {};
+    j.Travelers?.forEach((t) => {
+      const code = (paxTypeToPTC[t.PaxType] || t.PaxType || "").toUpperCase();
+      counts[code] = (counts[code] ?? 0) + 1;
+    });
+    ptcList.forEach((p) => {
+      const key = (p.PTC || "").toUpperCase();
+      if (key in map) {
+        const count = counts[key] ?? 1;
+        map[key] += (p.Fare ?? 0) * count;
+      }
+    });
+  });
+  // Fallback when PTCFare is missing: use overall base + counts
+  if (
+    map.ADT === 0 &&
+    map.CHD === 0 &&
+    map.INF === 0 &&
+    totalBase > 0
+  ) {
+    const adt = booking?.ADT ?? 0;
+    const chd = booking?.CHD ?? 0;
+    const inf = booking?.INF ?? 0;
+    const totalPax = adt + chd + inf || 1;
+    if (adt) map.ADT = totalBase; 
+  }
+  return map;
+})();
+
+// Fare attributed to each named traveller.
+// PTCFare gives a PER-PASSENGER amount for a given type (e.g. one adult's fare),
+// not the total for all adults — so we match each traveller's PaxType to the
+// matching PTCFare entry and sum across journeys (round trips often carry
+// FareInfo/PTCFare only on the outbound leg, with the return leg's FareInfo null).
+type PaxFareRow = { paxId: number; name: string; paxType: string; fare: number };
+
+const passengerFares: PaxFareRow[] = (() => {
+  const rows = new Map<number, PaxFareRow>();
+  booking?.Journey.forEach((j) => {
+    const ptcList = j.FareInfo?.PTCFare;
+    if (!ptcList?.length) return;
+    j.Travelers?.forEach((t) => {
+      const ptcCode = paxTypeToPTC[t.PaxType] || t.PaxType;
+      const match = ptcList.find((p) => (p.PTC || "").toUpperCase() === ptcCode);
+      if (!match) return;
+      const amount = match.NetFare ?? match.GrossFare ?? 0;
+      const existing = rows.get(t.PaxID);
+      if (existing) {
+        existing.fare += amount;
+      } else {
+        rows.set(t.PaxID, { paxId: t.PaxID, name: travelerName(t), paxType: ptcCode, fare: amount });
+      }
+    });
+  });
+  return Array.from(rows.values());
+})();
 
   return (
     <>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-16">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8">
 
           {/* Fully confirmed banner */}
           {isFullyConfirmed && (
@@ -635,28 +744,28 @@ const messageExpiry = getMessageExpiry(booking?.PaymentTime);
 
           <div className="grid grid-cols-1 lg:grid-cols-[750px_1fr] gap-6 items-start">
             <div className="min-w-0 order-1 lg:order-1 space-y-4">
-              {!isPaymentPending && (
-                <div className="grid grid-cols-3 gap-3">
-                  <ActionCard label="Web Check-in" sublabel="Complete before airport" />
-                             <ActionCard
-                    label="E-Ticket"
-                    sublabel={downloadingTicket ? "Downloading…" : "Download PDF"}
-                    onClick={handleDownloadTicket}
-                    disabled={downloadingTicket}
-                 />
-                 <ActionCard
-                    label="Invoice"
-                    sublabel={downloadingInvoice ? "Downloading…" : "View & download"}
-                    onClick={handleDownloadInvoice}
-                   disabled={downloadingInvoice}
-                  />
-                </div>
-              )}
+            {isFullyConfirmed && (
+  <div className="grid grid-cols-3 gap-3">
+    <ActionCard label="Web Check-in" sublabel="Complete before airport" />
+    <ActionCard
+      label="E-Ticket"
+      sublabel={downloadingTicket ? "Downloading…" : "Download PDF"}
+      onClick={handleDownloadTicket}
+      disabled={downloadingTicket}
+    />
+    <ActionCard
+      label="Invoice"
+      sublabel={downloadingInvoice ? "Downloading…" : "View & download"}
+      onClick={handleDownloadInvoice}
+      disabled={downloadingInvoice}
+    />
+  </div>
+)}
 
               {booking?.Journey.map((journey, jIdx) => {
                 const cabin = cabinLabel(journey.Segments?.[0]?.Cabin);
                 const journeyIsPending = isPendingStatus(journey.BookingStatus);
-                const journeyIsConfirmed = !journeyIsPending;
+                const journeyIsConfirmed = isConfirmedStatus(journey.BookingStatus);
 
                 return (
                   <div
@@ -676,24 +785,32 @@ const messageExpiry = getMessageExpiry(booking?.PaymentTime);
                       </div>
 
                       {/* Per-journey status badge */}
-                      {journeyIsPending ? (
+                      {journeyIsConfirmed ? (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                          Confirmed
+                        </span>
+                      ) : journeyIsPending ? (
                         <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
                           In Progress
                         </span>
                       ) : (
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
-                          Confirmed
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                          {journey.BookingStatus || "Not Started"}
                         </span>
                       )}
                     </div>
 
-                    {/* Show the specific message for this pending journey */}
-                  {journeyIsPending && journey.Message?.trim() && (
-  <div className="mt-3 mb-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 px-3.5 py-2.5 flex items-start justify-between gap-3">
+                    {/* Per-journey message text only — no CountdownTimer here.
+                        PaymentTime (and therefore the countdown) is a transaction-level
+                        concept, not per-journey, so the single timer already rendered in
+                        the top PendingStatusBanner is authoritative. Rendering it again per
+                        leg would show up to 3 identical countdowns on an RS (round-trip)
+                        booking with both legs pending. */}
+                  {journeyIsPending && (journey.Message?.trim() || pendingMessage) && (
+  <div className="mt-3 mb-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 px-3.5 py-2.5">
     <p className="text-sm text-blue-800 dark:text-blue-200">
-      {journey.Message}
+      {journey.Message?.trim() || pendingMessage}
     </p>
-    {messageExpiry && <CountdownTimer expiresAt={messageExpiry} />}
   </div>
 )}
 
@@ -778,16 +895,91 @@ const messageExpiry = getMessageExpiry(booking?.PaymentTime);
 
             {/* Right column */}
             <div className="space-y-4 order-2 lg:order-2 lg:sticky lg:top-8">
-              <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5">
-                <p className="text-sm font-bold text-gray-900 dark:text-gray-100 mb-3">Fare Summary</p>
-                <FareRow label="Base Fare" value={currency(totalBase)} />
-                <FareRow label="Taxes & Fees" value={currency(totalTax)} />
-                {totalDiscount > 0 && <FareRow label="Discount" value={`- ${currency(totalDiscount)}`} positive />}
-                <div className="flex items-center justify-between text-sm py-2 mt-1 border-t border-gray-100 dark:border-gray-800">
-                  <span className="text-gray-500 dark:text-gray-400">Total Amount Paid</span>
-                  <span className="font-extrabold text-gray-900 dark:text-gray-100 tabular-nums">{currency(totalFare)}</span>
-                </div>
-              </div>
+      <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5">
+  <div className="flex items-center justify-between mb-3">
+    <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
+      Fare Summary
+    </p>
+  </div>
+
+  {/* Amount paid header */}
+  <div className="mb-3">
+    <p className="text-xs text-gray-500 dark:text-gray-400">Amount Paid</p>
+    <p className="text-2xl font-extrabold text-gray-900 dark:text-gray-100 tabular-nums">
+      {currency(totalFare)}
+    </p>
+  </div>
+
+  {/* Savings banner */}
+  {totalDiscount > 0 && (
+    <div className="mb-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 px-3 py-2.5 flex items-center gap-2">
+      <span className="text-emerald-600 dark:text-emerald-400 text-sm">✓</span>
+      <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+        Yay! You saved {currency(totalDiscount)} on this booking
+      </p>
+    </div>
+  )}
+
+  {/* Fare per traveller */}
+  {passengerFares.length > 0 && (
+    <div className="mb-4 pb-4 border-b border-gray-100 dark:border-gray-800">
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+        Fare per traveller
+      </p>
+      <div className="space-y-1.5">
+        {passengerFares.map((p) => (
+          <div key={p.paxId} className="flex items-center justify-between text-sm">
+            <span className="text-gray-700 dark:text-gray-300 truncate pr-2">{p.name}</span>
+            <span className="font-semibold tabular-nums text-gray-900 dark:text-gray-100 flex-shrink-0">
+              {currency(p.fare)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )}
+
+  <div className="space-y-2 pb-3 border-b border-gray-100 dark:border-gray-800">
+    {/* Per-pax-type base fares (like Review & Pay) */}
+    {(booking?.ADT ?? 0) > 0 && ptcTotals.ADT > 0 && (
+      <FareRow label="Adult fare" value={currency(ptcTotals.ADT)} />
+    )}
+    {(booking?.CHD ?? 0) > 0 && ptcTotals.CHD > 0 && (
+      <FareRow label="Child fare" value={currency(ptcTotals.CHD)} />
+    )}
+    {(booking?.INF ?? 0) > 0 && ptcTotals.INF > 0 && (
+      <FareRow label="Infant fare" value={currency(ptcTotals.INF)} />
+    )}
+
+    {/* Fallback if no PTC breakdown */}
+    {(booking?.ADT ?? 0) + (booking?.CHD ?? 0) + (booking?.INF ?? 0) === 0 ||
+    (ptcTotals.ADT === 0 && ptcTotals.CHD === 0 && ptcTotals.INF === 0) ? (
+      <FareRow label="Base Fare" value={currency(totalBase)} />
+    ) : null}
+
+    <FareRow label="Taxes & fees" value={currency(totalTax)} />
+    <FareRow
+      label="Convenience fee"
+      value={currency(totalConvenience)}
+    />
+    {totalDiscount > 0 && (
+      <FareRow
+        label="Instant discount"
+        value={`- ${currency(totalDiscount)}`}
+        positive
+      />
+    )}
+  </div>
+
+  <div className="flex items-center justify-between pt-3">
+    <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
+      Total payable
+    </span>
+    <span className="text-base font-extrabold text-gray-900 dark:text-gray-100 tabular-nums">
+      {currency(totalFare)}
+    </span>
+  </div>
+</div>
 
               {isFullyConfirmed && (
                 <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5">

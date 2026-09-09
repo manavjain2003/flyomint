@@ -49,6 +49,7 @@ export type PassengerDetails = {
     passportNo: string;
     passportExpiry: string;
     passportIssuingCountry: string;
+    documentNo: string;
 };
 
 type SavedTraveler = {
@@ -86,6 +87,7 @@ function emptyPassenger(ptc: PTC): PassengerDetails {
         passportNo: "",
         passportExpiry: "",
         passportIssuingCountry: "",
+        documentNo: "",
     };
 }
 
@@ -219,18 +221,32 @@ export function passengerFormIsValid(passengers: PassengerDetails[], checklist: 
         if (checklist.PassportNo && checklist.DocumentMandate && !p.passportNo.trim()) return false;
         if (checklist.PDOE && checklist.DocumentMandate && !p.passportExpiry) return false;
         if (checklist.PIC && checklist.DocumentMandate && !p.passportIssuingCountry.trim()) return false;
+        if (checklist.DocumentMandate && !p.documentNo.trim()) return false;
         return true;
     });
 }
 
 type CountryOption = { name: string; codeShort: string };
 
-function NationalityField({
+/**
+ * Searchable country picker backed by getCountryDetails. Used for both the
+ * Nationality field and the Passport Issuing Country field — both store a
+ * 2-letter country code (codeShort) but display the resolved full country
+ * name, exactly the same way, so the lookup/resolve/search logic lives here
+ * once and each caller just supplies its own label/placeholder.
+ */
+function CountryField({
+    label,
     value,
     onChange,
+    required,
+    placeholder = "Start typing a country",
 }: {
+    label: string;
     value: string;
     onChange: (v: string) => void;
+    required?: boolean;
+    placeholder?: string;
 }) {
     const [query, setQuery] = useState("");
     const [results, setResults] = useState<CountryOption[]>([]);
@@ -257,7 +273,7 @@ function NationalityField({
             if (cancelled) return;
             if (res.success) {
                 const match = res.countries.find(
-                    (c) => c.codeShort.toLowerCase() === value.toLowerCase()
+                    (c: CountryOption) => c.codeShort.toLowerCase() === value.toLowerCase()
                 );
                 if (match) {
                     resolvedCodeRef.current = value;
@@ -302,7 +318,7 @@ function NationalityField({
     return (
         <div className="relative">
             <label className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1 block">
-                Nationality *
+                {label}{required ? " *" : ""}
             </label>
             <input
                 value={query}
@@ -314,7 +330,7 @@ function NationalityField({
                 }}
                 onFocus={() => setOpen(true)}
                 onBlur={() => setTimeout(() => setOpen(false), 150)}
-                placeholder="Start typing a country"
+                placeholder={placeholder}
                 autoComplete="off"
                 className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-700 px-3 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-[#1c8fc7]"
             />
@@ -731,6 +747,7 @@ export default function PassengerDetailsForm({
             passportNo: traveler.passportNo || "",
             passportExpiry: isPlaceholderDate(traveler.pdoe) ? "" : traveler.pdoe,
             passportIssuingCountry: isPlaceholderDate(traveler.pic) ? "" : traveler.pic,
+            documentNo: traveler.documentId || "",
         });
         setTravelerPickerOpen(null);
     }
@@ -844,7 +861,9 @@ export default function PassengerDetailsForm({
                                 />
 
                                 {checklist.Nationality && (
-                                    <NationalityField
+                                    <CountryField
+                                        label="Nationality"
+                                        required
                                         value={p.nationality}
                                         onChange={(v) => updatePassenger(idx, { nationality: v })}
                                     />
@@ -878,13 +897,23 @@ export default function PassengerDetailsForm({
                                 )}
 
                                 {showPassportBlock && checklist.PIC && (
+                                    <CountryField
+                                        label="Passport Issuing Country"
+                                        required={passportRequired}
+                                        placeholder="Start typing a country"
+                                        value={p.passportIssuingCountry}
+                                        onChange={(v) => updatePassenger(idx, { passportIssuingCountry: v })}
+                                    />
+                                )}
+
+                                {checklist.DocumentMandate && (
                                     <div>
                                         <label className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1 block">
-                                            Passport Issuing Country{passportRequired ? " *" : ""}
+                                            Document No *
                                         </label>
                                         <input
-                                            value={p.passportIssuingCountry}
-                                            onChange={(e) => updatePassenger(idx, { passportIssuingCountry: e.target.value })}
+                                            value={p.documentNo}
+                                            onChange={(e) => updatePassenger(idx, { documentNo: e.target.value })}
                                             className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-700 px-3 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-[#1c8fc7]"
                                         />
                                     </div>

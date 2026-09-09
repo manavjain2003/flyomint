@@ -31,6 +31,8 @@ import type { CabinClass, TripType } from "@/app/components/flights/FlightResult
 import ContactDetailsForm, { contactFormIsValid, type ContactDetails } from "@/app/components/booking/ContactDetailsForm";
 import { getUserProfile } from "@/app/lib/authApi";
 import BillingAddressForm, { billingFormIsValid, type BillingAddress } from "@/app/components/booking/BillingDetailsForm";
+
+
 type Baggage = { SegID?: string; PaxID?: string | null; PTC?: string; CabinBag?: string; CheckinBaggage?: string };
 type PTCFareEntry = {
     PTC: string;
@@ -125,12 +127,17 @@ export type ReviewBookingProps = {
     bookingId: string;
     index: string[];
     onBack: () => void;
-    onContinue: (data: {
+         onContinue: (data: {
         passengers: PassengerDetails[];
         gst: GSTDetails | null;
         contact: ContactDetails | null;
         billing: BillingAddress | null;
         totalAmount: number;
+        baseFareTotal: number;
+        taxTotal: number;
+        grossFareTotal: number;
+        netFareTotal: number;
+        fareDisplayType: "P" | "G" | "S" | "N";
         pricing: { onward: LegSelection | null; ret: LegSelection | null };
         bookingId: string;
     }) => void;
@@ -1172,6 +1179,11 @@ function handleContinueToPayment() {
         contact,
         billing,
         totalAmount,
+        baseFareTotal,
+        taxTotal,
+        grossFareTotal,
+        netFareTotal,
+        fareDisplayType,
         pricing: { onward: displayOnward, ret: isRoundtrip ? displayReturn : null },
         bookingId: pricedBookingId,
     });

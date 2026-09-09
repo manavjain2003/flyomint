@@ -126,7 +126,8 @@ async function handleExpiry() {
 
     if (isVisible && cachedKey?.isLoginKey) {
         try {
-            await fetchResetToken(cachedKey.uniqueKey);
+
+            await getUniqueKey({ forceRefresh: true });
             scheduleRefresh(); 
             return;
         } catch (e) {
