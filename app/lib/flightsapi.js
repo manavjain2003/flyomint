@@ -91,6 +91,14 @@ export async function collectAvailability(tokenId) {
     }
 }
 
+/**
+ * @param {string} tokenId
+ * @param {{
+ *   onUpdate?: (trips: any[], tokenId?: string) => void,
+ *   intervalMs?: number,
+ *   maxDurationMs?: number
+ * }} [options]
+ */
 export async function pollAvailability(
     tokenId,
     { onUpdate, intervalMs = 1500, maxDurationMs = 60000 } = {}
@@ -787,12 +795,12 @@ export async function getAirlineInvoice({ transactionId, pnr = "", referenceNo =
     }
 }
 
-export async function getETicketCopy({ transactionId, type = "P" }) {
+export async function getETicketCopy({ transactionId, pnr = "", referenceNo = "", type = "P" }) {
     try {
         const body = {
             TransactionID: String(transactionId),
-            PNR: "",
-            ReferenceNo: "",
+            PNR: pnr,
+            ReferenceNo: referenceNo,
             Type: type,
         };
 
@@ -973,12 +981,22 @@ export async function getTransactionHistory({ tabId = 1, pageNumber = 1, pageSiz
             });
         }
  
-        // Onward ("ON") before return ("RT") within each booking.
-        const legOrder = { ON: 0, RT: 1 };
-        const bookings = Array.from(grouped.values()).map((b) => ({
-            ...b,
-            legs: b.legs.sort((a, c) => (legOrder[a.searchType] ?? 9) - (legOrder[c.searchType] ?? 9)),
-        }));
+const legOrder = { ON: 0, RT: 1 };
+
+
+function deriveSearchType(legs) {
+    const types = new Set(legs.map((l) => l.searchType));
+    if (types.has("RS")) return "RS";
+    if (types.has("RT")) return "RT";
+    if (types.has("ON")) return "ON";
+    return legs[0]?.searchType || "";
+}
+
+const bookings = Array.from(grouped.values()).map((b) => ({
+    ...b,
+    searchType: deriveSearchType(b.legs),
+    legs: b.legs.sort((a, c) => (legOrder[a.searchType] ?? 9) - (legOrder[c.searchType] ?? 9)),
+}));
  
         // Most recently created first.
         bookings.sort((a, b) => new Date(b.createdDate) - new Date(a.createdDate));

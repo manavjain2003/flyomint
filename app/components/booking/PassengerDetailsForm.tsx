@@ -17,6 +17,7 @@ export type TravellerCheckList = {
     GSTMandate?: boolean;
     PassportNo?: boolean;
     PDOE?: boolean;
+    PDOI?: boolean;
     PIC?: boolean;
     Nationality?: boolean;
     FNMaxLen?: number;
@@ -49,6 +50,7 @@ export type PassengerDetails = {
     passportNo: string;
     passportExpiry: string;
     passportIssuingCountry: string;
+    passportIssuingDate: string;
     documentNo: string;
 };
 
@@ -86,6 +88,7 @@ function emptyPassenger(ptc: PTC): PassengerDetails {
         nationality: "",
         passportNo: "",
         passportExpiry: "",
+        passportIssuingDate: "", 
         passportIssuingCountry: "",
         documentNo: "",
     };
@@ -220,6 +223,7 @@ export function passengerFormIsValid(passengers: PassengerDetails[], checklist: 
         if (checklist.Nationality && !p.nationality.trim()) return false;
         if (checklist.PassportNo && checklist.DocumentMandate && !p.passportNo.trim()) return false;
         if (checklist.PDOE && checklist.DocumentMandate && !p.passportExpiry) return false;
+        if (checklist.PDOI && checklist.DocumentMandate && !p.passportIssuingDate) return false;
         if (checklist.PIC && checklist.DocumentMandate && !p.passportIssuingCountry.trim()) return false;
         if (checklist.DocumentMandate && !p.documentNo.trim()) return false;
         return true;
@@ -228,13 +232,7 @@ export function passengerFormIsValid(passengers: PassengerDetails[], checklist: 
 
 type CountryOption = { name: string; codeShort: string };
 
-/**
- * Searchable country picker backed by getCountryDetails. Used for both the
- * Nationality field and the Passport Issuing Country field — both store a
- * 2-letter country code (codeShort) but display the resolved full country
- * name, exactly the same way, so the lookup/resolve/search logic lives here
- * once and each caller just supplies its own label/placeholder.
- */
+
 function CountryField({
     label,
     value,
@@ -745,6 +743,7 @@ export default function PassengerDetailsForm({
             dob: traveler.dob || "",
             nationality: traveler.nationalityCode || "",
             passportNo: traveler.passportNo || "",
+            passportIssuingDate: isPlaceholderDate(traveler.pdoi) ? "" : traveler.pdoi,
             passportExpiry: isPlaceholderDate(traveler.pdoe) ? "" : traveler.pdoe,
             passportIssuingCountry: isPlaceholderDate(traveler.pic) ? "" : traveler.pic,
             documentNo: traveler.documentId || "",
@@ -881,7 +880,19 @@ export default function PassengerDetailsForm({
                                         />
                                     </div>
                                 )}
-
+{showPassportBlock && checklist.PDOI && (
+    <div>
+        <label className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1 block">
+            Passport Issue Date{passportRequired ? " *" : ""}
+        </label>
+        <input
+            type="date"
+            value={p.passportIssuingDate}
+            onChange={(e) => updatePassenger(idx, { passportIssuingDate: e.target.value })}
+            className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-700 px-2 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-[#1c8fc7]"
+        />
+    </div>
+)}
                                 {showPassportBlock && checklist.PDOE && (
                                     <div>
                                         <label className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1 block">

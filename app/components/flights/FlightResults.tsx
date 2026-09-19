@@ -896,7 +896,7 @@ const promoStrip = (
 
                         {isOneway && (
     <div className="hidden xl:block w-[320px] shrink-0">
-        <GoogleAdSlot width={300} height={600} />
+      <GoogleAdSlot width={300} imageHeight={600} />
     </div>
 )}
                     </div>

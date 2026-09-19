@@ -16,7 +16,7 @@ import {
     HiOutlineDocumentText,
     HiOutlineXMark,
 } from "react-icons/hi2";
-import { HiOutlineLocationMarker } from "react-icons/hi";
+import { HiOutlineClock, HiOutlineLocationMarker } from "react-icons/hi";
 import { AiOutlineLoading3Quarters } from "react-icons/ai";
 import { getAirlinePricing, getAirlineFareRule } from "@/app/lib/flightsapi";
 import PassengerDetailsForm, {
@@ -106,7 +106,7 @@ type Journey = {
     ArrivalNearBy?: string;
 };
 type LegSelection = { journey: Journey; fare: FareInfo };
-
+const SESSION_DURATION = 10 * 60; // 10 minutes in seconds
 
 type SearchMeta = { fromCode?: string; fromName?: string; toCode?: string; toName?: string };
 
@@ -206,6 +206,61 @@ function resolveSearchedName(code: string | undefined, meta?: SearchMeta): strin
     if (code === meta.fromCode) return meta.fromName;
     if (code === meta.toCode) return meta.toName;
     return undefined;
+}
+function SessionTimer({ seconds }: { seconds: number }) {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    const label = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    const urgent = seconds <= 60;
+    return (
+        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-bold ${
+            urgent
+                ? "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400"
+                : "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400"
+        }`}>
+            <HiOutlineClock className="w-4 h-4" />
+            {label}
+            <span className={`text-[11px] font-semibold ${urgent ? "text-red-400" : "text-green-500"}`}>
+                SAFE &amp; SECURED
+            </span>
+        </div>
+    );
+}
+function SessionExpiredModal({ onGoBack }: { onGoBack: () => void }) {
+    return (
+        <>
+            {/* Grey overlay — blocks all interaction */}
+            <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" />
+
+            {/* Modal */}
+            <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+                <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm p-8 flex flex-col items-center text-center">
+                    {/* Hourglass illustration */}
+                    <div className="w-16 h-16 mb-4 flex items-center justify-center rounded-full bg-orange-50 dark:bg-orange-950">
+                        <svg viewBox="0 0 64 64" className="w-10 h-10" fill="none">
+                            <path d="M20 8h24M20 56h24" stroke="#f97316" strokeWidth="3" strokeLinecap="round"/>
+                            <path d="M22 8c0 12 10 16 10 24S22 44 22 56" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round"/>
+                            <path d="M42 8c0 12-10 16-10 24s10 12 10 24" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round"/>
+                            <ellipse cx="32" cy="32" rx="8" ry="4" fill="#fed7aa"/>
+                        </svg>
+                    </div>
+                    <h2 className="text-[20px] font-bold text-gray-900 dark:text-gray-100 mb-2">
+                        Payments timed out
+                    </h2>
+                    <p className="text-[14px] text-gray-500 dark:text-gray-400 mb-6">
+                        Current payment session got expired
+                    </p>
+                    <button
+                        type="button"
+                        onClick={onGoBack}
+                        className="w-full h-11 rounded-full bg-[#1c8fc7] text-white text-[14px] font-bold hover:bg-[#177aab] transition-colors"
+                    >
+                        Go back
+                    </button>
+                </div>
+            </div>
+        </>
+    );
 }
 
 function NearByAirportNotice({
@@ -499,7 +554,7 @@ function ItineraryCard({
                 />
             )}
 
-            <div className="border-t border-gray-100 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
+            <div className="bg-[#e8f4fb] dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
                 {journey.Segments.map((seg, i) => (
                     <div key={seg.SID ?? i}>
                         {i > 0 && <LayoverBanner seg={journey.Segments[i - 1]} />}
@@ -831,13 +886,19 @@ export default function ReviewBooking({
     const [searchMeta, setSearchMeta] = useState<SearchMeta>({ fromCode: from, fromName, toCode: to, toName });
 
 
+const [sessionSeconds, setSessionSeconds] = useState<number | null>(null);
+const [sessionExpired, setSessionExpired] = useState(false);
+
     const [fareRuleSidebarOpen, setFareRuleSidebarOpen] = useState(false);
     const [activeRuleTabIndex, setActiveRuleTabIndex] = useState(0);
     const [fareRuleState, setFareRuleState] = useState<
         Record<number, { loading: boolean; error: string | null; data: any[] | null }>
     >({});
 
-
+function handleSessionExpiredGoBack() {
+    window.location.href = "/";
+    // onBack(); 
+}
     useEffect(() => {
         window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     }, []);
@@ -879,7 +940,15 @@ export default function ReviewBooking({
             fetchContactProfile();
         }
     }, [isLoggedIn]);
-
+useEffect(() => {
+    if (sessionSeconds === null) return;
+    if (sessionSeconds <= 0) {
+        setSessionExpired(true);
+        return;
+    }
+    const t = setTimeout(() => setSessionSeconds((s) => (s !== null ? s - 1 : s)), 1000);
+    return () => clearTimeout(t);
+}, [sessionSeconds]);
 async function fetchPricing() {
     setPricingLoading(true);
     setPricingError(null);
@@ -950,6 +1019,8 @@ async function fetchPricing() {
         setPricedBookingId(currentBookingId || bookingId);
 
         setFareRuleState({});
+        setSessionSeconds(SESSION_DURATION);   
+        setSessionExpired(false);
         return;
     }
 
@@ -1013,6 +1084,8 @@ async function fetchPricing() {
     setPricedBookingId(res.pricing.bookingId || bookingId);
 
     setFareRuleState({});
+    setSessionSeconds(SESSION_DURATION);
+setSessionExpired(false);
 }
 
     async function fetchFareRuleForLeg(legIndex: number, leg: LegSelection) {
@@ -1219,6 +1292,9 @@ function handleContinueToPayment() {
                     </div>
                 </div>
                 <StepIndicator />
+                {sessionSeconds !== null && (
+    <SessionTimer seconds={sessionSeconds} />
+)}
             </div>
 
             <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
@@ -1249,7 +1325,7 @@ function handleContinueToPayment() {
 
                     {displayOnward && (
                         <ItineraryCard
-                            label="Departure Flight"
+                            label="Onward"
                             leg={displayOnward}
                             cabinLabel={CABIN_LABEL[cabinClass]}
                             searchMeta={searchMeta}
@@ -1259,7 +1335,7 @@ function handleContinueToPayment() {
                     )}
                     {isRoundtrip && displayReturn && (
                         <ItineraryCard
-                            label="Return Flight"
+                            label="Return"
                             leg={displayReturn}
                             cabinLabel={CABIN_LABEL[cabinClass]}
                             searchMeta={searchMeta}
@@ -1396,6 +1472,9 @@ function handleContinueToPayment() {
                 ruleData={fareRuleState[activeRuleTabIndex]?.data ?? null}
                 onRetry={handleRetryFareRule}
             />
+            {sessionExpired && (
+    <SessionExpiredModal onGoBack={handleSessionExpiredGoBack} />
+)}
         </div>
     );
 }

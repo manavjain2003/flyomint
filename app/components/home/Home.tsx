@@ -110,7 +110,7 @@ const [hoveredFare, setHoveredFare] = useState<SpecialFare | null>(null);
     const fromDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
     const toDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const [departureDate, setDepartureDate] = useState<Date>(new Date());
+const [departureDate, setDepartureDate] = useState<Date>(addDays(new Date(), 1));
     const [returnDate, setReturnDate] = useState<Date | null>(null);
 
     const [travelersOpen, setTravelersOpen] = useState(false);
@@ -431,7 +431,7 @@ const [hoveredFare, setHoveredFare] = useState<SpecialFare | null>(null);
                         <div className="w-full lg:flex-1 lg:min-w-0">
                             <DatePicker
                                 selected={departureDate}
-                                onChange={(date) => {
+                                onChange={(date: Date | null) => {
                                     if (!date) return;
                                     setDepartureDate(date);
                                     if (returnDate && returnDate < date) setReturnDate(null);
@@ -456,9 +456,10 @@ const [hoveredFare, setHoveredFare] = useState<SpecialFare | null>(null);
                         </div>
 
                         <div className="w-full lg:flex-1 lg:min-w-0">
-   <DatePicker
+<DatePicker
+    key={formatApiDate(departureDate)}
     selected={returnDate}
-    onChange={(date) => {
+  onChange={(date: Date | null) => {
         setReturnDate(date);
         if (date) setTripType("roundtrip");
     }}
@@ -467,7 +468,7 @@ const [hoveredFare, setHoveredFare] = useState<SpecialFare | null>(null);
     monthsShown={2}
     popperPlacement="bottom-start"
     wrapperClassName="block w-full"
-    openToDate={returnDate || departureDate} 
+    openToDate={returnDate || departureDate}
     customInput={
         <Field label="Return">
             <div className="flex items-center justify-between">
@@ -824,6 +825,17 @@ function AirportDropdownStyles() {
             }
             .airport-scrollbar::-webkit-scrollbar-thumb:hover {
                 background-color: #1c8fc7;
+            }
+
+            /* Scale the datepicker calendar popup by 30% */
+            .react-datepicker-popper {
+                transform-origin: top left;
+                z-index: 60;
+            }
+            .react-datepicker-popper .react-datepicker {
+                transform: scale(1.3);
+                transform-origin: top left;
+                right: 35px;
             }
         `}</style>
     );

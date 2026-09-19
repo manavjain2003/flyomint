@@ -11,7 +11,7 @@ import {
   HiOutlineChevronDown,
   HiOutlineChevronUp,
 } from "react-icons/hi2";
-
+import type { ComponentType } from "react";
 const currency = (n: number) =>
   new Intl.NumberFormat("en-IN", {
     style: "currency",
@@ -98,12 +98,7 @@ function normalizeServiceResponse(res: any) {
   };
 }
 
-type Category = {
-  key: string;
-  label: string;
-  subtitle: string;
-  Icon: (props: { className?: string }) => JSX.Element;
-};
+
 
 const CATEGORY_DEFS: { key: string; label: string; subtitle: string; match: RegExp }[] = [
   { key: "upi", label: "Pay via any UPI app", subtitle: "Scan and pay with UPI", match: /upi/i },
@@ -300,13 +295,20 @@ function formatSegTime(iso?: string) {
   return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
-
+/**
+ * Renders one itinerary leg from the normalized AddOnLegSummary shape
+ * (from, to, duration, stops, segments[]) produced by FlightAddOns and
+ * threaded through via addOnData.legs. This is sourced from getAirlineSSR
+ * (keyed off the booking's actual TokenID/BookingID), so PaymentStep no
+ * longer needs to reach back into ReviewBooking's pricing state for
+ * itinerary display.
+ */
 function TripLegSummaryRow({ leg, showDetails }: { leg: any; showDetails: boolean }) {
-  const journey = leg?.journey;
-  if (!journey) return null;
-  const firstSeg = journey.Segments?.[0];
-  const stopsLabel = journey.Stops === 0 ? "Direct" : `${journey.Stops} stop${journey.Stops > 1 ? "s" : ""}`;
-  const logoUrl = resolveLogoUrl(firstSeg?.VACLogo || firstSeg?.MACLogo);
+  if (!leg) return null;
+  const firstSeg = leg.segments?.[0];
+  const lastSeg = leg.segments?.[leg.segments.length - 1];
+  const stopsLabel = leg.stops === 0 ? "Direct" : `${leg.stops} stop${leg.stops > 1 ? "s" : ""}`;
+  const logoUrl = resolveLogoUrl(firstSeg?.logo);
 
   return (
     <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 last:border-b-0">
@@ -321,7 +323,7 @@ function TripLegSummaryRow({ leg, showDetails }: { leg: any; showDetails: boolea
           <span className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-800 flex-shrink-0" />
         )}
         <p className="text-[15px] font-bold text-gray-900 dark:text-gray-100 truncate">
-          {journey.From} <span className="text-gray-400">&rarr;</span> {journey.To}
+          {leg.from} <span className="text-gray-400">&rarr;</span> {leg.to}
         </p>
       </div>
 
@@ -330,18 +332,18 @@ function TripLegSummaryRow({ leg, showDetails }: { leg: any; showDetails: boolea
           {firstSeg && (
             <span className="flex items-center gap-1.5 font-semibold text-gray-700 dark:text-gray-300">
               <HiOutlinePaperAirplane className="w-3.5 h-3.5 -rotate-45 text-gray-400" />
-              {firstSeg.AirlineCode}-{firstSeg.FlightNo}
+              {firstSeg.airlineCode}-{firstSeg.flightNo}
             </span>
           )}
           <span className="flex items-center gap-1.5">
             <HiOutlineCalendarDays className="w-3.5 h-3.5 text-gray-400" />
-            {formatSegDate(journey.DepartureDateTime)}
+            {formatSegDate(firstSeg?.departureTime)}
           </span>
           <span className="flex items-center gap-1.5 tabular-nums">
             <HiOutlineClock className="w-3.5 h-3.5 text-gray-400" />
-            {formatSegTime(journey.DepartureDateTime)} &rarr; {formatSegTime(journey.ArrivalDateTime)}
+            {formatSegTime(firstSeg?.departureTime)} &rarr; {formatSegTime(lastSeg?.arrivalTime)}
           </span>
-          {journey.Duration && <span>({journey.Duration})</span>}
+          {leg.duration && <span>({leg.duration})</span>}
           <span>({stopsLabel})</span>
         </div>
       )}
@@ -381,6 +383,8 @@ export default function PaymentStep({
 
   const hasFetchedRef = useRef(false);
 
+  const itineraryLegs = addOnData?.legs ?? [];
+
 useEffect(() => {
   if (hasFetchedRef.current) return;
   hasFetchedRef.current = true;
@@ -404,7 +408,8 @@ const travelers = (bookingData.passengers ?? []).map((p: any, i: number) => ({
   passportNo: p.passportNo || "",
   pic: p.passportIssuingCountry || "",  
   pdoe: p.passportExpiry || "",    
-  pdoi: "",                            
+  pdoi: p.passportIssuingDate || "",                            
+  documentNo: p.documentNo || "",
   paxType: p.ptc === "INF" ? "I" : p.ptc === "CHD" ? "C" : "A",
 }));
       const contact = bookingData.contact ?? {};
@@ -692,9 +697,9 @@ return Array.from(groups.values()).map((g) => {
     <div className="max-w-7xl mx-auto px-4 pt-5 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-3 sm:gap-5 items-start">
       {/* LEFT COLUMN: trip/traveller details + payment methods */}
       <div className="space-y-4 min-w-0">
-        {(bookingData?.pricing?.onward || travellers.length > 0) && (
+        {(itineraryLegs.length > 0 || travellers.length > 0) && (
           <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden">
-            {(bookingData?.pricing?.onward || bookingData?.pricing?.ret) && (
+            {itineraryLegs.length > 0 && (
               <div className="flex items-center justify-end px-5 pt-3.5">
                 <button
                   type="button"
@@ -710,12 +715,9 @@ return Array.from(groups.values()).map((g) => {
                 </button>
               </div>
             )}
-            {bookingData?.pricing?.onward && (
-              <TripLegSummaryRow leg={bookingData.pricing.onward} showDetails={legDetailsOpen} />
-            )}
-            {bookingData?.pricing?.ret && (
-              <TripLegSummaryRow leg={bookingData.pricing.ret} showDetails={legDetailsOpen} />
-            )}
+            {itineraryLegs.map((leg: any, i: number) => (
+              <TripLegSummaryRow key={i} leg={leg} showDetails={legDetailsOpen} />
+            ))}
 
             {travellers.length > 0 && (
               <div className="px-5 py-3.5 border-t border-gray-100 dark:border-gray-800">
@@ -807,10 +809,10 @@ return Array.from(groups.values()).map((g) => {
                 <div key={group.key}>
                   <button
                     onClick={() => setSelectedIndex(group.options[0].index)}
-                    className={`w-full flex items-center justify-between gap-3 px-5 py-4 text-left transition-colors ${
+                    className={`w-full flex items-center justify-between gap-3 px-5 py-4 text-left transition-colors border-l-4 ${
                       groupSelected
-                        ? "bg-[#1c8fc7]/5 dark:bg-[#1c8fc7]/10"
-                        : "bg-gray-50 dark:bg-gray-950/30 hover:bg-gray-100 dark:hover:bg-gray-800/60"
+                        ? "bg-[#1c8fc7]/10 dark:bg-[#1c8fc7]/15 border-[#1c8fc7]"
+                        : "bg-gray-50 dark:bg-gray-950/30 hover:bg-gray-100 dark:hover:bg-gray-800/60 border-transparent"
                     }`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
@@ -829,8 +831,21 @@ return Array.from(groups.values()).map((g) => {
                       </div>
                     </div>
                     {isSingle && (
-                      <span className="text-sm font-bold text-gray-900 dark:text-gray-100 tabular-nums flex-shrink-0">
-                        {currency(group.options[0].f.amountToBePaid)}
+                      <span className="flex items-center gap-2 flex-shrink-0">
+                        {groupSelected && (
+                          <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            className="w-4 h-4 text-[#1c8fc7]"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                          >
+                            <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        )}
+                        <span className="text-sm font-bold text-gray-900 dark:text-gray-100 tabular-nums">
+                          {currency(group.options[0].f.amountToBePaid)}
+                        </span>
                       </span>
                     )}
                   </button>

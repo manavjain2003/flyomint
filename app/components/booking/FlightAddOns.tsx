@@ -50,6 +50,29 @@ type MealSelection = Record<string, Record<string, string | null>>;
 
 export type FareDisplayType = "P" | "G" | "S" | "N";
 
+/**
+ * Normalized, display-ready itinerary leg handed off to PaymentStep so it
+ * doesn't need to reach back into ReviewBooking's pricing state (which can
+ * lag or duplicate legs if the upstream fare-pairing logic ever misbehaves).
+ * This is sourced straight from getAirlineSSR, which is keyed off the actual
+ * TokenID/BookingID for this booking — the most authoritative source we have
+ * at this point in the flow.
+ */
+export type AddOnLegSummary = {
+    from: string;
+    to: string;
+    duration: string;
+    stops: number;
+    segments: {
+        airlineCode: string;
+        airlineName: string;
+        flightNo: string;
+        logo?: string;
+        departureTime: string;
+        arrivalTime: string;
+    }[];
+};
+
 export type FlightAddOnsProps = {
     tokenId: string;
     bookingId: string;
@@ -73,6 +96,7 @@ export type FlightAddOnsProps = {
             sid: string | number;
             ssrType: string;
         }[];
+        legs: AddOnLegSummary[];
     }) => void;
 };
 
@@ -146,6 +170,31 @@ export default function FlightAddOns({
         [legs]
     );
 
+    /**
+     * Display-ready leg summary derived from the SSR response, handed off to
+     * PaymentStep via onContinue so the payment screen renders the itinerary
+     * from this authoritative source rather than re-deriving it from
+     * ReviewBooking's pricing state.
+     */
+    const legsSummary = useMemo<AddOnLegSummary[]>(
+        () =>
+            legs.map((leg) => ({
+                from: leg.from,
+                to: leg.to,
+                duration: leg.duration,
+                stops: Math.max(0, leg.segments.length - 1),
+                segments: leg.segments.map((seg) => ({
+                    airlineCode: seg.airlineCode,
+                    airlineName: seg.airlineName,
+                    flightNo: seg.flightNo,
+                    logo: seg.vacLogo || seg.macLogo || seg.oacLogo,
+                    departureTime: seg.departureTime,
+                    arrivalTime: seg.arrivalTime,
+                })),
+            })),
+        [legs]
+    );
+
 
     const legsToShow = useMemo(() => {
         return legs
@@ -192,9 +241,9 @@ export default function FlightAddOns({
 
         if (!hasBaggage && !hasMeals) {
             autoSkipped.current = true;
-            onContinue({ addOnTotal: 0, selections: [] });
+            onContinue({ addOnTotal: 0, selections: [], legs: legsSummary });
         }
-    }, [legs, loading, error, onContinue]);
+    }, [legs, loading, error, onContinue, legsSummary]);
 
     useEffect(() => {
         if (hasFetchedSSR.current) return;
@@ -809,7 +858,7 @@ export default function FlightAddOns({
                         </div>
                         <button
                             type="button"
-                            onClick={() => onContinue({ addOnTotal, selections: selectionList })}
+                            onClick={() => onContinue({ addOnTotal, selections: selectionList, legs: legsSummary })}
                             className="h-12 px-6 rounded-full text-sm font-bold flex items-center gap-2 bg-[#FF7626] hover:bg-[#e6661f] text-white transition-colors"
                         >
                             Next <HiOutlineArrowRight className="w-4 h-4" />

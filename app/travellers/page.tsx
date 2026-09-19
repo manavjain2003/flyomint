@@ -9,6 +9,8 @@ import {
   HiOutlineIdentification,
   HiOutlineCalendar,
   HiOutlineGlobeAlt,
+  HiOutlineChevronLeft,
+  HiOutlineChevronRight,
 } from "react-icons/hi2";
 import { AiOutlineLoading3Quarters } from "react-icons/ai";
 import AccountSidebar from "@/app/components/booking/AccountSidebar";
@@ -21,6 +23,7 @@ import {
 import { useRequireAuth } from "@/app/lib/useRequireAuth";
 
 const GENDERS = ["MALE", "FEMALE", "OTHER"];
+const PAGE_SIZE = 5; 
 
 const emptyForm = {
   travelerId: null as number | null,
@@ -127,12 +130,10 @@ function CountryCodeField({
 
       const match = res.success
         ? res.countries.find(
-              (c) => c.codeShort.toUpperCase() === value.toUpperCase()
+            (c: CountryOption) => c.codeShort.toUpperCase() === value.toUpperCase()
           )
         : null;
 
-      // Fallback to showing the raw value only if we couldn't resolve it
-      // (e.g. legacy saved data that wasn't a valid ISO code to begin with).
       setQuery(match ? match.name : value);
     });
 
@@ -227,6 +228,9 @@ export default function MyTravelersPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -249,6 +253,7 @@ export default function MyTravelersPage() {
       return;
     }
     setTravelers(res.travelers || []);
+    setCurrentPage(1); // reset to first page after reload
   }
 
   useEffect(() => {
@@ -256,6 +261,19 @@ export default function MyTravelersPage() {
     loadTravelers(controller.signal);
     return () => controller.abort();
   }, []);
+
+  // Derived pagination values
+  const totalItems = travelers.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const startIndex = (safePage - 1) * PAGE_SIZE;
+  const endIndex = Math.min(startIndex + PAGE_SIZE, totalItems);
+  const paginatedTravelers = travelers.slice(startIndex, endIndex);
+
+  function goToPage(page: number) {
+    const next = Math.max(1, Math.min(page, totalPages));
+    setCurrentPage(next);
+  }
 
   function openAddForm() {
     setForm(emptyForm);
@@ -331,7 +349,7 @@ export default function MyTravelersPage() {
   return (
     <div className="flex-1 bg-[#f5f8fb] dark:bg-gray-950 min-h-screen">
       <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 flex items-center gap-3">
+        <div className="max-w-8xl mx-auto px-4 sm:px-6 py-5 flex items-center gap-3">
           <span className="grid place-items-center w-9 h-9 rounded-lg bg-[#FF7626]/10 shrink-0">
             <HiOutlineUserGroup className="w-5 h-5 text-[#FF7626]" />
           </span>
@@ -346,7 +364,7 @@ export default function MyTravelersPage() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+      <div className="max-w-8xl mx-auto px-4 sm:px-6 py-8">
         <div className="flex flex-col md:flex-row gap-6">
           <aside className="w-full md:w-64 shrink-0">
             <AccountSidebar />
@@ -416,109 +434,187 @@ export default function MyTravelersPage() {
                     </button>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <div className="hidden md:grid grid-cols-[minmax(200px,1.4fr)_100px_130px_90px_minmax(120px,1fr)_40px] gap-4 px-5 py-2.5 border-b border-gray-100 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-800/40">
-                      <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                        Traveler
-                      </span>
-                      <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                        Gender
-                      </span>
-                      <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                        Date of birth
-                      </span>
-                      <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                        Nationality
-                      </span>
-                      <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                        Passport
-                      </span>
-                      <span className="sr-only">Actions</span>
+                  <>
+                    <div className="overflow-x-auto">
+                      <div className="hidden md:grid grid-cols-[minmax(200px,1.4fr)_100px_130px_90px_minmax(120px,1fr)_40px] gap-4 px-5 py-2.5 border-b border-gray-100 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-800/40">
+                        <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                          Traveler
+                        </span>
+                        <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                          Gender
+                        </span>
+                        <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                          Date of birth
+                        </span>
+                        <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                          Nationality
+                        </span>
+                        <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                          Passport
+                        </span>
+                        <span className="sr-only">Actions</span>
+                      </div>
+
+                      <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+                        {paginatedTravelers.map((t: any) => {
+                          const age = calcAge(t.dob);
+                          const dobLabel = formatDob(t.dob);
+                          const hasPassport = Boolean(t.passportNo?.trim());
+                          const nationality = t.nationalityCode || "—";
+
+                          return (
+                            <li
+                              key={t.travelerId}
+                              className="group grid grid-cols-1 md:grid-cols-[minmax(200px,1.4fr)_100px_130px_90px_minmax(120px,1fr)_40px] gap-x-4 gap-y-2 items-center px-5 py-3.5 hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors"
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="shrink-0 w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-800 grid place-items-center text-xs font-semibold text-gray-600 dark:text-gray-300 tracking-wide">
+                                  {initials(t.firstName, t.lastName)}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-gray-900 dark:text-gray-50 truncate">
+                                    {t.firstName} {t.lastName}
+                                  </p>
+                                  <p className="md:hidden text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                    {genderLabel(t.gender)}
+                                    {age !== null && ` · ${age} yrs`}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="hidden md:block text-sm text-gray-600 dark:text-gray-300">
+                                {genderLabel(t.gender)}
+                                {age !== null && (
+                                  <span className="text-gray-400 dark:text-gray-500 text-xs ml-1">
+                                    · {age} yrs
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300 tabular-nums">
+                                <HiOutlineCalendar className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 shrink-0 md:hidden" />
+                                <span className="md:hidden text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500 mr-1">
+                                  DOB
+                                </span>
+                                {dobLabel}
+                              </div>
+
+                              <div className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300">
+                                <HiOutlineGlobeAlt className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 shrink-0 md:hidden" />
+                                <span className="md:hidden text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500 mr-1">
+                                  Nat.
+                                </span>
+                                {nationality}
+                              </div>
+
+                              <div className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300 min-w-0">
+                                <HiOutlineIdentification className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 shrink-0 md:hidden" />
+                                <span className="md:hidden text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500 mr-1">
+                                  Passport
+                                </span>
+                                <span
+                                  className={`truncate ${
+                                    hasPassport
+                                      ? "font-mono tracking-wide"
+                                      : "text-gray-400 dark:text-gray-500 italic"
+                                  }`}
+                                >
+                                  {hasPassport ? t.passportNo : "Not added"}
+                                </span>
+                              </div>
+
+                              <div className="flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => openEditForm(t)}
+                                  className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:text-[#0284c7] hover:bg-sky-50 dark:hover:bg-sky-950/30 opacity-70 group-hover:opacity-100 transition-all"
+                                  aria-label="Edit traveler"
+                                >
+                                  <HiOutlinePencil className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
                     </div>
 
-                    <ul className="divide-y divide-gray-100 dark:divide-gray-800">
-                      {travelers.map((t: any) => {
-                        const age = calcAge(t.dob);
-                        const dobLabel = formatDob(t.dob);
-                        const hasPassport = Boolean(t.passportNo?.trim());
-                        const nationality = t.nationalityCode || "—";
+                    {/* Pagination controls */}
+                    {totalPages > 1 && (
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-3.5 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Showing{" "}
+                          <span className="font-medium text-gray-700 dark:text-gray-300">
+                            {startIndex + 1}–{endIndex}
+                          </span>{" "}
+                          of{" "}
+                          <span className="font-medium text-gray-700 dark:text-gray-300">
+                            {totalItems}
+                          </span>
+                        </p>
 
-                        return (
-                          <li
-                            key={t.travelerId}
-                            className="group grid grid-cols-1 md:grid-cols-[minmax(200px,1.4fr)_100px_130px_90px_minmax(120px,1fr)_40px] gap-x-4 gap-y-2 items-center px-5 py-3.5 hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors"
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => goToPage(safePage - 1)}
+                            disabled={safePage <= 1}
+                            className="h-8 w-8 grid place-items-center rounded-lg border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-white dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            aria-label="Previous page"
                           >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <div className="shrink-0 w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-800 grid place-items-center text-xs font-semibold text-gray-600 dark:text-gray-300 tracking-wide">
-                                {initials(t.firstName, t.lastName)}
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-sm font-semibold text-gray-900 dark:text-gray-50 truncate">
-                                  {t.firstName} {t.lastName}
-                                </p>
-                                <p className="md:hidden text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                                  {genderLabel(t.gender)}
-                                  {age !== null && ` · ${age} yrs`}
-                                </p>
-                              </div>
-                            </div>
+                            <HiOutlineChevronLeft className="w-4 h-4" />
+                          </button>
 
-                            <div className="hidden md:block text-sm text-gray-600 dark:text-gray-300">
-                              {genderLabel(t.gender)}
-                              {age !== null && (
-                                <span className="text-gray-400 dark:text-gray-500 text-xs ml-1">
-                                  · {age} yrs
+                          {/* Page numbers – show a window around current page */}
+                          {Array.from({ length: totalPages }, (_, i) => i + 1)
+                            .filter((page) => {
+                              // Always show first, last, and pages near current
+                              if (page === 1 || page === totalPages) return true;
+                              return Math.abs(page - safePage) <= 1;
+                            })
+                            .reduce<(number | "ellipsis")[]>((acc, page, idx, arr) => {
+                              if (idx > 0 && page - (arr[idx - 1] as number) > 1) {
+                                acc.push("ellipsis");
+                              }
+                              acc.push(page);
+                              return acc;
+                            }, [])
+                            .map((item, idx) =>
+                              item === "ellipsis" ? (
+                                <span
+                                  key={`ellipsis-${idx}`}
+                                  className="h-8 w-8 grid place-items-center text-xs text-gray-400"
+                                >
+                                  …
                                 </span>
-                              )}
-                            </div>
+                              ) : (
+                                <button
+                                  key={item}
+                                  type="button"
+                                  onClick={() => goToPage(item)}
+                                  className={`h-8 min-w-[2rem] px-2 rounded-lg text-sm font-medium transition-colors ${
+                                    item === safePage
+                                      ? "bg-[#0284c7] text-white"
+                                      : "border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800"
+                                  }`}
+                                >
+                                  {item}
+                                </button>
+                              )
+                            )}
 
-                            <div className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300 tabular-nums">
-                              <HiOutlineCalendar className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 shrink-0 md:hidden" />
-                              <span className="md:hidden text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500 mr-1">
-                                DOB
-                              </span>
-                              {dobLabel}
-                            </div>
-
-                            <div className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300">
-                              <HiOutlineGlobeAlt className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 shrink-0 md:hidden" />
-                              <span className="md:hidden text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500 mr-1">
-                                Nat.
-                              </span>
-                              {nationality}
-                            </div>
-
-                            <div className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300 min-w-0">
-                              <HiOutlineIdentification className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 shrink-0 md:hidden" />
-                              <span className="md:hidden text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500 mr-1">
-                                Passport
-                              </span>
-                              <span
-                                className={`truncate ${
-                                  hasPassport
-                                    ? "font-mono tracking-wide"
-                                    : "text-gray-400 dark:text-gray-500 italic"
-                                }`}
-                              >
-                                {hasPassport ? t.passportNo : "Not added"}
-                              </span>
-                            </div>
-
-                            <div className="flex justify-end">
-                              <button
-                                type="button"
-                                onClick={() => openEditForm(t)}
-                                className="h-8 w-8 grid place-items-center rounded-lg text-gray-400 hover:text-[#0284c7] hover:bg-sky-50 dark:hover:bg-sky-950/30 opacity-70 group-hover:opacity-100 transition-all"
-                                aria-label="Edit traveler"
-                              >
-                                <HiOutlinePencil className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
+                          <button
+                            type="button"
+                            onClick={() => goToPage(safePage + 1)}
+                            disabled={safePage >= totalPages}
+                            className="h-8 w-8 grid place-items-center rounded-lg border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-white dark:hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            aria-label="Next page"
+                          >
+                            <HiOutlineChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>

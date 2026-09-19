@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { Suspense, useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { HiMenu, HiX, HiSupport, HiSun, HiMoon } from "react-icons/hi";
 import { HiOutlineUserCircle, HiOutlineUser, HiOutlineArrowRightOnRectangle, HiChevronDown } from "react-icons/hi2";
 import { MdFlight } from "react-icons/md";
@@ -20,6 +20,20 @@ const NAV_LINKS = [
 
 const PROFILE_NAME_STORAGE = "profileName";
 
+// Isolated reader for the `bookingStep` search param. Kept as its own
+// component so the useSearchParams() call can be wrapped in <Suspense>
+// without pulling the rest of the navbar out of static rendering.
+function PaymentStepFlag({ onChange }: { onChange: (isPaymentStep: boolean) => void }) {
+    const searchParams = useSearchParams();
+    const isPaymentStep = searchParams.get("bookingStep") === "payment";
+
+    useEffect(() => {
+        onChange(isPaymentStep);
+    }, [isPaymentStep, onChange]);
+
+    return null;
+}
+
 export default function Navbar() {
     const [scrolled, setScrolled] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
@@ -27,6 +41,7 @@ export default function Navbar() {
     const [loggedIn, setLoggedIn] = useState(false);
     const [profileName, setProfileName] = useState("");
     const [menuOpen, setMenuOpen] = useState(false);
+    const [isPaymentStep, setIsPaymentStep] = useState(false);
     const menuRef = useRef<HTMLDivElement | null>(null);
     const pathname = usePathname();
     const router = useRouter();
@@ -122,6 +137,12 @@ export default function Navbar() {
 
     return (
         <>
+            {/* Reads ?bookingStep=payment without blocking the rest of the navbar
+                from static rendering. Renders nothing visually. */}
+            <Suspense fallback={null}>
+                <PaymentStepFlag onChange={setIsPaymentStep} />
+            </Suspense>
+
             <header
                 className={`fixed inset-x-0 top-0 z-50 w-full h-16 transition-all duration-300 ${
                     scrolled
@@ -172,62 +193,78 @@ export default function Navbar() {
                             )}
                         </button>
 
-                        {loggedIn ? (
-                            <div
-                                ref={menuRef}
-                                className="hidden sm:block relative"
-                                onMouseEnter={() => setMenuOpen(true)}
-                                onMouseLeave={() => setMenuOpen(false)}
-                            >
-                                <button
-                                    type="button"
-                                    onClick={() => setMenuOpen((v) => !v)}
-                                    aria-haspopup="menu"
-                                    aria-expanded={menuOpen}
-                                    className="flex items-center gap-1.5 h-9 pl-2 pr-3 rounded-full border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                                >
-                                    <HiOutlineUserCircle className="w-6 h-6 text-gray-500 dark:text-gray-400" />
-                                    <span className="max-w-[110px] truncate text-sm font-medium">
-                                        {profileName || "Account"}
-                                    </span>
-                                    <HiChevronDown className={`w-4 h-4 text-gray-400 dark:text-gray-500 transition-transform ${menuOpen ? "rotate-180" : ""}`} />
-                                </button>
-
-                                {menuOpen && (
+                       
+                        {!isPaymentStep && (
+                            <>
+                                {loggedIn ? (
                                     <div
-                                        role="menu"
-                                        className="absolute right-0 top-full pt-2 w-48"
+                                        ref={menuRef}
+                                        className="hidden sm:block relative"
+                                        onMouseEnter={() => setMenuOpen(true)}
+                                        onMouseLeave={() => setMenuOpen(false)}
                                     >
-                                        <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg py-1.5 overflow-hidden">
-                                            <Link
-                                                href="/my-profile"
-                                                role="menuitem"
-                                                onClick={() => setMenuOpen(false)}
-                                                className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
-                                            >
-                                                <HiOutlineUser className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-                                                My Profile
-                                            </Link>
-                                            <button
-                                                type="button"
-                                                role="menuitem"
-                                                onClick={handleLogout}
-                                                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
-                                            >
-                                                <HiOutlineArrowRightOnRectangle className="w-4 h-4" />
-                                                Log out
-                                            </button>
-                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setMenuOpen((v) => !v)}
+                                            aria-haspopup="menu"
+                                            aria-expanded={menuOpen}
+                                            className="flex items-center gap-1.5 h-9 pl-2 pr-3 rounded-full border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                                        >
+                                            <HiOutlineUserCircle className="w-6 h-6 text-gray-500 dark:text-gray-400" />
+                                            <span className="max-w-[110px] truncate text-sm font-medium">
+                                                {profileName || "Account"}
+                                            </span>
+                                            <HiChevronDown className={`w-4 h-4 text-gray-400 dark:text-gray-500 transition-transform ${menuOpen ? "rotate-180" : ""}`} />
+                                        </button>
+
+                                  {menuOpen && (
+    <div
+        role="menu"
+        className="absolute right-0 top-full pt-2 w-48"
+    >
+        <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg py-1.5 overflow-hidden">
+            <Link
+                href="/my-profile"
+                role="menuitem"
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+                <HiOutlineUser className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                My Profile
+            </Link>
+
+            <Link
+                href="/my-bookings"
+                role="menuitem"
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+                <FiClipboard className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                My Trips
+            </Link>
+
+            <button
+                type="button"
+                role="menuitem"
+                onClick={handleLogout}
+                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
+            >
+                <HiOutlineArrowRightOnRectangle className="w-4 h-4" />
+                Log out
+            </button>
+        </div>
+    </div>
+)}
                                     </div>
+                                ) : (
+                                    <button
+                                        onClick={() => setLoginOpen(true)}
+                                        className="hidden sm:inline-flex items-center justify-center h-9 px-4 rounded-full bg-[#FF7626] text-white text-sm font-semibold hover:bg-[#e6661f] transition-colors"
+                                    >
+                                        Sign in
+                                    </button>
                                 )}
-                            </div>
-                        ) : (
-                            <button
-                                onClick={() => setLoginOpen(true)}
-                                className="hidden sm:inline-flex items-center justify-center h-9 px-4 rounded-full bg-[#FF7626] text-white text-sm font-semibold hover:bg-[#e6661f] transition-colors"
-                            >
-                                Sign in
-                            </button>
+                            </>
                         )}
 
                         <button
@@ -243,30 +280,43 @@ export default function Navbar() {
                 {mobileOpen && (
                     <div className="lg:hidden border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
                         <div className="max-w-7xl mx-auto px-4 py-3 space-y-0.5">
-                            {loggedIn ? (
+                            
+                            {!isPaymentStep && (
                                 <>
-                                    <Link
-                                        href="/my-profile"
-                                        onClick={() => setMobileOpen(false)}
-                                        className="flex items-center gap-2 justify-center mb-2 py-2.5 rounded-full border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-semibold text-sm"
-                                    >
-                                        <HiOutlineUserCircle className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-                                        {profileName || "My Profile"}
-                                    </Link>
-                                    <button
-                                        onClick={() => { handleLogout(); setMobileOpen(false); }}
-                                        className="block w-full text-center mb-2 py-2.5 rounded-full border border-gray-200 dark:border-gray-700 text-red-500 dark:text-red-400 font-semibold text-sm"
-                                    >
-                                        Log out
-                                    </button>
+                                    {loggedIn ? (
+                                        <>
+                                            <Link
+                                                href="/my-profile"
+                                                onClick={() => setMobileOpen(false)}
+                                                className="flex items-center gap-2 justify-center mb-2 py-2.5 rounded-full border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-semibold text-sm"
+                                            >
+                                                <HiOutlineUserCircle className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                                                {profileName || "My Profile"}
+                                            </Link>
+<Link
+    href="/my-bookings"
+    onClick={() => setMobileOpen(false)}
+    className="flex items-center gap-2 justify-center mb-2 py-2.5 rounded-full border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-semibold text-sm"
+>
+    <FiClipboard className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+    My Trips
+</Link>
+                                            <button
+                                                onClick={() => { handleLogout(); setMobileOpen(false); }}
+                                                className="block w-full text-center mb-2 py-2.5 rounded-full border border-gray-200 dark:border-gray-700 text-red-500 dark:text-red-400 font-semibold text-sm"
+                                            >
+                                                Log out
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <button
+                                            onClick={() => { setLoginOpen(true); setMobileOpen(false); }}
+                                            className="block w-full text-center mb-2 py-2.5 rounded-full bg-[#FF7626] text-white font-semibold text-sm"
+                                        >
+                                            Sign in
+                                        </button>
+                                    )}
                                 </>
-                            ) : (
-                                <button
-                                    onClick={() => { setLoginOpen(true); setMobileOpen(false); }}
-                                    className="block w-full text-center mb-2 py-2.5 rounded-full bg-[#FF7626] text-white font-semibold text-sm"
-                                >
-                                    Sign in
-                                </button>
                             )}
                             {visibleNavLinks.map(({ href, label, icon: Icon }) => (
                                 <Link

@@ -10,8 +10,8 @@ export type BillingAddress = {
     pinCode: string;
     address: string;
     city: string;
-    state: string;     
-    stateCode: string; 
+    state: string;
+    stateCode: string;
     profileUpdate: boolean;
 };
 
@@ -86,12 +86,9 @@ export default function BillingAddressForm({
                 if (!cancelled) setLoading(false);
             });
 
-        return () => {
-            cancelled = true;
-        };
+        return () => { cancelled = true; };
     }, []);
 
-    // Look up state from PIN code once 6 digits are entered
     useEffect(() => {
         const pin = billing.pinCode.trim();
 
@@ -123,7 +120,7 @@ export default function BillingAddressForm({
                 state: result.stateName,
                 stateCode: result.stateCode,
             }));
-        }, 300); // debounce so we don't fire on every keystroke
+        }, 300);
 
         return () => {
             cancelled = true;
@@ -139,8 +136,18 @@ export default function BillingAddressForm({
         setBilling((prev) => ({ ...prev, ...patch }));
     }
 
+    const label = (text: string) => (
+        <label className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1 block">
+            {text}{mandatory ? " *" : ""}
+        </label>
+    );
+
+    const inputClass =
+        "w-full h-10 rounded-lg border border-gray-200 dark:border-gray-700 px-3 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-[#1c8fc7] bg-white dark:bg-gray-900 transition-colors";
+
     return (
         <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 sm:p-6">
+            {/* Header */}
             <div className="flex items-center gap-2 mb-4">
                 <span className="grid place-items-center w-8 h-8 rounded-full bg-[#e8f4fb] text-[#1c8fc7] shrink-0">
                     <HiOutlineHome className="w-4 h-4" />
@@ -149,45 +156,25 @@ export default function BillingAddressForm({
                     Billing Address
                 </h3>
                 {loading && (
-                    <span className="text-xs text-gray-400 dark:text-gray-500 ml-1">Loading saved address…</span>
+                    <span className="text-xs text-gray-400 dark:text-gray-500 ml-1">
+                        Loading saved address…
+                    </span>
                 )}
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="col-span-2 sm:col-span-4">
-                    <label className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1 block">
-                        Address{mandatory ? " *" : ""}
-                    </label>
-                    <input
-                        value={billing.address}
-                        onChange={(e) => update({ address: e.target.value })}
-                        placeholder="House / flat no., street, area"
-                        className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-700 px-3 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-[#1c8fc7]"
-                    />
-                </div>
+            {/* 2×2 grid */}
+            <div className="grid grid-cols-2 gap-3">
 
-                <div className="col-span-1 sm:col-span-2">
-                    <label className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1 block">
-                        City{mandatory ? " *" : ""}
-                    </label>
-                    <input
-                        value={billing.city}
-                        onChange={(e) => update({ city: e.target.value })}
-                        className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-700 px-3 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-[#1c8fc7]"
-                    />
-                </div>
-
+                {/* Row 1 — PIN Code | State */}
                 <div>
-                    <label className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1 block">
-                        PIN Code{mandatory ? " *" : ""}
-                    </label>
+                    {label("PIN Code")}
                     <div className="relative">
                         <input
                             value={billing.pinCode}
                             maxLength={6}
                             inputMode="numeric"
                             onChange={(e) => update({ pinCode: e.target.value.replace(/\D/g, "") })}
-                            className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-700 px-3 pr-8 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-[#1c8fc7]"
+                            className={`${inputClass} pr-8`}
                         />
                         {pinLoading && (
                             <AiOutlineLoading3Quarters className="w-4 h-4 text-gray-400 animate-spin absolute right-2.5 top-1/2 -translate-y-1/2" />
@@ -199,18 +186,38 @@ export default function BillingAddressForm({
                 </div>
 
                 <div>
-                    <label className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1 block">
-                        State{mandatory ? " *" : ""}
-                    </label>
+                    {label("State")}
                     <input
                         value={billing.state}
                         readOnly
-                        placeholder="Auto-filled from PIN code"
-                        className="w-full h-10 rounded-lg border border-gray-200 dark:border-gray-700 px-3 text-sm text-gray-900 dark:text-gray-100 outline-none bg-gray-50 dark:bg-gray-800 cursor-not-allowed"
+                        placeholder="Auto-filled from PIN"
+                        className={`${inputClass} bg-gray-50 dark:bg-gray-800 cursor-not-allowed`}
                     />
                 </div>
+
+                {/* Row 2 — City | Address */}
+                <div>
+                    {label("City")}
+                    <input
+                        value={billing.city}
+                        onChange={(e) => update({ city: e.target.value })}
+                        className={inputClass}
+                    />
+                </div>
+
+                <div>
+                    {label("Address")}
+                    <input
+                        value={billing.address}
+                        onChange={(e) => update({ address: e.target.value })}
+                        placeholder="House / flat no., street, area"
+                        className={inputClass}
+                    />
+                </div>
+
             </div>
 
+            {/* Save to profile checkbox */}
             <label className="mt-4 flex items-start gap-2.5 cursor-pointer select-none">
                 <input
                     type="checkbox"

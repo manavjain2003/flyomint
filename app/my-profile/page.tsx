@@ -211,7 +211,7 @@ export default function MyProfilePage() {
         return (
             <div className="flex-1 bg-[#f5f8fb]">
                 <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex items-center gap-3">
+                    <div className="max-w-8xl mx-auto px-4 sm:px-6 py-6 flex items-center gap-3">
                         <span className="grid place-items-center w-9 h-9 rounded-full bg-[#FF7626]/10 shrink-0">
                             <HiOutlineUser className="w-5 h-5 text-[#FF7626]" />
                         </span>
@@ -222,7 +222,7 @@ export default function MyProfilePage() {
                     </div>
                 </div>
 
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+                <div className="max-w-8xl mx-auto px-4 sm:px-6 py-8">
                     <div className="flex flex-col md:flex-row gap-6">
                         <aside className="w-full md:w-64 shrink-0">
                             <AccountSidebar />
@@ -251,7 +251,7 @@ export default function MyProfilePage() {
     return (
         <div className="flex-1 bg-dark dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
             <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex items-center gap-3">
+                <div className="max-w-8xl mx-auto px-4 sm:px-6 py-6 flex items-center gap-3">
                     <span className="grid place-items-center w-9 h-9 rounded-full bg-[#FF7626]/10 shrink-0">
                         <HiOutlineUser className="w-5 h-5 text-[#FF7626]" />
                     </span>
@@ -262,7 +262,7 @@ export default function MyProfilePage() {
                 </div>
             </div>
 
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+            <div className="max-w-8xl mx-auto px-4 sm:px-6 py-8">
                 <div className="flex flex-col md:flex-row gap-6">
                     <aside className="w-full md:w-64 shrink-0">
                         <AccountSidebar />

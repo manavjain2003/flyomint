@@ -284,7 +284,7 @@ const [hoveredFare, setHoveredFare] = useState<Exclude<SpecialFare, "regular"> |
                                         setFromOpen(true);
                                         setFromQuery("");
                                     }}
-                                    placeholder={formatAirportField(draft.from, draft.fromCity, fromAirportDetail) || "DEL"}
+                                    placeholder={formatAirportField(draft.from, draft.fromCity) || "DEL"}
                                     className="w-full bg-transparent text-sm font-bold text-gray-900 dark:text-gray-100 outline-none"
                                 />
                             </div>
@@ -309,7 +309,7 @@ const [hoveredFare, setHoveredFare] = useState<Exclude<SpecialFare, "regular"> |
                                     }`}
                             >
                                 <input
-                                    value={toOpen ? toQuery : formatAirportField(draft.to, draft.toCity, toAirportDetail)}
+                                    value={toOpen ? toQuery : formatAirportField(draft.to, draft.toCity)}
                                     onChange={(e) => {
                                         setToQuery(e.target.value.toUpperCase());
                                         setToOpen(true);
@@ -318,7 +318,7 @@ const [hoveredFare, setHoveredFare] = useState<Exclude<SpecialFare, "regular"> |
                                         setToOpen(true);
                                         setToQuery("");
                                     }}
-                                    placeholder={formatAirportField(draft.to, draft.toCity, toAirportDetail) || "BOM"}
+                                    placeholder={formatAirportField(draft.to, draft.toCity) || "BOM"}
                                     className="w-full bg-transparent text-sm font-bold text-gray-900 dark:text-gray-100 outline-none"
                                 />
                             </div>
@@ -349,7 +349,7 @@ const [hoveredFare, setHoveredFare] = useState<Exclude<SpecialFare, "regular"> |
                         <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">Departure</p>
                         <DatePicker
                             selected={draftDeparture}
-                            onChange={(date) => {
+                            onChange={(date: Date | null) => {
                                 if (!date) return;
                                 setDraftDeparture(date);
                                 if (draftReturn && draftReturn < date) setDraftReturn(date);
@@ -369,7 +369,7 @@ const [hoveredFare, setHoveredFare] = useState<Exclude<SpecialFare, "regular"> |
     <DatePicker
         key={draftDeparture.getTime()}  
         selected={draftReturn}
-        onChange={(date) => {
+       onChange={(date: Date | null) => {
             if (!date) return;
             setDraftReturn(date);
             setDraft((d) => ({ ...d, tripType: "roundtrip" }));

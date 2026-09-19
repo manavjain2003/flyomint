@@ -41,10 +41,10 @@ export default function FlightCard({
 }) {
     const firstSeg = journey.Segments[0];
     const lastSeg = journey.Segments[journey.Segments.length - 1];
-    const fares = useMemo(
-        () => [...journey.FareInfo].sort((a, b) => primaryFareAmount(a) - primaryFareAmount(b)),
-        [journey]
-    );
+ const fares = useMemo(
+    () => [...(journey.FareInfo ?? [])].sort((a, b) => primaryFareAmount(a) - primaryFareAmount(b)),
+    [journey]
+);
     const [selectedFareIdx, setSelectedFareIdx] = useState(0);
     const [fareDropdownOpen, setFareDropdownOpen] = useState(false);
     const fare = fares[selectedFareIdx];

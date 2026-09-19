@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import FlightResults from "@/app/components/flights/FlightResults";
 import ReviewBooking from "@/app/components/booking/ReviewBooking";
@@ -33,7 +33,22 @@ const REVIEW_KEY = "flyomint_review_payload";
 const BOOKING_KEY = "flyomint_booking_data";
 const ADDONS_KEY = "flyomint_addons_data";
 
-export default function FlightResultsPage() {
+
+export default function FlightResultsPageWrapper() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="w-12 h-12 rounded-full border-4 border-[#1c8fc7]/20 border-t-[#1c8fc7] animate-spin" />
+        </div>
+      }
+    >
+      <FlightResultsPage />
+    </Suspense>
+  );
+}
+
+function FlightResultsPage() {
   const router = useRouter();
   const params = useSearchParams();
 
