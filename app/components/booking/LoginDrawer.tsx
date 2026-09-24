@@ -38,7 +38,29 @@ export function clearLoginSession() {
 }
 
 export function isLoggedInSession(): boolean {
-    return Boolean(getStoredUniqueKey());
+    const uniqueKey = getStoredUniqueKey();
+    if (!uniqueKey) return false;
+
+    const validity = localStorage.getItem(LOGIN_VALIDITY_KEY);
+    if (!validity) {
+        // No expiry on record for a stored key — treat as untrustworthy
+        // rather than silently logged-in forever.
+        clearLoginSession();
+        return false;
+    }
+
+    const expiresAt = new Date(validity).getTime();
+    if (Number.isNaN(expiresAt) || expiresAt <= Date.now()) {
+        // Stale/expired login session (e.g. from a previous visit whose
+        // background refresh never got a chance to run before the tab was
+        // closed). Wipe it here so the rest of the app — starting with
+        // whatever just called this — doesn't keep treating an expired
+        // token as a logged-in account.
+        clearLoginSession();
+        return false;
+    }
+
+    return true;
 }
 
 export default function LoginDrawer({ open, onClose, onLoginSuccess }: LoginDrawerProps) {

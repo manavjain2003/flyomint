@@ -474,31 +474,35 @@ export async function getAirlineTrvlItinerary({
       tokenId: payload.TokenID,
       transactionId: payload.TransactionID,
       bookingId: payload.BookingID,
-      fareInfo: (payload.FareInfo || [])
-        .filter((f) => f != null) 
-        .map((f) => ({
-          pgDetails: {
-            pgId: f.PGDetails?.PGID,
-            pgCode: f.PGDetails?.PGCode,
-            pgName: f.PGDetails?.PGName,
-            pgDescription: f.PGDetails?.PGDescription,
-          },
-          baseFare: f.BaseFare,
-          tax: f.Tax,
-          convenienceFee: f.ConvenienceFee,
-          discount: f.Discount,
-          instantOff: f.InstantOff,
-          markUp: f.MarkUp,
-          addOns: f.AddOns,
-          addOnDetails: f.AddOnDetails || [],
-          wallet: f.Wallet,
-          amountToBePaid: f.AmountToBePaid,
-          ptcFares: (f.PTCFares || []).map((p) => ({
-            ptc: p.PTC,
-            fare: p.Fare,
-            tax: p.Tax,
-          })),
-        })),
+   fareInfo: (payload.FareInfo || [])
+  .filter((f) => f != null)
+  .map((f) => ({
+    pgDetails: {
+      pgId: f.PGDetails?.PGID,
+      pgCode: f.PGDetails?.PGCode,
+      pgName: f.PGDetails?.PGName,
+      pgDescription: f.PGDetails?.PGDescription,
+    },
+    baseFare: f.BaseFare,
+    tax: f.Tax,
+    convenienceFee: f.ConvenienceFee,
+    discount: f.Discount,
+    instantOff: f.InstantOff,
+    markUp: f.MarkUp,
+    addOns: f.AddOns,
+    addOnDetails: f.AddOnDetails || [],
+    wallet: f.Wallet,
+    amountToBePaid: f.AmountToBePaid,
+    ptcFares: (f.PTCFares || []).map((p) => ({
+      ptc: p.PTC,
+      fare: p.Fare,
+      tax: p.Tax,
+    })),
+    pgLogos: (f.PGLogos || []).map((l) => ({
+      name: l.LogoName ?? "",
+      path: l.LogoPath ?? "",
+    })).filter((l) => !!l.path),
+  })),
     };
   } catch (error) {
     if (error instanceof ApiError) {

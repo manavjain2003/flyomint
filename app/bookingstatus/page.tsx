@@ -3,7 +3,8 @@
 import { Suspense, useEffect, useState, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { pollBookingConfirmation, getAirlineBookingRetrieve, getETicketCopy, getAirlineInvoice } from "@/app/lib/flightsapi";
-import { HiOutlineCreditCard, HiOutlinePaperAirplane } from "react-icons/hi2";
+import { HiOutlineCreditCard, HiOutlinePaperAirplane, HiOutlinePhone, HiOutlineEnvelope } from "react-icons/hi2";
+import AirlineLogo from "@/app/components/flights/AirlineLogo";
 
 type SSR = {
   SID: number;
@@ -28,12 +29,16 @@ type Segment = {
   AirlineCode: string;
   AirlineName: string;
   VACLogo?: string;
+  MACLogo?: string;
+  OACLogo?: string;
   DepartureTime: string;
   ArrivalTime: string;
   DepartureAirportCode: string;
   ArrivalAirportCode: string;
   DepartureCityName: string;
   ArrivalCityName: string;
+  DepartureAirportName?: string;
+  ArrivalAirportName?: string;
   DepartureTerminal?: string;
   ArrivalTerminal?: string;
   Cabin?: string;
@@ -42,7 +47,7 @@ type Segment = {
 };
 
 type PTCFare = {
-  PTC: string; // "ADT" | "CHD" | "INF"
+  PTC: string;
   Fare: number;
   Tax: number;
   Discount: number;
@@ -106,11 +111,12 @@ const CABIN_LABELS: Record<string, string> = {
   J: "Business",
   F: "First",
 };
+
 function getMessageExpiry(paymentTime?: string): Date | null {
   if (!paymentTime) return null;
   const base = new Date(paymentTime);
   if (isNaN(base.getTime())) return null;
-  return new Date(base.getTime() + 20 * 60 * 1000); // PaymentTime + 20 min
+  return new Date(base.getTime() + 20 * 60 * 1000);
 }
 
 function ClockIcon({ className }: { className?: string }) {
@@ -145,6 +151,7 @@ function CountdownTimer({ expiresAt }: { expiresAt: Date }) {
     </span>
   );
 }
+
 const PENDING_STATUSES = [
   "PENDING",
   "BOOKING INITIATE",
@@ -161,9 +168,6 @@ function isPendingStatus(status?: string) {
   return PENDING_STATUSES.includes(status.toUpperCase().trim());
 }
 
-// Explicit allow-list: a journey is only "confirmed" if the API says so.
-// Anything unrecognized (new/typo'd statuses from the airline) falls through
-// as "not confirmed" instead of silently being treated as confirmed.
 function isConfirmedStatus(status?: string) {
   if (!status) return false;
   return CONFIRMED_STATUSES.includes(status.toUpperCase().trim());
@@ -193,12 +197,62 @@ function cabinLabel(code?: string) {
   return CABIN_LABELS[code] ?? code;
 }
 
+const AIRLINE_PHONES: Record<string, string> = {
+  "6E": "0124-6173838",
+  IX: "0124-6173838",
+  AI: "0124-2640888",
+  UK: "0124-6173838",
+  SG: "0120-2444415",
+  G8: "0120-711-1000",
+  QP: "0120-444-4444",
+};
+
+function getAirlinePhone(airlineCode?: string): string {
+  if (!airlineCode) return "—";
+  return AIRLINE_PHONES[airlineCode.toUpperCase()] ?? "—";
+}
+
 function travelerName(t: Traveler) {
   return [t.Title, t.FirstName, t.LastName].filter(Boolean).join(" ");
 }
 
-function findSSR(t: Traveler, type: string) {
-  return t.SSRL?.find((s) => s.SSRType === type)?.SSRDesc || "—";
+function travelerPaxTypeLabel(t: Traveler) {
+  const map: Record<string, string> = { A: "Adult", C: "Child", I: "Infant" };
+  const gender = t.Title === "MRS" || t.Title === "MS" ? "Female" : "Male";
+  return `${map[t.PaxType] ?? t.PaxType}, ${gender}`;
+}
+
+/**
+ * Find addon SSRs for a given segment SID and type.
+ * Excludes SSRCode "BAG" from type "2" — that's the free included allowance,
+ * shown separately above the table.
+ */
+function findSSRAddon(t: Traveler, sid: string | number, type: string): string {
+  const sidStr = String(sid);
+  const matches = t.SSRL?.filter(
+    (s) =>
+      s.SSRType === type &&
+      String(s.SID) === sidStr &&
+      !(type === "2" && s.SSRCode === "BAG")
+  );
+  if (!matches || matches.length === 0) return "--";
+  return matches.map((s) => s.SSRDesc).join(", ");
+}
+
+/**
+ * Get included (free) baggage from BAG SSR for a specific segment SID.
+ * SSRDesc format: "15 KG,7 KG" → [checkin, cabin]
+ */
+function getFreeBaggage(travelers: Traveler[], segSID: string | number): { cabin: string; checkin: string } | null {
+  const t = travelers[0];
+  if (!t?.SSRL) return null;
+  const sidStr = String(segSID);
+  const bagSsr = t.SSRL.find(
+    (s) => s.SSRCode === "BAG" && s.SSRType === "2" && String(s.SID) === sidStr
+  );
+  if (!bagSsr) return null;
+  const parts = bagSsr.SSRDesc.split(",").map((p) => p.trim());
+  return { checkin: parts[0] ?? "", cabin: parts[1] ?? "" };
 }
 
 type Stage = "checking" | "landing" | "paymentFailed" | "bookingFailed";
@@ -278,6 +332,7 @@ function BookingConfirmationPage() {
       return next;
     });
   }
+
   async function handleDownloadTicket() {
     if (!booking?.TransactionID || downloadingTicket) return;
     setDownloadingTicket(true);
@@ -294,7 +349,7 @@ function BookingConfirmationPage() {
         return;
       }
       const url = window.URL.createObjectURL(res.data.blob);
-     const a = document.createElement("a");
+      const a = document.createElement("a");
       a.href = url;
       a.download = `e-ticket-${refNo || booking.TransactionID}.pdf`;
       document.body.appendChild(a);
@@ -333,6 +388,7 @@ function BookingConfirmationPage() {
       setDownloadingInvoice(false);
     }
   }
+
   function toggleTraveler(paxId: number) {
     setSelectedTravelers((prev) => {
       const next = new Set(prev);
@@ -354,131 +410,125 @@ function BookingConfirmationPage() {
     let cancelled = false;
     const controller = new AbortController();
 
-async function runBookingRetrieve() {
-  if (!transactionId || cancelled) return;
+    async function runBookingRetrieve() {
+      if (!transactionId || cancelled) return;
 
-  let retrieved: any;
-  try {
-    retrieved = await getAirlineBookingRetrieve({
-      transactionId: transactionId!,
-      signal: controller.signal,
-    });
-  } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") return;
-    throw err;
-  }
-
-  if (cancelled) return;
-
-  if (!retrieved?.success) {
-    if (pollCountRef.current < 5) {
-      pollCountRef.current += 1;
-      setBookingStatus("pending");
-      setStage("landing");
-      pollTimerRef.current = setTimeout(() => {
-        if (!cancelled) runBookingRetrieve();
-      }, 60_000);
-      return;
-    }
-
-    setBookingStatus("failed");
-    setFailReason(
-      retrieved?.message ||
-        "We couldn't confirm your booking. If any amount was deducted, please contact support with your transaction ID."
-    );
-    setFailedAt(new Date());
-    setStage("bookingFailed");
-    return;
-  }
-
-  const payload: ServiceResponse | null = retrieved.raw ?? null;
-
-  if (payload && payload.Journey?.length) {
-    setBooking(payload);
-
-    const hasPendingJourney = payload.Journey.some((j) => isPendingStatus(j.BookingStatus));
-    const pendingJourneyWithMessage = payload.Journey.find(
-      (j) => isPendingStatus(j.BookingStatus) && !!j.Message?.trim()
-    );
-
-    if (hasPendingJourney) {
-      if (pendingJourneyWithMessage) {
-        // Message exists → show the airline-provided pending message
-        setPendingMessage(pendingJourneyWithMessage.Message || null);
-      } else {
-        setPendingMessage(null);
+      let retrieved: any;
+      try {
+        retrieved = await getAirlineBookingRetrieve({
+          transactionId: transactionId!,
+          signal: controller.signal,
+        });
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") return;
+        throw err;
       }
 
-      setBookingStatus("pending");
-      setStage("landing");
+      if (cancelled) return;
 
-      pollCountRef.current += 1;
-      const nextDelay = pollCountRef.current <= 5 ? 60_000 : 300_000;
-      pollTimerRef.current = setTimeout(() => {
-        if (!cancelled) runBookingRetrieve();
-      }, nextDelay);
-    } else {
-      // All journeys confirmed
-      setBookingStatus("success");
-      setPendingMessage(null);
-      setStage("landing");
-      sessionStorage.removeItem("pendingBooking");
+      if (!retrieved?.success) {
+        if (pollCountRef.current < 5) {
+          pollCountRef.current += 1;
+          setBookingStatus("pending");
+          setStage("landing");
+          pollTimerRef.current = setTimeout(() => {
+            if (!cancelled) runBookingRetrieve();
+          }, 60_000);
+          return;
+        }
+
+        setBookingStatus("failed");
+        setFailReason(
+          retrieved?.message ||
+            "We couldn't confirm your booking. If any amount was deducted, please contact support with your transaction ID."
+        );
+        setFailedAt(new Date());
+        setStage("bookingFailed");
+        return;
+      }
+
+      const payload: ServiceResponse | null = retrieved.raw ?? null;
+
+      if (payload && payload.Journey?.length) {
+        setBooking(payload);
+
+        const hasPendingJourney = payload.Journey.some((j) => isPendingStatus(j.BookingStatus));
+        const pendingJourneyWithMessage = payload.Journey.find(
+          (j) => isPendingStatus(j.BookingStatus) && !!j.Message?.trim()
+        );
+
+        if (hasPendingJourney) {
+          if (pendingJourneyWithMessage) {
+            setPendingMessage(pendingJourneyWithMessage.Message || null);
+          } else {
+            setPendingMessage(null);
+          }
+
+          setBookingStatus("pending");
+          setStage("landing");
+
+          pollCountRef.current += 1;
+          const nextDelay = pollCountRef.current <= 5 ? 60_000 : 300_000;
+          pollTimerRef.current = setTimeout(() => {
+            if (!cancelled) runBookingRetrieve();
+          }, nextDelay);
+        } else {
+          setBookingStatus("success");
+          setPendingMessage(null);
+          setStage("landing");
+          sessionStorage.removeItem("pendingBooking");
+        }
+      } else {
+        setBookingStatus("pending");
+        setStage("landing");
+
+        pollCountRef.current += 1;
+        const nextDelay = pollCountRef.current <= 5 ? 60_000 : 300_000;
+        pollTimerRef.current = setTimeout(() => {
+          if (!cancelled) runBookingRetrieve();
+        }, nextDelay);
+      }
     }
-  } else {
-    setBookingStatus("pending");
-    setStage("landing");
 
-    pollCountRef.current += 1;
-    const nextDelay = pollCountRef.current <= 5 ? 60_000 : 300_000;
-    pollTimerRef.current = setTimeout(() => {
-      if (!cancelled) runBookingRetrieve();
-    }, nextDelay);
-  }
-}
+    async function checkPayment() {
+      if (cancelled) return;
+      setCheckStep("payment");
 
+      let pay: any;
+      try {
+        pay = await pollBookingConfirmation(transactionId!, { signal: controller.signal });
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") return;
+        throw err;
+      }
+      if (cancelled) return;
 
-async function checkPayment() {
-  if (cancelled) return;
-  setCheckStep("payment");
+      if (pay.stage === "payment") {
+        if (pay.status === "success") {
+          setPaymentStatus("success");
+        } else if (pay.status === "pending") {
+          setPaymentStatus("pending");
+          setBookingStatus("pending");
+          setStage("landing");
+          return;
+        } else {
+          setPaymentStatus("failed");
+          setFailReason(
+            pay.message ||
+              "We're having trouble processing your payment. Please try again or contact support for further queries."
+          );
+          setFailedAt(new Date());
+          setStage("paymentFailed");
+          return;
+        }
+      } else {
+        setPaymentStatus("success");
+      }
 
-  let pay: any;
-  try {
-    pay = await pollBookingConfirmation(transactionId!, { signal: controller.signal });
-  } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") return;
-    throw err;
-  }
-  if (cancelled) return;
-
-  if (pay.stage === "payment") {
-    if (pay.status === "success") {
-      setPaymentStatus("success");
-    } else if (pay.status === "pending") {
-      setPaymentStatus("pending");
-      setBookingStatus("pending");
-      setStage("landing");
-      return;
-    } else {
-      setPaymentStatus("failed");
-      setFailReason(
-        pay.message ||
-          "We're having trouble processing your payment. Please try again or contact support for further queries."
-      );
-      setFailedAt(new Date());
-      setStage("paymentFailed");
-      return;
+      setCheckStep("booking");
+      pollCountRef.current = 0;
+      await runBookingRetrieve();
     }
-  } else {
-    // stage === "booking" → payment already succeeded by definition.
-    // Don't treat a failed/pending booking-status check as a payment failure;
-    // runBookingRetrieve below does the fuller, authoritative check.
-    setPaymentStatus("success");
-  }
-
-  setCheckStep("booking");
-  pollCountRef.current = 0;
-  await runBookingRetrieve();
-}
 
     checkPaymentRef.current = checkPayment;
     checkPayment();
@@ -513,171 +563,137 @@ async function checkPayment() {
     return <CheckingScreen step={checkStep} />;
   }
 
-if (stage === "paymentFailed") {
-  const isAuthError = /not a valid login|unauthorized|session|token|login/i.test(
-    failReason || ""
-  );
-
-  return (
-    <PaymentFailedCard
-      title={isAuthError ? "Session expired" : "Oh no! Payment Failed."}
-      message={
-        isAuthError
-          ? "Your session is no longer valid. Please log in again and retry from your bookings."
-          : failReason
-      }
-      cfLinkId={transactionId ?? "—"}
-      dateTime={
-        failedAt
-          ? failedAt.toLocaleString("en-IN", {
-              day: "2-digit",
-              month: "short",
-              year: "2-digit",
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: true,
-            })
-          : ""
-      }
-      buttonLabel={isAuthError ? "Login" : "Contact Support"}
-      onTryAgain={() => {
-        if (isAuthError) {
-          router.push("/login");
-        } else {
-          router.push("/contact");
+  if (stage === "paymentFailed") {
+    const isAuthError = /not a valid login|unauthorized|session|token|login/i.test(failReason || "");
+    return (
+      <PaymentFailedCard
+        title={isAuthError ? "Session expired" : "Oh no! Payment Failed."}
+        message={
+          isAuthError
+            ? "Your session is no longer valid. Please log in again and retry from your bookings."
+            : failReason
         }
-      }}
-    />
-  );
-}
+        cfLinkId={transactionId ?? "—"}
+        dateTime={
+          failedAt
+            ? failedAt.toLocaleString("en-IN", {
+                day: "2-digit",
+                month: "short",
+                year: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: true,
+              })
+            : ""
+        }
+        buttonLabel={isAuthError ? "Login" : "Contact Support"}
+        onTryAgain={() => {
+          if (isAuthError) router.push("/login");
+          else router.push("/contact");
+        }}
+      />
+    );
+  }
 
-if (stage === "bookingFailed") {
-  return (
-    <PaymentFailedCard
-      title="We couldn't confirm your booking"
-      message={failReason}
-      cfLinkId={transactionId ?? "—"}
-      dateTime={
-        failedAt
-          ? failedAt.toLocaleString("en-IN", {
-              day: "2-digit",
-              month: "short",
-              year: "2-digit",
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: true,
-            })
-          : ""
-      }
-      buttonLabel="Contact Support"
-      onTryAgain={() => router.push("/contact")}
-    />
-  );
-}
+  if (stage === "bookingFailed") {
+    return (
+      <PaymentFailedCard
+        title="We couldn't confirm your booking"
+        message={failReason}
+        cfLinkId={transactionId ?? "—"}
+        dateTime={
+          failedAt
+            ? failedAt.toLocaleString("en-IN", {
+                day: "2-digit",
+                month: "short",
+                year: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: true,
+              })
+            : ""
+        }
+        buttonLabel="Contact Support"
+        onTryAgain={() => router.push("/contact")}
+      />
+    );
+  }
 
   if (!booking && stage !== "landing") return null;
-const messageExpiry = getMessageExpiry(booking?.PaymentTime);
+
+  const messageExpiry = getMessageExpiry(booking?.PaymentTime);
 
   const isFullyConfirmed =
-paymentStatus === "success" &&
-bookingStatus === "success" &&
-!!booking?.Journey?.length &&
-booking.Journey.every((j) => !isPendingStatus(j.BookingStatus))
+    paymentStatus === "success" &&
+    bookingStatus === "success" &&
+    !!booking?.Journey?.length &&
+    booking.Journey.every((j) => !isPendingStatus(j.BookingStatus));
 
   const isPaymentPending = paymentStatus === "pending";
   const isBookingPending = bookingStatus === "pending" && !!pendingMessage;
 
-const totalFare =
-  booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.NetFare ?? 0), 0) ?? 0;
-const totalBase =
-  booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.BaseFare ?? 0), 0) ?? 0;
-const totalTax =
-  booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.Tax ?? 0), 0) ?? 0;
-const totalDiscount =
-  booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.Discount ?? 0), 0) ?? 0;
-const totalGross =
-  booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.GrossFare ?? 0), 0) ?? 0;
-const totalConvenience =
-  booking?.Journey.reduce(
-    (sum, j) => sum + (j.FareInfo?.ConvenienceFee ?? 0),
-    0
-  ) ?? 0;
+  const totalFare = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.NetFare ?? 0), 0) ?? 0;
+  const totalBase = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.BaseFare ?? 0), 0) ?? 0;
+  const totalTax = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.Tax ?? 0), 0) ?? 0;
+  const totalDiscount = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.Discount ?? 0), 0) ?? 0;
+  const totalGross = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.GrossFare ?? 0), 0) ?? 0;
+  const totalConvenience = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.ConvenienceFee ?? 0), 0) ?? 0;
 
-// Maps API PaxType codes to PTCFare's PTC codes.
-const paxTypeToPTC: Record<string, string> = { A: "ADT", C: "CHD", I: "INF" };
+  const paxTypeToPTC: Record<string, string> = { A: "ADT", C: "CHD", I: "INF" };
 
-// Per-PTC base fare totals (sum across journeys).
-// PTCFare gives a PER-PASSENGER amount for a type, so it must be multiplied
-// by the actual number of travellers of that type in the journey — otherwise
-// a journey with 2 adults only counts one adult's fare.
-const ptcTotals = (() => {
-  const map: Record<string, number> = { ADT: 0, CHD: 0, INF: 0 };
-  booking?.Journey.forEach((j) => {
-    const ptcList = j.FareInfo?.PTCFare;
-    if (!ptcList?.length) return;
-    const counts: Record<string, number> = {};
-    j.Travelers?.forEach((t) => {
-      const code = (paxTypeToPTC[t.PaxType] || t.PaxType || "").toUpperCase();
-      counts[code] = (counts[code] ?? 0) + 1;
+  const ptcTotals = (() => {
+    const map: Record<string, number> = { ADT: 0, CHD: 0, INF: 0 };
+    booking?.Journey.forEach((j) => {
+      const ptcList = j.FareInfo?.PTCFare;
+      if (!ptcList?.length) return;
+      const counts: Record<string, number> = {};
+      j.Travelers?.forEach((t) => {
+        const code = (paxTypeToPTC[t.PaxType] || t.PaxType || "").toUpperCase();
+        counts[code] = (counts[code] ?? 0) + 1;
+      });
+      ptcList.forEach((p) => {
+        const key = (p.PTC || "").toUpperCase();
+        if (key in map) {
+          const count = counts[key] ?? 1;
+          map[key] += (p.Fare ?? 0) * count;
+        }
+      });
     });
-    ptcList.forEach((p) => {
-      const key = (p.PTC || "").toUpperCase();
-      if (key in map) {
-        const count = counts[key] ?? 1;
-        map[key] += (p.Fare ?? 0) * count;
-      }
-    });
-  });
-  // Fallback when PTCFare is missing: use overall base + counts
-  if (
-    map.ADT === 0 &&
-    map.CHD === 0 &&
-    map.INF === 0 &&
-    totalBase > 0
-  ) {
-    const adt = booking?.ADT ?? 0;
-    const chd = booking?.CHD ?? 0;
-    const inf = booking?.INF ?? 0;
-    const totalPax = adt + chd + inf || 1;
-    if (adt) map.ADT = totalBase; 
-  }
-  return map;
-})();
+    if (map.ADT === 0 && map.CHD === 0 && map.INF === 0 && totalBase > 0) {
+      if (booking?.ADT) map.ADT = totalBase;
+    }
+    return map;
+  })();
 
-// Fare attributed to each named traveller.
-// PTCFare gives a PER-PASSENGER amount for a given type (e.g. one adult's fare),
-// not the total for all adults — so we match each traveller's PaxType to the
-// matching PTCFare entry and sum across journeys (round trips often carry
-// FareInfo/PTCFare only on the outbound leg, with the return leg's FareInfo null).
-type PaxFareRow = { paxId: number; name: string; paxType: string; fare: number };
+  type PaxFareRow = { paxId: number; name: string; paxType: string; fare: number };
 
-const passengerFares: PaxFareRow[] = (() => {
-  const rows = new Map<number, PaxFareRow>();
-  booking?.Journey.forEach((j) => {
-    const ptcList = j.FareInfo?.PTCFare;
-    if (!ptcList?.length) return;
-    j.Travelers?.forEach((t) => {
-      const ptcCode = paxTypeToPTC[t.PaxType] || t.PaxType;
-      const match = ptcList.find((p) => (p.PTC || "").toUpperCase() === ptcCode);
-      if (!match) return;
-      const amount = match.NetFare ?? match.GrossFare ?? 0;
-      const existing = rows.get(t.PaxID);
-      if (existing) {
-        existing.fare += amount;
-      } else {
-        rows.set(t.PaxID, { paxId: t.PaxID, name: travelerName(t), paxType: ptcCode, fare: amount });
-      }
+  const passengerFares: PaxFareRow[] = (() => {
+    const rows = new Map<number, PaxFareRow>();
+    booking?.Journey.forEach((j) => {
+      const ptcList = j.FareInfo?.PTCFare;
+      if (!ptcList?.length) return;
+      j.Travelers?.forEach((t) => {
+        const ptcCode = paxTypeToPTC[t.PaxType] || t.PaxType;
+        const match = ptcList.find((p) => (p.PTC || "").toUpperCase() === ptcCode);
+        if (!match) return;
+        const amount = match.NetFare ?? match.GrossFare ?? 0;
+        const existing = rows.get(t.PaxID);
+        if (existing) {
+          existing.fare += amount;
+        } else {
+          rows.set(t.PaxID, { paxId: t.PaxID, name: travelerName(t), paxType: ptcCode, fare: amount });
+        }
+      });
     });
-  });
-  return Array.from(rows.values());
-})();
+    return Array.from(rows.values());
+  })();
 
   return (
     <>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8">
 
-          {/* Fully confirmed banner */}
+          {/* Confirmed banner */}
           {isFullyConfirmed && (
             <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900 px-5 py-5 flex items-start gap-3 mb-4">
               <div className="w-9 h-9 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -707,7 +723,7 @@ const passengerFares: PaxFareRow[] = (() => {
             </div>
           )}
 
-          {/* Payment success but still confirming (no message case) */}
+          {/* Payment success but booking still confirming */}
           {!isFullyConfirmed && !isPaymentPending && !isBookingPending && bookingStatus === "pending" && (
             <div className="rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900 px-5 py-5 flex items-start gap-3 mb-4">
               <div className="w-9 h-9 rounded-full bg-amber-500 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -731,255 +747,393 @@ const passengerFares: PaxFareRow[] = (() => {
             </div>
           )}
 
-          {/* Pending status */}
-   {(isPaymentPending || isBookingPending) && (
-  <PendingStatusBanner
-    message={pendingMessage}
-    referenceNo={booking?.ReferenceNo}
-    onRecheck={isPaymentPending ? handleManualRecheck : undefined}
-    rechecking={manualChecking}
-    expiresAt={pendingMessage ? messageExpiry : null}
-  />
-)}
+          {/* Pending status banner */}
+          {(isPaymentPending || isBookingPending) && (
+            <PendingStatusBanner
+              message={pendingMessage}
+              referenceNo={booking?.ReferenceNo}
+              onRecheck={isPaymentPending ? handleManualRecheck : undefined}
+              rechecking={manualChecking}
+              expiresAt={pendingMessage ? messageExpiry : null}
+            />
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-[750px_1fr] gap-6 items-start">
             <div className="min-w-0 order-1 lg:order-1 space-y-4">
-            {isFullyConfirmed && (
-  <div className="grid grid-cols-3 gap-3">
-    <ActionCard label="Web Check-in" sublabel="Complete before airport" />
-    <ActionCard
-      label="E-Ticket"
-      sublabel={downloadingTicket ? "Downloading…" : "Download PDF"}
-      onClick={handleDownloadTicket}
-      disabled={downloadingTicket}
-    />
-    <ActionCard
-      label="Invoice"
-      sublabel={downloadingInvoice ? "Downloading…" : "View & download"}
-      onClick={handleDownloadInvoice}
-      disabled={downloadingInvoice}
-    />
-  </div>
-)}
 
+              {/* Quick action cards */}
+              {isFullyConfirmed && (
+                <div className="grid grid-cols-3 gap-3">
+                  <ActionCard label="Web Check-in" sublabel="Complete before airport" />
+                  <ActionCard
+                    label="E-Ticket"
+                    sublabel={downloadingTicket ? "Downloading…" : "Download PDF"}
+                    onClick={handleDownloadTicket}
+                    disabled={downloadingTicket}
+                  />
+                  <ActionCard
+                    label="Invoice"
+                    sublabel={downloadingInvoice ? "Downloading…" : "View & download"}
+                    onClick={handleDownloadInvoice}
+                    disabled={downloadingInvoice}
+                  />
+                </div>
+              )}
+
+              {/* Journey cards — each segment rendered separately */}
               {booking?.Journey.map((journey, jIdx) => {
                 const cabin = cabinLabel(journey.Segments?.[0]?.Cabin);
                 const journeyIsPending = isPendingStatus(journey.BookingStatus);
                 const journeyIsConfirmed = isConfirmedStatus(journey.BookingStatus);
 
+                const totalDuration = journey.Segments.reduce((acc, seg) => {
+                  const m = seg.Duration?.match(/(\d+)\s*Hr\s*(\d+)\s*Min/i);
+                  if (m) return acc + parseInt(m[1]) * 60 + parseInt(m[2]);
+                  return acc;
+                }, 0);
+                const journeyDurationLabel = totalDuration > 0
+                  ? `${Math.floor(totalDuration / 60)} Hr ${totalDuration % 60} Minutes`
+                  : "";
+
                 return (
                   <div
                     key={jIdx}
-                    className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5"
+                    className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden"
                   >
-                    <div className="flex items-start justify-between gap-3 mb-1">
+                    {/* Journey header */}
+                    <div className="px-5 pt-5 pb-3 flex items-start justify-between gap-3">
                       <div>
                         <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
                           {journey.FromCity} → {journey.ToCity}
                         </p>
                         <p className="text-sm text-gray-500 dark:text-gray-400">
-                          {[formatDate(journey.DepartureDateTime), stopsLabel(journey.Stops), cabin]
+                          {[formatDate(journey.DepartureDateTime), stopsLabel(journey.Stops), journeyDurationLabel || undefined, cabin]
                             .filter(Boolean)
-                            .join(" • ")}
+                            .join(" · ")}
                         </p>
                       </div>
 
-                      {/* Per-journey status badge */}
                       {journeyIsConfirmed ? (
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 flex-shrink-0">
                           Confirmed
                         </span>
                       ) : journeyIsPending ? (
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 flex-shrink-0">
                           In Progress
                         </span>
                       ) : (
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300 flex-shrink-0">
                           {journey.BookingStatus || "Not Started"}
                         </span>
                       )}
                     </div>
 
-                    {/* Per-journey message text only — no CountdownTimer here.
-                        PaymentTime (and therefore the countdown) is a transaction-level
-                        concept, not per-journey, so the single timer already rendered in
-                        the top PendingStatusBanner is authoritative. Rendering it again per
-                        leg would show up to 3 identical countdowns on an RS (round-trip)
-                        booking with both legs pending. */}
-                  {journeyIsPending && (journey.Message?.trim() || pendingMessage) && (
-  <div className="mt-3 mb-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 px-3.5 py-2.5">
-    <p className="text-sm text-blue-800 dark:text-blue-200">
-      {journey.Message?.trim() || pendingMessage}
-    </p>
-  </div>
-)}
+                    {/* Journey-level pending message */}
+                    {journeyIsPending && (journey.Message?.trim() || pendingMessage) && (
+                      <div className="mx-5 mb-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 px-3.5 py-2.5">
+                        <p className="text-sm text-blue-800 dark:text-blue-200">
+                          {journey.Message?.trim() || pendingMessage}
+                        </p>
+                      </div>
+                    )}
 
-                    <div className="space-y-3 mb-4 mt-4">
-                      {journey.Segments.map((seg, sIdx) => (
+                    {/* Segments — each with its own header, timeline, free baggage, traveler table */}
+                    {journey.Segments.map((seg, sIdx) => {
+                      const freeBag = getFreeBaggage(journey.Travelers, seg.SID);
+
+                      return (
                         <div key={seg.SID}>
-                          <div className="flex items-center gap-4">
-                            {seg.VACLogo && (
-                              <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                                <span className="text-[10px] font-bold text-gray-500">{seg.AirlineCode}</span>
+                          <div className="px-5 py-4 border-t border-gray-100 dark:border-gray-800">
+                            {/* Airline + flight header */}
+                            <div className="flex items-center gap-2 mb-3">
+                              <AirlineLogo seg={seg} code={seg.AirlineCode} className="w-7 h-7" />
+                              <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                {seg.AirlineName}
+                              </span>
+                              <span className="text-sm text-gray-400">|</span>
+                              <span className="text-sm text-gray-500 dark:text-gray-400">
+                                {seg.AirlineCode}-{seg.FlightNo}
+                              </span>
+                              <span className="ml-auto text-xs text-gray-400 dark:text-gray-500">
+                                {formatDate(seg.DepartureTime)}
+                              </span>
+                            </div>
+
+                            {/* Flight timeline */}
+                            <div className="flex items-start justify-between gap-3">
+                              {/* Departure */}
+                              <div className="min-w-0">
+                                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 tabular-nums leading-none">
+                                  {formatTime(seg.DepartureTime)}
+                                </p>
+                                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mt-0.5">
+                                  {seg.DepartureAirportCode}
+                                  {seg.DepartureTerminal ? ` · ${seg.DepartureTerminal}` : ""}
+                                </p>
+                                {seg.DepartureAirportName && (
+                                  <p className="text-xs text-gray-400 dark:text-gray-500 leading-snug mt-0.5">
+                                    {seg.DepartureAirportName}
+                                  </p>
+                                )}
                               </div>
-                            )}
-                            <div className="flex-1">
-                              <p className="text-xs text-gray-400 mb-1.5">
-                                {seg.AirlineName} • {seg.AirlineCode} {seg.FlightNo}
-                              </p>
-                              <div className="flex items-center justify-between gap-3">
-                                <div>
-                                  <p className="text-base font-bold text-gray-900 dark:text-gray-100 tabular-nums">
-                                    {formatTime(seg.DepartureTime)}
-                                  </p>
-                                  <p className="text-xs text-gray-400">
-                                    {seg.DepartureAirportCode}
-                                    {seg.DepartureTerminal ? ` • ${seg.DepartureTerminal}` : ""}
-                                  </p>
+
+                              {/* Duration + line */}
+                              <div className="flex-1 flex flex-col items-center px-2 pt-2">
+                                {seg.Duration && (
+                                  <p className="text-xs text-gray-400 mb-1">{seg.Duration}</p>
+                                )}
+                                <div className="relative w-full flex items-center">
+                                  <div className="h-px bg-gray-200 dark:bg-gray-700 flex-1" />
+                                  <div className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600 mx-1 flex-shrink-0" />
+                                  <div className="h-px bg-gray-200 dark:bg-gray-700 flex-1" />
                                 </div>
-                                <div className="flex-1 text-center px-1">
-                                  {seg.Duration && <p className="text-xs text-gray-400">{seg.Duration}</p>}
-                                  <div className="h-px bg-gray-200 dark:bg-gray-700 my-1" />
-                                </div>
-                                <div className="text-right">
-                                  <p className="text-base font-bold text-gray-900 dark:text-gray-100 tabular-nums">
-                                    {formatTime(seg.ArrivalTime)}
+                              </div>
+
+                              {/* Arrival */}
+                              <div className="min-w-0 text-right">
+                                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 tabular-nums leading-none">
+                                  {formatTime(seg.ArrivalTime)}
+                                </p>
+                                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mt-0.5">
+                                  {seg.ArrivalAirportCode}
+                                  {seg.ArrivalTerminal ? ` · ${seg.ArrivalTerminal}` : ""}
+                                </p>
+                                {seg.ArrivalAirportName && (
+                                  <p className="text-xs text-gray-400 dark:text-gray-500 leading-snug mt-0.5">
+                                    {seg.ArrivalAirportName}
                                   </p>
-                                  <p className="text-xs text-gray-400">
-                                    {seg.ArrivalAirportCode}
-                                    {seg.ArrivalTerminal ? ` • ${seg.ArrivalTerminal}` : ""}
-                                  </p>
-                                </div>
+                                )}
                               </div>
                             </div>
+
+                            {/* Free baggage row */}
+                            {freeBag && (freeBag.cabin || freeBag.checkin) && (
+                              <div className="mt-3 flex items-center gap-4">
+                                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Baggage</p>
+                                {freeBag.cabin && (
+                                  <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                                    <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 flex-shrink-0" stroke="currentColor" strokeWidth="1.6">
+                                      <rect x="5" y="8" width="14" height="12" rx="2" />
+                                      <path d="M9 8V6a3 3 0 016 0v2" strokeLinecap="round" />
+                                      <line x1="12" y1="12" x2="12" y2="16" strokeLinecap="round" />
+                                      <line x1="10" y1="14" x2="14" y2="14" strokeLinecap="round" />
+                                    </svg>
+                                    <span>Cabin: <span className="font-semibold text-gray-700 dark:text-gray-300">{freeBag.cabin} per adult</span></span>
+                                  </div>
+                                )}
+                                {freeBag.checkin && (
+                                  <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                                    <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 flex-shrink-0" stroke="currentColor" strokeWidth="1.6">
+                                      <rect x="4" y="7" width="16" height="14" rx="2" />
+                                      <path d="M9 7V5a3 3 0 016 0v2" strokeLinecap="round" />
+                                      <circle cx="8" cy="21" r="1" fill="currentColor" stroke="none" />
+                                      <circle cx="16" cy="21" r="1" fill="currentColor" stroke="none" />
+                                    </svg>
+                                    <span>Check-in: <span className="font-semibold text-gray-700 dark:text-gray-300">{freeBag.checkin} per adult</span></span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Traveler table per segment */}
+                            {journey.Travelers?.length > 0 && (
+                              <div className="mt-3 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800 overflow-hidden">
+                                <div className="grid grid-cols-4 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide px-3 py-2 bg-gray-100/70 dark:bg-gray-800">
+                                  <span>Traveller</span>
+                                  <span>PNR</span>
+                                  <span>Baggage</span>
+                                  <span>Meal</span>
+                                </div>
+                                {journey.Travelers.map((t) => (
+                                  <TravelerRow
+                                    key={t.PaxID}
+                                    traveler={t}
+                                    segSID={seg.SID}
+                                    pnr={journeyIsConfirmed ? journey.AirlinePNR || "—" : "Pending"}
+                                    showCopyPNR={journeyIsConfirmed && !!journey.AirlinePNR}
+                                  />
+                                ))}
+                              </div>
+                            )}
                           </div>
 
+                          {/* Layover banner */}
                           {sIdx < journey.Segments.length - 1 && seg.Layover && (
-                            <div className="ml-12 mt-2 mb-1 pl-3 border-l-2 border-dashed border-amber-300 text-xs text-amber-600 dark:text-amber-400">
-                              {seg.Layover} layover in {seg.ArrivalCityName}
+                            <div className="border-t border-b border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-5 py-2.5 flex items-center gap-2">
+                              <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-amber-500 flex-shrink-0" stroke="currentColor" strokeWidth="2">
+                                <circle cx="12" cy="12" r="9" />
+                                <path d="M12 7v5l3 3" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                              <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+                                Change of Planes · {seg.Layover} layover in {seg.ArrivalCityName}
+                              </p>
                             </div>
                           )}
                         </div>
-                      ))}
-                    </div>
-
-                    {journey.Travelers?.length > 0 && (
-                      <div className="border-t border-gray-100 dark:border-gray-800 pt-3">
-                        <div className="grid grid-cols-4 text-xs font-semibold text-gray-400 uppercase tracking-wide pb-2">
-                          <span>Traveller</span>
-                          <span>PNR</span>
-                          <span>Baggage</span>
-                          <span>Meal</span>
-                         
-                        </div>
-                        {journey.Travelers.map((t) => (
-                          <div
-                            key={t.PaxID}
-                            className="grid grid-cols-4 text-sm py-1.5 border-t border-gray-50 dark:border-gray-800/60"
-                          >
-                            <span className="text-gray-800 dark:text-gray-200">{travelerName(t)}</span>
-                            <span className="text-gray-400 font-mono">
-                              {journeyIsConfirmed ? journey.AirlinePNR || "—" : "Pending"}
-                            </span>
-                            <span className="text-gray-400">{findSSR(t, "2")}</span>
-                            <span className="text-gray-400">{findSSR(t, "1")}</span>
-                           
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                      );
+                    })}
                   </div>
                 );
               })}
+
+              {/* Contact + Help card */}
+              {((booking?.ContactInfo && (booking.ContactInfo.Mobile || booking.ContactInfo.Email)) ||
+                booking?.Journey?.[0]?.Segments?.[0]) && (
+                <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5 space-y-5">
+                  {booking?.ContactInfo && (booking.ContactInfo.Mobile || booking.ContactInfo.Email) && (
+                    <div>
+                      <p className="text-base font-bold text-gray-900 dark:text-gray-100">Contact Details</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        We have sent the booking details on your email &amp; WhatsApp
+                      </p>
+                      <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2">
+                        {booking.ContactInfo.Mobile && (
+                          <div className="flex items-center gap-2 min-w-0">
+                            <HiOutlinePhone className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                            <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                              {booking.ContactInfo.Mobile}
+                            </span>
+                          </div>
+                        )}
+                        {booking.ContactInfo.Email && (
+                          <div className="flex items-center gap-2 min-w-0">
+                            <HiOutlineEnvelope className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                            <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">
+                              {booking.ContactInfo.Email}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="border-t border-gray-100 dark:border-gray-800 pt-5">
+                    <p className="text-base font-bold text-gray-900 dark:text-gray-100 mb-3">Need Help?</p>
+                    <button
+                      type="button"
+                      onClick={() => router.push("/contact")}
+                      className="w-full flex items-center justify-between text-left group"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center flex-shrink-0">
+                          <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-gray-500" stroke="currentColor" strokeWidth="1.8">
+                            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Customer Service</p>
+                          <p className="text-xs text-gray-400">Get answers on our Help Centre or chat with us instantly</p>
+                        </div>
+                      </div>
+                      <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-gray-300 flex-shrink-0 group-hover:text-gray-500" stroke="currentColor" strokeWidth="2">
+                        <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {booking?.Journey?.[0]?.Segments?.[0] && (
+                    <div className="border-t border-gray-100 dark:border-gray-800 pt-5">
+                      <p className="text-base font-bold text-gray-900 dark:text-gray-100 mb-3">Call Airline</p>
+                      <a
+                        href={`tel:${getAirlinePhone(booking.Journey[0].Segments[0].AirlineCode)}`}
+                        className="w-full flex items-center justify-between text-left group"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <AirlineLogo
+                            seg={booking.Journey[0].Segments[0]}
+                            code={booking.Journey[0].Segments[0].AirlineCode}
+                            className="w-9 h-9"
+                          />
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                              {booking.Journey[0].Segments[0].AirlineName}
+                            </p>
+                            <p className="text-xs text-gray-400 tabular-nums">
+                              {getAirlinePhone(booking.Journey[0].Segments[0].AirlineCode)}
+                            </p>
+                          </div>
+                        </div>
+                        <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-gray-300 flex-shrink-0 group-hover:text-gray-500" stroke="currentColor" strokeWidth="2">
+                          <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* Right column */}
+            {/* Right column — fare summary */}
             <div className="space-y-4 order-2 lg:order-2 lg:sticky lg:top-8">
-      <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5">
-  <div className="flex items-center justify-between mb-3">
-    <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
-      Fare Summary
-    </p>
-  </div>
+              <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-bold text-gray-900 dark:text-gray-100">Fare Summary</p>
+                </div>
 
-  {/* Amount paid header */}
-  <div className="mb-3">
-    <p className="text-xs text-gray-500 dark:text-gray-400">Amount Paid</p>
-    <p className="text-2xl font-extrabold text-gray-900 dark:text-gray-100 tabular-nums">
-      {currency(totalFare)}
-    </p>
-  </div>
+                <div className="mb-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Amount Paid</p>
+                  <p className="text-2xl font-extrabold text-gray-900 dark:text-gray-100 tabular-nums">
+                    {currency(totalFare)}
+                  </p>
+                </div>
 
-  {/* Savings banner */}
-  {totalDiscount > 0 && (
-    <div className="mb-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 px-3 py-2.5 flex items-center gap-2">
-      <span className="text-emerald-600 dark:text-emerald-400 text-sm">✓</span>
-      <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-        Yay! You saved {currency(totalDiscount)} on this booking
-      </p>
-    </div>
-  )}
+                {totalDiscount > 0 && (
+                  <div className="mb-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 px-3 py-2.5 flex items-center gap-2">
+                    <span className="text-emerald-600 dark:text-emerald-400 text-sm">✓</span>
+                    <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                      Yay! You saved {currency(totalDiscount)} on this booking
+                    </p>
+                  </div>
+                )}
 
-  {/* Fare per traveller */}
-  {passengerFares.length > 0 && (
-    <div className="mb-4 pb-4 border-b border-gray-100 dark:border-gray-800">
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-        Fare per traveller
-      </p>
-      <div className="space-y-1.5">
-        {passengerFares.map((p) => (
-          <div key={p.paxId} className="flex items-center justify-between text-sm">
-            <span className="text-gray-700 dark:text-gray-300 truncate pr-2">{p.name}</span>
-            <span className="font-semibold tabular-nums text-gray-900 dark:text-gray-100 flex-shrink-0">
-              {currency(p.fare)}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )}
+                {passengerFares.length > 0 && (
+                  <div className="mb-4 pb-4 border-b border-gray-100 dark:border-gray-800">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                      Fare per traveller
+                    </p>
+                    <div className="space-y-1.5">
+                      {passengerFares.map((p) => (
+                        <div key={p.paxId} className="flex items-center justify-between text-sm">
+                          <span className="text-gray-700 dark:text-gray-300 truncate pr-2">{p.name}</span>
+                          <span className="font-semibold tabular-nums text-gray-900 dark:text-gray-100 flex-shrink-0">
+                            {currency(p.fare)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-  <div className="space-y-2 pb-3 border-b border-gray-100 dark:border-gray-800">
-    {/* Per-pax-type base fares (like Review & Pay) */}
-    {(booking?.ADT ?? 0) > 0 && ptcTotals.ADT > 0 && (
-      <FareRow label="Adult fare" value={currency(ptcTotals.ADT)} />
-    )}
-    {(booking?.CHD ?? 0) > 0 && ptcTotals.CHD > 0 && (
-      <FareRow label="Child fare" value={currency(ptcTotals.CHD)} />
-    )}
-    {(booking?.INF ?? 0) > 0 && ptcTotals.INF > 0 && (
-      <FareRow label="Infant fare" value={currency(ptcTotals.INF)} />
-    )}
+                <div className="space-y-2 pb-3 border-b border-gray-100 dark:border-gray-800">
+                  {(booking?.ADT ?? 0) > 0 && ptcTotals.ADT > 0 && (
+                    <FareRow label="Adult fare" value={currency(ptcTotals.ADT)} />
+                  )}
+                  {(booking?.CHD ?? 0) > 0 && ptcTotals.CHD > 0 && (
+                    <FareRow label="Child fare" value={currency(ptcTotals.CHD)} />
+                  )}
+                  {(booking?.INF ?? 0) > 0 && ptcTotals.INF > 0 && (
+                    <FareRow label="Infant fare" value={currency(ptcTotals.INF)} />
+                  )}
+                  {(booking?.ADT ?? 0) + (booking?.CHD ?? 0) + (booking?.INF ?? 0) === 0 ||
+                  (ptcTotals.ADT === 0 && ptcTotals.CHD === 0 && ptcTotals.INF === 0) ? (
+                    <FareRow label="Base Fare" value={currency(totalBase)} />
+                  ) : null}
+                  <FareRow label="Taxes & fees" value={currency(totalTax)} />
+                  {totalConvenience > 0 && (
+                    <FareRow label="Convenience fee" value={currency(totalConvenience)} />
+                  )}
+                  {totalDiscount > 0 && (
+                    <FareRow label="Instant discount" value={`- ${currency(totalDiscount)}`} positive />
+                  )}
+                </div>
 
-    {/* Fallback if no PTC breakdown */}
-    {(booking?.ADT ?? 0) + (booking?.CHD ?? 0) + (booking?.INF ?? 0) === 0 ||
-    (ptcTotals.ADT === 0 && ptcTotals.CHD === 0 && ptcTotals.INF === 0) ? (
-      <FareRow label="Base Fare" value={currency(totalBase)} />
-    ) : null}
-
-    <FareRow label="Taxes & fees" value={currency(totalTax)} />
-    <FareRow
-      label="Convenience fee"
-      value={currency(totalConvenience)}
-    />
-    {totalDiscount > 0 && (
-      <FareRow
-        label="Instant discount"
-        value={`- ${currency(totalDiscount)}`}
-        positive
-      />
-    )}
-  </div>
-
-  <div className="flex items-center justify-between pt-3">
-    <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
-      Total payable
-    </span>
-    <span className="text-base font-extrabold text-gray-900 dark:text-gray-100 tabular-nums">
-      {currency(totalFare)}
-    </span>
-  </div>
-</div>
+                <div className="flex items-center justify-between pt-3">
+                  <span className="text-sm font-bold text-gray-900 dark:text-gray-100">Total payable</span>
+                  <span className="text-base font-extrabold text-gray-900 dark:text-gray-100 tabular-nums">
+                    {currency(totalFare)}
+                  </span>
+                </div>
+              </div>
 
               {isFullyConfirmed && (
                 <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5">
@@ -1027,6 +1181,66 @@ const passengerFares: PaxFareRow[] = (() => {
   );
 }
 
+// ─── TravelerRow — extracted so useState (PNR copy feedback) is never called inside .map() ───
+
+function TravelerRow({
+  traveler,
+  segSID,
+  pnr,
+  showCopyPNR,
+}: {
+  traveler: Traveler;
+  segSID: string | number;
+  pnr: string;
+  showCopyPNR: boolean;
+}) {
+  const [copiedPNR, setCopiedPNR] = useState(false);
+  const addonBag = findSSRAddon(traveler, segSID, "2");
+  const addonMeal = findSSRAddon(traveler, segSID, "1");
+
+  return (
+    <div className="grid grid-cols-4 text-sm px-3 py-2.5 border-t border-gray-100 dark:border-gray-800">
+      <div>
+        <p className="text-gray-800 dark:text-gray-200 font-medium text-xs leading-tight">
+          {travelerName(traveler)}
+        </p>
+        <p className="text-[11px] text-gray-400 leading-tight mt-0.5">
+          ({travelerPaxTypeLabel(traveler)})
+        </p>
+      </div>
+      <div className="flex items-center gap-1">
+        <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">{pnr}</span>
+        {showCopyPNR && (
+          <button
+            onClick={() => {
+              navigator.clipboard?.writeText(pnr);
+              setCopiedPNR(true);
+              setTimeout(() => setCopiedPNR(false), 1500);
+            }}
+            className="text-gray-300 hover:text-gray-500 dark:hover:text-gray-300 transition-colors"
+            title="Copy PNR"
+          >
+            {copiedPNR ? (
+              <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3 text-emerald-500" stroke="currentColor" strokeWidth="2.5">
+                <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3" stroke="currentColor" strokeWidth="1.8">
+                <rect x="9" y="9" width="11" height="11" rx="2" />
+                <path d="M5 15V6a1 1 0 011-1h9" strokeLinecap="round" />
+              </svg>
+            )}
+          </button>
+        )}
+      </div>
+      <span className="text-xs text-gray-400 dark:text-gray-500">{addonBag}</span>
+      <span className="text-xs text-gray-400 dark:text-gray-500">{addonMeal}</span>
+    </div>
+  );
+}
+
+// ─── CheckingScreen ────────────────────────────────────────────────────────────
+
 function CheckingScreen({ step }: { step: CheckStep }) {
   const steps = [
     { key: "payment" as const, label: "Verifying your payment", icon: HiOutlineCreditCard },
@@ -1043,20 +1257,13 @@ function CheckingScreen({ step }: { step: CheckStep }) {
           className="absolute inset-0 rounded-full checking-spin"
           style={{
             background: "conic-gradient(from 0deg, transparent 0%, #1c8fc7 20%, transparent 45%)",
-            WebkitMask:
-              "radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px))",
+            WebkitMask: "radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px))",
             mask: "radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px))",
           }}
         />
-
         <span className="absolute inset-0 rounded-full border border-[#1c8fc7]/40 checking-ping" />
-        <span
-          className="absolute inset-0 rounded-full border border-[#1c8fc7]/30 checking-ping"
-          style={{ animationDelay: "0.7s" }}
-        />
-
+        <span className="absolute inset-0 rounded-full border border-[#1c8fc7]/30 checking-ping" style={{ animationDelay: "0.7s" }} />
         <div className="absolute inset-[6px] rounded-full bg-white/[0.04] border border-white/10 backdrop-blur-sm" />
-
         <div className="absolute inset-0 flex items-center justify-center">
           {steps.map((s, i) => {
             const Icon = s.icon;
@@ -1066,11 +1273,9 @@ function CheckingScreen({ step }: { step: CheckStep }) {
               <div
                 key={s.key}
                 className={`absolute transition-all duration-500 ease-out ${
-                  isActive
-                    ? "opacity-100 scale-100 rotate-0"
-                    : isDone
-                    ? "opacity-0 scale-75 -rotate-12"
-                    : "opacity-0 scale-125 rotate-12"
+                  isActive ? "opacity-100 scale-100 rotate-0"
+                  : isDone ? "opacity-0 scale-75 -rotate-12"
+                  : "opacity-0 scale-125 rotate-12"
                 }`}
               >
                 <Icon className="w-10 h-10 text-[#1c8fc7]" />
@@ -1088,11 +1293,9 @@ function CheckingScreen({ step }: { step: CheckStep }) {
             <div key={s.key} className="flex items-center">
               <div
                 className={`w-7 h-7 rounded-full flex items-center justify-center transition-all duration-500 ${
-                  done
-                    ? "bg-emerald-500"
-                    : active
-                    ? "bg-[#1c8fc7]/15 border-2 border-[#1c8fc7]"
-                    : "bg-white/5 border border-white/10"
+                  done ? "bg-emerald-500"
+                  : active ? "bg-[#1c8fc7]/15 border-2 border-[#1c8fc7]"
+                  : "bg-white/5 border border-white/10"
                 }`}
               >
                 {done ? (
@@ -1100,20 +1303,12 @@ function CheckingScreen({ step }: { step: CheckStep }) {
                     <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 ) : (
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      active ? "bg-[#1c8fc7] checking-dot" : "bg-white/20"
-                    }`}
-                  />
+                  <span className={`w-1.5 h-1.5 rounded-full ${active ? "bg-[#1c8fc7] checking-dot" : "bg-white/20"}`} />
                 )}
               </div>
               {i < steps.length - 1 && (
                 <div className="w-12 h-0.5 mx-1.5 rounded-full bg-white/10 overflow-hidden">
-                  <div
-                    className={`h-full bg-emerald-500 transition-all duration-700 ease-out ${
-                      done ? "w-full" : "w-0"
-                    }`}
-                  />
+                  <div className={`h-full bg-emerald-500 transition-all duration-700 ease-out ${done ? "w-full" : "w-0"}`} />
                 </div>
               )}
             </div>
@@ -1127,10 +1322,11 @@ function CheckingScreen({ step }: { step: CheckStep }) {
       <p className="text-sm text-gray-400 max-w-xs">
         Please don't close this window or press back. This can take up to a minute.
       </p>
-
     </div>
   );
 }
+
+// ─── Shared sub-components ─────────────────────────────────────────────────────
 
 function PaymentFailedCard({
   title = "Oh no! Payment Failed.",
@@ -1152,7 +1348,6 @@ function PaymentFailedCard({
       <div className="w-full max-w-sm bg-white dark:bg-gray-900 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-800 px-6 py-8 text-center">
         <h1 className="text-lg font-extrabold text-gray-900 dark:text-gray-100 mb-2">{title}</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 leading-relaxed">{message}</p>
-
         <div className="flex items-center justify-between text-sm py-2 border-t border-gray-100 dark:border-gray-800">
           <span className="text-gray-400">CF Link ID</span>
           <span className="font-mono text-gray-700 dark:text-gray-300">{cfLinkId}</span>
@@ -1161,7 +1356,6 @@ function PaymentFailedCard({
           <span className="text-gray-400">Date &amp; Time</span>
           <span className="text-gray-700 dark:text-gray-300">{dateTime}</span>
         </div>
-
         <button
           type="button"
           onClick={onTryAgain}
@@ -1259,32 +1453,19 @@ function ModifyBookingPanel({
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
       <div
         onClick={onClose}
-        className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ${
-          visible ? "opacity-100" : "opacity-0"
-        }`}
+        className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ${visible ? "opacity-100" : "opacity-0"}`}
       />
-
       <div
-        className={`absolute right-0 top-0 h-full w-full sm:max-w-md bg-white dark:bg-gray-900 shadow-2xl flex flex-col transition-transform duration-300 ease-out ${
-          visible ? "translate-x-0" : "translate-x-full"
-        }`}
+        className={`absolute right-0 top-0 h-full w-full sm:max-w-md bg-white dark:bg-gray-900 shadow-2xl flex flex-col transition-transform duration-300 ease-out ${visible ? "translate-x-0" : "translate-x-full"}`}
       >
         <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 dark:border-gray-800">
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-            aria-label="Close"
-          >
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" aria-label="Close">
             <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" stroke="currentColor" strokeWidth="2">
               <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
           <p className="text-base font-bold text-gray-900 dark:text-gray-100">{titles[panel]}</p>
-          <button
-            onClick={onClose}
-            className="ml-auto text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-            aria-label="Close"
-          >
+          <button onClick={onClose} className="ml-auto text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" aria-label="Close">
             <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" stroke="currentColor" strokeWidth="2">
               <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
@@ -1299,47 +1480,30 @@ function ModifyBookingPanel({
                   ? "A penalty may be charged by the airline based on how close to the travel date the cancellation is made."
                   : "Rescheduling charges depend on the airline's fare rules and how close to the travel date the change is made."}
               </p>
-
               {booking.Journey.map((journey, jIdx) => {
                 const journeySelected = selectedJourneys.has(jIdx);
                 return (
                   <div
                     key={jIdx}
-                    className={`rounded-xl border px-4 py-3 mb-3 ${
-                      journeySelected
-                        ? "border-[#1c8fc7] bg-[#e8f4fb] dark:bg-gray-800"
-                        : "border-gray-200 dark:border-gray-700"
-                    }`}
+                    className={`rounded-xl border px-4 py-3 mb-3 ${journeySelected ? "border-[#1c8fc7] bg-[#e8f4fb] dark:bg-gray-800" : "border-gray-200 dark:border-gray-700"}`}
                   >
                     <label className="flex items-start gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={journeySelected}
-                        onChange={() => onToggleJourney(jIdx)}
-                        className="mt-0.5 accent-[#1c8fc7]"
-                      />
+                      <input type="checkbox" checked={journeySelected} onChange={() => onToggleJourney(jIdx)} className="mt-0.5 accent-[#1c8fc7]" />
                       <div>
                         <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
                           {journey.FromCity} → {journey.ToCity}
                         </p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">
                           {[formatDate(journey.DepartureDateTime), journey.Segments?.[0]?.AirlineName, journey.AirlinePNR]
-                            .filter(Boolean)
-                            .join(" • ")}
+                            .filter(Boolean).join(" · ")}
                         </p>
                       </div>
                     </label>
-
                     {journey.Travelers?.length > 0 && (
                       <div className="mt-2 ml-6 space-y-1.5">
                         {journey.Travelers.map((t) => (
                           <label key={t.PaxID} className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={selectedTravelers.has(t.PaxID)}
-                              onChange={() => onToggleTraveler(t.PaxID)}
-                              className="accent-[#1c8fc7]"
-                            />
+                            <input type="checkbox" checked={selectedTravelers.has(t.PaxID)} onChange={() => onToggleTraveler(t.PaxID)} className="accent-[#1c8fc7]" />
                             <span className="text-xs text-gray-700 dark:text-gray-300">{travelerName(t)}</span>
                           </label>
                         ))}
@@ -1360,8 +1524,7 @@ function ModifyBookingPanel({
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
                     Detailed cancellation and rescheduling charges for this fare are set by{" "}
-                    {journey.Segments?.[0]?.AirlineName || "the airline"} and may vary based on how close to the
-                    travel date the request is made. Contact support for the exact fare rule breakdown for PNR{" "}
+                    {journey.Segments?.[0]?.AirlineName || "the airline"} and may vary based on how close to the travel date the request is made. Contact support for the exact fare rule breakdown for PNR{" "}
                     <span className="font-mono">{journey.AirlinePNR}</span>.
                   </p>
                 </div>
@@ -1385,17 +1548,7 @@ function ModifyBookingPanel({
   );
 }
 
-function ActionCard({
-  label,
-  sublabel,
-  onClick,
-  disabled,
-}: {
-  label: string;
-  sublabel: string;
-  onClick?: () => void;
-  disabled?: boolean;
-}) {
+function ActionCard({ label, sublabel, onClick, disabled }: { label: string; sublabel: string; onClick?: () => void; disabled?: boolean }) {
   return (
     <button
       onClick={onClick}

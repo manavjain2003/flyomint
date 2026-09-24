@@ -11,6 +11,7 @@ import { FiClipboard } from "react-icons/fi";
 import LoginDrawer, { isLoggedInSession } from "@/app/components/booking/LoginDrawer";
 import { getUserProfile, logoutUser } from "@/app/lib/authApi";
 import { useTheme } from "@/app/components/shared/ThemeProvider";
+import { HiOutlineClock } from "react-icons/hi";
 
 const NAV_LINKS = [
     { href: "/", label: "Search", icon: MdFlight },
@@ -19,6 +20,70 @@ const NAV_LINKS = [
 ];
 
 const PROFILE_NAME_STORAGE = "profileName";
+
+// Hard payment-session timeout: starts once the person actually reaches the
+// payment step (not on review), and lives in the navbar so it's visible no
+// matter what's happening in the page content below it.
+const SESSION_DURATION = 10 * 60; // 10 minutes in seconds
+
+function SessionTimer({ seconds }: { seconds: number }) {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    const label = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    const urgent = seconds <= 60;
+    return (
+        <div
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-bold ${
+                urgent
+                    ? "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400"
+                    : "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400"
+            }`}
+        >
+            <HiOutlineClock className="w-4 h-4" />
+            {label}
+            <span className={`text-[11px] font-semibold ${urgent ? "text-red-400" : "text-green-500"}`}>
+                SAFE &amp; SECURED
+            </span>
+        </div>
+    );
+}
+
+function SessionExpiredModal({ onGoBack }: { onGoBack: () => void }) {
+    return (
+        <>
+            {/* Grey overlay — blocks all interaction */}
+            <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm" />
+
+            {/* Modal */}
+            <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+                <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm p-8 flex flex-col items-center text-center">
+                    {/* Hourglass illustration */}
+                    <div className="w-16 h-16 mb-4 flex items-center justify-center rounded-full bg-orange-50 dark:bg-orange-950">
+                        <svg viewBox="0 0 64 64" className="w-10 h-10" fill="none">
+                            <path d="M20 8h24M20 56h24" stroke="#f97316" strokeWidth="3" strokeLinecap="round" />
+                            <path d="M22 8c0 12 10 16 10 24S22 44 22 56" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" />
+                            <path d="M42 8c0 12-10 16-10 24s10 12 10 24" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" />
+                            <ellipse cx="32" cy="32" rx="8" ry="4" fill="#fed7aa" />
+                        </svg>
+                    </div>
+                    <h2 className="text-[20px] font-bold text-gray-900 dark:text-gray-100 mb-2">
+                        Payments timed out
+                    </h2>
+                    <p className="text-[14px] text-gray-500 dark:text-gray-400 mb-6">
+                        Current payment session got expired
+                    </p>
+                    <button
+                        type="button"
+                        onClick={onGoBack}
+                        className="w-full h-11 rounded-full bg-[#1c8fc7] text-white text-[14px] font-bold hover:bg-[#177aab] transition-colors"
+                    >
+                        Go back
+                    </button>
+                </div>
+            </div>
+        </>
+    );
+}
 
 // Isolated reader for the `bookingStep` search param. Kept as its own
 // component so the useSearchParams() call can be wrapped in <Suspense>
@@ -42,6 +107,8 @@ export default function Navbar() {
     const [profileName, setProfileName] = useState("");
     const [menuOpen, setMenuOpen] = useState(false);
     const [isPaymentStep, setIsPaymentStep] = useState(false);
+    const [sessionSeconds, setSessionSeconds] = useState(SESSION_DURATION);
+    const [sessionExpired, setSessionExpired] = useState(false);
     const menuRef = useRef<HTMLDivElement | null>(null);
     const pathname = usePathname();
     const router = useRouter();
@@ -49,19 +116,51 @@ export default function Navbar() {
 
     const visibleNavLinks = NAV_LINKS.filter((link) => !link.authOnly || loggedIn);
 
+    // Reset the countdown fresh each time the payment step is entered, and
+    // leave it alone once it's already expired so it doesn't restart itself.
+    useEffect(() => {
+        if (isPaymentStep) {
+            setSessionSeconds(SESSION_DURATION);
+            setSessionExpired(false);
+        }
+    }, [isPaymentStep]);
+
+    useEffect(() => {
+        if (!isPaymentStep || sessionExpired) return;
+        if (sessionSeconds <= 0) {
+            setSessionExpired(true);
+            return;
+        }
+        const t = setTimeout(() => setSessionSeconds((s) => s - 1), 1000);
+        return () => clearTimeout(t);
+    }, [isPaymentStep, sessionSeconds, sessionExpired]);
+
+    function handleSessionExpiredGoBack() {
+        window.location.href = "/";
+    }
+
     useEffect(() => {
         const check = () => setLoggedIn(isLoggedInSession());
         check();
 
+        function handleVisibility() {
+            if (document.visibilityState === "visible") check();
+        }
+
         window.addEventListener("flyomint:login", check);
         window.addEventListener("flyomint:logout", check);
-        document.addEventListener("visibilitychange", () => {
-            if (document.visibilityState === "visible") check();
-        });
+        // Dispatched by app/lib/api.js when a login token's refresh fails —
+        // without this, the navbar could keep showing "My Trips"/profile
+        // menus after the token underneath has already fallen back to a
+        // guest token.
+        window.addEventListener("flyomint:sessionExpired", check);
+        document.addEventListener("visibilitychange", handleVisibility);
 
         return () => {
             window.removeEventListener("flyomint:login", check);
             window.removeEventListener("flyomint:logout", check);
+            window.removeEventListener("flyomint:sessionExpired", check);
+            document.removeEventListener("visibilitychange", handleVisibility);
         };
     }, []);
 
@@ -75,6 +174,7 @@ export default function Navbar() {
     useEffect(() => {
         if (!loggedIn) {
             setProfileName("");
+            localStorage.removeItem(PROFILE_NAME_STORAGE);
             return;
         }
 
@@ -156,44 +256,54 @@ export default function Navbar() {
                         <Image src="/assets/logo.jpg" alt="Flyomint" width={180} height={52} className="h-9 w-auto" priority />
                     </Link>
 
-                    {/* Center nav */}
-                    <nav className="hidden lg:flex items-center gap-1 absolute left-1/2 -translate-x-1/2">
-                        {visibleNavLinks.map(({ href, label, icon: Icon }) => {
-                            const active = pathname === href;
-                            return (
-                                <Link
-                                    key={href}
-                                    href={href}
-                                    className={`inline-flex items-center gap-2 h-9 px-3.5 rounded-full text-sm font-medium transition-colors ${
-                                        active
-                                            ? "text-[#FF7626]"
-                                            : "text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
-                                    }`}
-                                >
-                                    <Icon className="w-4 h-4" />
-                                    {label}
-                                </Link>
-                            );
-                        })}
-                    </nav>
+                    {/* Center nav — hidden on the payment step so there's nowhere to
+                        navigate away to mid-checkout. */}
+                    {!isPaymentStep && (
+                        <nav className="hidden lg:flex items-center gap-1 absolute left-1/2 -translate-x-1/2">
+                            {visibleNavLinks.map(({ href, label, icon: Icon }) => {
+                                const active = pathname === href;
+                                return (
+                                    <Link
+                                        key={href}
+                                        href={href}
+                                        className={`inline-flex items-center gap-2 h-9 px-3.5 rounded-full text-sm font-medium transition-colors ${
+                                            active
+                                                ? "text-[#FF7626]"
+                                                : "text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
+                                        }`}
+                                    >
+                                        <Icon className="w-4 h-4" />
+                                        {label}
+                                    </Link>
+                                );
+                            })}
+                        </nav>
+                    )}
 
                     {/* Right side */}
                     <div className="flex items-center gap-3">
-                        <button
-                            type="button"
-                            onClick={toggleTheme}
-                            aria-label="Toggle theme"
-                            aria-pressed={theme === "dark"}
-                            className="w-8 h-8 rounded-full border border-gray-200 dark:border-gray-700 grid place-items-center text-gray-500 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition"
-                        >
-                            {theme === "dark" ? (
-                                <HiMoon className="w-4 h-4" />
-                            ) : (
-                                <HiSun className="w-4 h-4" />
-                            )}
-                        </button>
+                        {/* Payment-session countdown — only visible on the payment step,
+                            in place of the other (hidden) menu options. */}
+                        {isPaymentStep && <SessionTimer seconds={sessionSeconds} />}
 
-                       
+                        {/* Theme toggle — also hidden on the payment step, along with
+                            every other menu option. */}
+                        {!isPaymentStep && (
+                            <button
+                                type="button"
+                                onClick={toggleTheme}
+                                aria-label="Toggle theme"
+                                aria-pressed={theme === "dark"}
+                                className="w-8 h-8 rounded-full border border-gray-200 dark:border-gray-700 grid place-items-center text-gray-500 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+                            >
+                                {theme === "dark" ? (
+                                    <HiMoon className="w-4 h-4" />
+                                ) : (
+                                    <HiSun className="w-4 h-4" />
+                                )}
+                            </button>
+                        )}
+
                         {!isPaymentStep && (
                             <>
                                 {loggedIn ? (
@@ -267,17 +377,19 @@ export default function Navbar() {
                             </>
                         )}
 
-                        <button
-                            onClick={() => setMobileOpen((v) => !v)}
-                            className="lg:hidden p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
-                            aria-label="Toggle menu"
-                        >
-                            {mobileOpen ? <HiX className="w-5 h-5" /> : <HiMenu className="w-5 h-5" />}
-                        </button>
+                        {!isPaymentStep && (
+                            <button
+                                onClick={() => setMobileOpen((v) => !v)}
+                                className="lg:hidden p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
+                                aria-label="Toggle menu"
+                            >
+                                {mobileOpen ? <HiX className="w-5 h-5" /> : <HiMenu className="w-5 h-5" />}
+                            </button>
+                        )}
                     </div>
                 </div>
 
-                {mobileOpen && (
+                {!isPaymentStep && mobileOpen && (
                     <div className="lg:hidden border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
                         <div className="max-w-7xl mx-auto px-4 py-3 space-y-0.5">
                             
@@ -339,6 +451,8 @@ export default function Navbar() {
                 onClose={() => setLoginOpen(false)}
                 onLoginSuccess={handleLoginSuccess}
             />
+
+            {sessionExpired && <SessionExpiredModal onGoBack={handleSessionExpiredGoBack} />}
         </>
     );
 }

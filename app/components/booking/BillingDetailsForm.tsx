@@ -29,7 +29,7 @@ function emptyBilling(initial?: Partial<BillingAddress>): BillingAddress {
         city: initial?.city ?? "",
         state: initial?.state ?? "",
         stateCode: initial?.stateCode ?? "",
-        profileUpdate: initial?.profileUpdate ?? false,
+        profileUpdate: initial?.profileUpdate ?? true,
     };
 }
 

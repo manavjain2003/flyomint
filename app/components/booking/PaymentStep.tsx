@@ -10,8 +10,46 @@ import {
   HiOutlineChatBubbleLeftRight,
   HiOutlineChevronDown,
   HiOutlineChevronUp,
+  HiOutlineDocumentText,
 } from "react-icons/hi2";
 import type { ComponentType } from "react";
+
+const SESSION_DURATION = 10 * 60; // 10 minutes in seconds
+
+
+
+function SessionExpiredModal({ onGoBack }: { onGoBack: () => void }) {
+  return (
+    <>
+      <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" />
+
+      {/* Modal */}
+      <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm p-8 flex flex-col items-center text-center">
+          {/* Hourglass illustration */}
+          <div className="w-16 h-16 mb-4 flex items-center justify-center rounded-full bg-orange-50 dark:bg-orange-950">
+            <svg viewBox="0 0 64 64" className="w-10 h-10" fill="none">
+              <path d="M20 8h24M20 56h24" stroke="#f97316" strokeWidth="3" strokeLinecap="round" />
+              <path d="M22 8c0 12 10 16 10 24S22 44 22 56" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" />
+              <path d="M42 8c0 12-10 16-10 24s10 12 10 24" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" />
+              <ellipse cx="32" cy="32" rx="8" ry="4" fill="#fed7aa" />
+            </svg>
+          </div>
+          <h2 className="text-[20px] font-bold text-gray-900 dark:text-gray-100 mb-2">Payments timed out</h2>
+          <p className="text-[14px] text-gray-500 dark:text-gray-400 mb-6">Current payment session got expired</p>
+          <button
+            type="button"
+            onClick={onGoBack}
+            className="w-full h-11 rounded-full bg-[#1c8fc7] text-white text-[14px] font-bold hover:bg-[#177aab] transition-colors"
+          >
+            Go back
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 const currency = (n: number) =>
   new Intl.NumberFormat("en-IN", {
     style: "currency",
@@ -29,8 +67,11 @@ const BASE_IMAGE_URL = process.env.NEXT_PUBLIC_BASE_IMAGE_URL || "";
 
 function resolveLogoUrl(logo?: string): string | undefined {
   if (!logo) return undefined;
+
   if (/^https?:\/\//i.test(logo)) return logo;
-  return `${BASE_IMAGE_URL}${logo.replace(/^\/+/, "")}`;
+
+  const baseOrigin = BASE_IMAGE_URL.replace(/\/+$/, ""); 
+  return `${baseOrigin}${logo.startsWith("/") ? "" : "/"}${logo}`;
 }
 
 function pick(obj: any, keys: string[]) {
@@ -65,6 +106,7 @@ function normalizePgDetails(raw: any) {
 function normalizeFare(raw: any) {
   const pgDetails = normalizePgDetails(raw.pgDetails || raw.PGDetails || raw.PgDetails || {});
   const ptcFaresRaw = pick(raw, ["ptcFares", "PTCFares"]) || [];
+  const pgLogosRaw = pick(raw, ["pgLogos", "PGLogos", "PgLogos"]) || [];
   return {
     pgDetails,
     baseFare: pick(raw, ["baseFare", "BaseFare"]) ?? 0,
@@ -82,6 +124,10 @@ function normalizeFare(raw: any) {
       fare: pick(p, ["fare", "Fare"]) ?? 0,
       tax: pick(p, ["tax", "Tax"]) ?? 0,
     })),
+    pgLogos: (Array.isArray(pgLogosRaw) ? pgLogosRaw : []).map((l: any) => ({
+      name: pick(l, ["logoName", "LogoName"]) ?? "",
+      path: pick(l, ["logoPath", "LogoPath"]) ?? "",
+    })).filter((l: { name: string; path: string }) => !!l.path),
   };
 }
 
@@ -314,14 +360,17 @@ function TripLegSummaryRow({ leg, showDetails }: { leg: any; showDetails: boolea
     <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 last:border-b-0">
       <div className="flex items-center gap-2.5 mb-2">
         {logoUrl ? (
-          <img
-            src={logoUrl}
-            alt=""
-            className="w-7 h-7 rounded-full object-contain border border-gray-100 dark:border-gray-800 flex-shrink-0"
-          />
-        ) : (
-          <span className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-800 flex-shrink-0" />
-        )}
+  <img
+    src={logoUrl}
+    alt=""
+    className="w-7 h-7 rounded-full object-contain border border-gray-100 dark:border-gray-800 flex-shrink-0"
+    onError={(e) => {
+      e.currentTarget.style.display = "none";
+    }}
+  />
+) : (
+  <span className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-800 flex-shrink-0" />
+)}
         <p className="text-[15px] font-bold text-gray-900 dark:text-gray-100 truncate">
           {leg.from} <span className="text-gray-400">&rarr;</span> {leg.to}
         </p>
@@ -375,11 +424,31 @@ export default function PaymentStep({
   const [fareInfo, setFareInfo] = useState<any[]>([]);
   const [tokenId, setTokenId] = useState<string | null>(null);
   const [transactionId, setTransactionId] = useState<number | null>(null);
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [breakdownOpen, setBreakdownOpen] = useState(true);
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
   const [legDetailsOpen, setLegDetailsOpen] = useState(true);
+
+  // Payment-session countdown: starts the moment this page mounts (not on
+  // review), so it reflects time actually spent on payment rather than
+  // ticking down while the person is still filling in traveller details.
+  const [sessionSeconds, setSessionSeconds] = useState<number>(SESSION_DURATION);
+  const [sessionExpired, setSessionExpired] = useState(false);
+
+  function handleSessionExpiredGoBack() {
+    window.location.href = "/";
+  }
+
+  useEffect(() => {
+    if (sessionExpired) return;
+    if (sessionSeconds <= 0) {
+      setSessionExpired(true);
+      return;
+    }
+    const t = setTimeout(() => setSessionSeconds((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [sessionSeconds, sessionExpired]);
 
   const hasFetchedRef = useRef(false);
 
@@ -421,7 +490,7 @@ const travelers = (bookingData.passengers ?? []).map((p: any, i: number) => ({
           mobile: contact.mobile || "",
           email: contact.email || "",
           gstCompanyName: bookingData.gst?.companyName || "",
-          gstTin: bookingData.gst?.tin || "",
+          gstTin: bookingData.gst?.gstNumber || "",
           gstMobile: bookingData.gst?.mobile || "",
           gstEmail: bookingData.gst?.email || "",
           gstAddress: bookingData.gst?.address || "",
@@ -437,7 +506,7 @@ const travelers = (bookingData.passengers ?? []).map((p: any, i: number) => ({
         ssrl: ssrl.length ? ssrl : undefined,
       });
 
-      const res = normalizeServiceResponse(rawRes);
+     const res = rawRes;
 
       if (!res.success) {
         setError(res.message || "Could not create itinerary");
@@ -458,12 +527,33 @@ const travelers = (bookingData.passengers ?? []).map((p: any, i: number) => ({
   load();
 }, []);
 
-  const selected = fareInfo[selectedIndex];
+  const selected = selectedIndex !== null ? fareInfo[selectedIndex] : undefined;
 
   const savings = useMemo(() => {
     if (!selected) return 0;
     return (selected.discount || 0) + (selected.instantOff || 0);
   }, [selected]);
+
+  const defaultFare = useMemo(() => {
+  if (fareInfo.length === 0) return null;
+  const base = fareInfo[0];
+  const addOns = base.addOns ?? 0;
+  return {
+    baseFare: base.baseFare ?? 0,
+    tax: base.tax ?? 0,
+    convenienceFee: base.convenienceFee ?? 0,
+    addOns,
+    markUp: 0,
+    discount: 0,
+    instantOff: 0,
+    wallet: 0,
+    ptcFares: base.ptcFares ?? [],
+    amountToBePaid:
+      (base.baseFare ?? 0) + (base.tax ?? 0) + (base.convenienceFee ?? 0) + addOns,
+  };
+}, [fareInfo]);
+
+  const displayFare = selected ?? defaultFare;
 
   const groupedMethods = useMemo(() => {
     const groups = new Map<
@@ -502,18 +592,11 @@ return Array.from(groups.values()).map((g) => {
 });
   }, [fareInfo]);
 
-  useEffect(() => {
-    if (groupedMethods.length > 0) {
-         const cheapest = groupedMethods
-        .flatMap((g) => g.options)
-        .reduce((min, o) =>
-          (o.f.amountToBePaid ?? Infinity) < (min.f.amountToBePaid ?? Infinity) ? o : min
-        );
-      setSelectedIndex(cheapest.index);
-    }
-  }, [groupedMethods]);
+  // No payment method is auto-selected — the person must actively pick one.
 
   const travellers = bookingData?.passengers ?? [];
+  const gstDetails = bookingData?.gst ?? null;
+  const hasGstDetails = Boolean(gstDetails?.gstNumber?.trim());
 
   async function handlePayNow() {
     if (!selected) return;
@@ -670,17 +753,19 @@ return Array.from(groups.values()).map((g) => {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-32">
       <div className="sticky top-0 z-10 bg-white/95 dark:bg-gray-900/95 backdrop-blur border-b border-gray-100 dark:border-gray-800 px-4 sm:px-8 py-4">
-        <div className="max-w-5xl mx-auto flex items-center gap-3">
-          <button
-            onClick={onBack}
-            aria-label="Go back"
-            className="w-8 h-8 flex items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-          >
-            ←
-          </button>
-          <div>
-            <p className="text-[11px] font-semibold tracking-wide text-gray-400 uppercase">Step 4 of 4</p>
-            <h1 className="text-base font-bold text-gray-900 dark:text-gray-100 leading-tight">Review & Pay</h1>
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onBack}
+              aria-label="Go back"
+              className="w-8 h-8 flex items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            >
+              ←
+            </button>
+            <div>
+              <p className="text-[11px] font-semibold tracking-wide text-gray-400 uppercase">Step 4 of 4</p>
+              <h1 className="text-base font-bold text-gray-900 dark:text-gray-100 leading-tight">Review & Pay</h1>
+            </div>
           </div>
         </div>
       </div>
@@ -692,7 +777,6 @@ return Array.from(groups.values()).map((g) => {
           </div>
         </div>
       ) : (
-       selected && (
   <>
     <div className="max-w-7xl mx-auto px-4 pt-5 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-3 sm:gap-5 items-start">
       {/* LEFT COLUMN: trip/traveller details + payment methods */}
@@ -789,6 +873,57 @@ return Array.from(groups.values()).map((g) => {
           </div>
         )}
 
+        {hasGstDetails && (
+          <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden">
+            <div className="px-5 py-3.5 flex items-center gap-2 border-b border-gray-100 dark:border-gray-800">
+              <span className="grid place-items-center w-8 h-8 rounded-full bg-[#e8f4fb] dark:bg-gray-800 text-[#1c8fc7] shrink-0">
+                <HiOutlineDocumentText className="w-4 h-4" />
+              </span>
+              <p className="text-sm font-bold text-gray-900 dark:text-gray-100">GST Details</p>
+            </div>
+            <div className="px-5 py-3.5 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
+              <div>
+                <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-0.5">
+                  GSTIN
+                </p>
+                <p className="text-sm font-bold text-gray-900 dark:text-gray-100 break-words">
+                  {gstDetails.gstNumber}
+                </p>
+              </div>
+              {gstDetails.companyName && (
+                <div>
+                  <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-0.5">
+                    Company Name
+                  </p>
+                  <p className="text-sm font-bold text-gray-900 dark:text-gray-100 break-words">
+                    {gstDetails.companyName}
+                  </p>
+                </div>
+              )}
+              {gstDetails.email && (
+                <div>
+                  <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-0.5">
+                    Email
+                  </p>
+                  <p className="text-sm font-bold text-gray-900 dark:text-gray-100 break-words">
+                    {gstDetails.email}
+                  </p>
+                </div>
+              )}
+              {gstDetails.address && (
+                <div>
+                  <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-0.5">
+                    Registered Address
+                  </p>
+                  <p className="text-sm font-bold text-gray-900 dark:text-gray-100 break-words">
+                    {gstDetails.address}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden">
           <div className="px-5 py-4 flex items-center gap-2 border-b border-gray-100 dark:border-gray-800">
             <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-[#1c8fc7]">
@@ -800,94 +935,157 @@ return Array.from(groups.values()).map((g) => {
             </div>
           </div>
 
-          <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-[70vh] overflow-y-auto">
-            {groupedMethods.map((group) => {
-              const isSingle = group.options.length === 1;
-              const groupSelected = group.options.some((o) => o.index === selectedIndex);
+   <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-[70vh] overflow-y-auto">
+  {groupedMethods.map((group) => {
+    const isSingle = group.options.length === 1;
+    const groupSelected = group.options.some((o) => o.index === selectedIndex);
+    const logos = isSingle ? (group.options[0].f.pgLogos ?? []) : [];
 
+    return (
+      <div key={group.key}>
+        <button
+          onClick={() => setSelectedIndex(group.options[0].index)}
+          className={`w-full flex items-center justify-between gap-3 px-5 py-4 text-left transition-colors border-l-4 ${
+            groupSelected
+              ? "bg-[#1c8fc7]/10 dark:bg-[#1c8fc7]/15 border-[#1c8fc7]"
+              : "bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800/60 border-transparent"
+          }`}
+        >
+          {/* Left: icon + label */}
+          <div className="flex items-center gap-3 min-w-0">
+            <span
+              className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                groupSelected
+                  ? "bg-[#1c8fc7]/10 text-[#1c8fc7]"
+                  : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
+              }`}
+            >
+              <CategoryIcon categoryKey={group.key} />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">
+                {group.label}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                {group.subtitle}
+              </p>
+            </div>
+          </div>
+
+          {/* Right: logos + chevron */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {logos.length > 0 && (
+              <div className="flex items-center gap-1">
+                {logos.map((logo: { name: string; path: string }, i: number) => (
+                  <span key={i} className="inline-flex items-center">
+                    <img
+                      src={resolveLogoUrl(logo.path)}
+                      alt={logo.name}
+                      title={logo.name}
+                      className="h-10 w-auto max-w-[36px] object-contain"
+                      onError={(e) => {
+                        const el = e.currentTarget;
+                        el.style.display = "none";
+                        const fallback = el.nextElementSibling as HTMLElement | null;
+                        if (fallback) fallback.style.display = "inline";
+                      }}
+                    />
+                    <span className="hidden text-[10px] font-semibold text-gray-400 bg-gray-100 dark:bg-gray-800 rounded px-1 py-0.5">
+                      {logo.name}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            )}
+            {isSingle && !groupSelected && (
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                className="w-4 h-4 text-orange-400 flex-shrink-0"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              >
+                <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+            {groupSelected && (
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                className="w-4 h-4 text-[#1c8fc7] flex-shrink-0"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              >
+                <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+          </div>
+        </button>
+
+        {!isSingle && (
+          <div className="px-5 pb-3 space-y-1.5">
+            {group.options.map(({ index, f }) => {
+              const isSelected = index === selectedIndex;
               return (
-                <div key={group.key}>
-                  <button
-                    onClick={() => setSelectedIndex(group.options[0].index)}
-                    className={`w-full flex items-center justify-between gap-3 px-5 py-4 text-left transition-colors border-l-4 ${
-                      groupSelected
-                        ? "bg-[#1c8fc7]/10 dark:bg-[#1c8fc7]/15 border-[#1c8fc7]"
-                        : "bg-gray-50 dark:bg-gray-950/30 hover:bg-gray-100 dark:hover:bg-gray-800/60 border-transparent"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span
-                        className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                          groupSelected
-                            ? "bg-[#1c8fc7]/10 text-[#1c8fc7]"
-                            : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
-                        }`}
-                      >
-                        <CategoryIcon categoryKey={group.key} />
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">{group.label}</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{group.subtitle}</p>
-                      </div>
-                    </div>
-                    {isSingle && (
-                      <span className="flex items-center gap-2 flex-shrink-0">
-                        {groupSelected && (
-                          <svg
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            className="w-4 h-4 text-[#1c8fc7]"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                          >
-                            <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        )}
-                        <span className="text-sm font-bold text-gray-900 dark:text-gray-100 tabular-nums">
-                          {currency(group.options[0].f.amountToBePaid)}
-                        </span>
-                      </span>
-                    )}
-                  </button>
+                <button
+                  key={index}
+                  onClick={() => setSelectedIndex(index)}
+                  className={`w-full flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                    isSelected
+                      ? "border-[#1c8fc7] bg-[#1c8fc7]/5 dark:bg-[#1c8fc7]/10"
+                      : "border-gray-200 dark:border-gray-800 hover:border-gray-300"
+                  }`}
+                >
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span
+                      className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                        isSelected ? "border-[#1c8fc7]" : "border-gray-300 dark:border-gray-700"
+                      }`}
+                    >
+                      {isSelected && <span className="w-2 h-2 rounded-full bg-[#1c8fc7]" />}
+                    </span>
+                    <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate">
+                      {f.pgDetails?.pgDescription || f.pgDetails?.pgName || "Payment option"}
+                    </span>
+                  </span>
 
-                  {!isSingle && (
-                    <div className="px-5 pb-3 space-y-1.5">
-                      {group.options.map(({ index, f }) => {
-                        const isSelected = index === selectedIndex;
-                        return (
-                          <button
-                            key={index}
-                            onClick={() => setSelectedIndex(index)}
-                            className={`w-full flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
-                              isSelected
-                                ? "border-[#1c8fc7] bg-[#1c8fc7]/5 dark:bg-[#1c8fc7]/10"
-                                : "border-gray-200 dark:border-gray-800 hover:border-gray-300"
-                            }`}
-                          >
-                            <span className="flex items-center gap-2 min-w-0">
-                              <span
-                                className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                                  isSelected ? "border-[#1c8fc7]" : "border-gray-300 dark:border-gray-700"
-                                }`}
-                              >
-                                {isSelected && <span className="w-2 h-2 rounded-full bg-[#1c8fc7]" />}
-                              </span>
-                              <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate">
-                                {f.pgDetails?.pgDescription || f.pgDetails?.pgName || "Payment option"}
-                              </span>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {f.pgLogos?.length > 0 && (
+                      <div className="flex items-center gap-1">
+                        {f.pgLogos.map((logo: { name: string; path: string }, i: number) => (
+                          <span key={i} className="inline-flex items-center">
+                            <img
+                              src={resolveLogoUrl(logo.path)}
+                              alt={logo.name}
+                              title={logo.name}
+                              className="h-5 w-auto max-w-[32px] object-contain"
+                              onError={(e) => {
+                                const el = e.currentTarget;
+                                el.style.display = "none";
+                                const fallback = el.nextElementSibling as HTMLElement | null;
+                                if (fallback) fallback.style.display = "inline";
+                              }}
+                            />
+                            <span className="hidden text-[10px] font-semibold text-gray-400 bg-gray-100 dark:bg-gray-800 rounded px-1 py-0.5">
+                              {logo.name}
                             </span>
-                            <span className="text-xs font-bold text-gray-900 dark:text-gray-100 tabular-nums flex-shrink-0">
-                              {currency(f.amountToBePaid)}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <span className="text-xs font-bold text-gray-900 dark:text-gray-100 tabular-nums">
+                      {currency(f.amountToBePaid)}
+                    </span>
+                  </div>
+                </button>
               );
             })}
           </div>
+        )}
+      </div>
+    );
+  })}
+</div>
 
           {payError && (
             <div className="mx-5 mb-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-600 dark:text-red-400">
@@ -904,66 +1102,79 @@ return Array.from(groups.values()).map((g) => {
 
       <div className="space-y-4 lg:sticky lg:top-[76px]">
         <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden">
-          <button
-            onClick={() => setBreakdownOpen((v) => !v)}
-            className="w-full flex items-start justify-between p-5 text-left group"
-          >
-            <div>
-              <p className="text-lg font-bold text-gray-900 dark:text-gray-100">Fare Summary</p>
-              <p className="mt-2 text-sm font-semibold text-gray-500 dark:text-gray-400">Amount To Be Paid</p>
-              <div className="mt-0.5 flex items-baseline gap-2">
-                <span className="text-2xl font-extrabold text-gray-900 dark:text-gray-100 tabular-nums">
-                  {currency(selected.amountToBePaid)}
-                </span>
-              </div>
-              {selected.convenienceFee > 0 && (
-                <p className="text-xs text-gray-400 mt-0.5">
-                  ({currency(selected.convenienceFee)} conv. fee included)
-                </p>
-              )}
-            </div>
-            <span className="mt-1 flex items-center gap-1.5 rounded-full border border-gray-200 dark:border-gray-700 pl-1.5 pr-1.5 py-1.5 text-xs font-bold text-[#1c8fc7] transition-colors group-hover:bg-[#1c8fc7]/5 group-hover:border-[#1c8fc7]/40 flex-shrink-0">
-              <span
-                className={`flex items-center justify-center w-5 h-5 rounded-full bg-[#1c8fc7]/10 text-[#1c8fc7] transition-transform duration-200 ${
-                  breakdownOpen ? "rotate-180" : ""
-                }`}
+          {displayFare && (
+            <>
+              <button
+                onClick={() => setBreakdownOpen((v) => !v)}
+                className="w-full flex items-start justify-between p-5 text-left group"
               >
-                <HiOutlineChevronDown className="w-3 h-3" />
-              </span>
-            </span>
-          </button>
-
-          {savings > 0 && (
-            <div className="mx-5 mb-4 -mt-1 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 px-4 py-2.5 text-sm font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
-              <span>🎉</span>
-              <span>Yay! You saved {currency(savings)} on this booking</span>
-            </div>
-          )}
-
-          {breakdownOpen && (
-            <div className="border-t border-gray-100 dark:border-gray-800 px-5 py-4 space-y-3 bg-gray-50/60 dark:bg-gray-950/40">
-              {(selected.ptcFares || []).map((p: any, idx: number) => (
-                <div key={idx} className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600 dark:text-gray-400">{PTC_LABEL[p.ptc] || p.ptc} fare</span>
-                  <span className="text-gray-900 dark:text-gray-200 tabular-nums">{currency(p.fare)}</span>
+                <div>
+                  <p className="text-lg font-bold text-gray-900 dark:text-gray-100">Fare Summary</p>
+                  <p className="mt-2 text-sm font-semibold text-gray-500 dark:text-gray-400">Amount To Be Paid</p>
+                  <div className="mt-0.5 flex items-baseline gap-2">
+                    <span className="text-2xl font-extrabold text-gray-900 dark:text-gray-100 tabular-nums">
+                      {currency(displayFare.amountToBePaid)}
+                    </span>
+                  </div>
+                  {displayFare.convenienceFee > 0 && (
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      ({currency(displayFare.convenienceFee)} conv. fee included)
+                    </p>
+                  )}
+                  {!selected && (
+                    <p className="text-xs text-gray-400 mt-1.5">
+                      Select a payment method to see any applicable discount
+                    </p>
+                  )}
                 </div>
-              ))}
-              <FareRow label="Taxes & fees" value={selected.tax} />
-              <FareRow label="Convenience fee" value={selected.convenienceFee} />
-              {selected.addOns > 0 && <FareRow label="Add-ons" value={selected.addOns} />}
-              {selected.markUp > 0 && <FareRow label="Markup" value={selected.markUp} />}
-              {selected.discount > 0 && <FareRow label="Discount" value={-selected.discount} positiveIsGood />}
-              {selected.instantOff > 0 && (
-                <FareRow label="Instant discount" value={-selected.instantOff} positiveIsGood />
-              )}
-              {selected.wallet > 0 && <FareRow label="Wallet applied" value={-selected.wallet} positiveIsGood />}
-              <div className="pt-2 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between text-sm font-bold">
-                <span className="text-gray-900 dark:text-gray-100">Total payable</span>
-                <span className="text-gray-900 dark:text-gray-100 tabular-nums">
-                  {currency(selected.amountToBePaid)}
+                <span className="mt-1 flex items-center gap-1.5 rounded-full border border-gray-200 dark:border-gray-700 pl-1.5 pr-1.5 py-1.5 text-xs font-bold text-[#1c8fc7] transition-colors group-hover:bg-[#1c8fc7]/5 group-hover:border-[#1c8fc7]/40 flex-shrink-0">
+                  <span
+                    className={`flex items-center justify-center w-5 h-5 rounded-full bg-[#1c8fc7]/10 text-[#1c8fc7] transition-transform duration-200 ${
+                      breakdownOpen ? "rotate-180" : ""
+                    }`}
+                  >
+                    <HiOutlineChevronDown className="w-3 h-3" />
+                  </span>
                 </span>
-              </div>
-            </div>
+              </button>
+
+              {selected && savings > 0 && (
+                <div className="mx-5 mb-4 -mt-1 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 px-4 py-2.5 text-sm font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
+                  <span>🎉</span>
+                  <span>Yay! You saved {currency(savings)} on this booking</span>
+                </div>
+              )}
+
+              {breakdownOpen && (
+                <div className="border-t border-gray-100 dark:border-gray-800 px-5 py-4 space-y-3 bg-gray-50/60 dark:bg-gray-950/40">
+                  {(displayFare.ptcFares || []).map((p: any, idx: number) => (
+                    <div key={idx} className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">{PTC_LABEL[p.ptc] || p.ptc} fare</span>
+                      <span className="text-gray-900 dark:text-gray-200 tabular-nums">{currency(p.fare)}</span>
+                    </div>
+                  ))}
+                  <FareRow label="Taxes & fees" value={displayFare.tax} />
+                  <FareRow label="Convenience fee" value={displayFare.convenienceFee} />
+                  {displayFare.addOns > 0.00 && <FareRow label="Add-ons" value={displayFare.addOns} />}
+                  {displayFare.markUp > 0 && <FareRow label="Markup" value={displayFare.markUp} />}
+                  {selected && displayFare.discount > 0 && (
+                    <FareRow label="Discount" value={-displayFare.discount} positiveIsGood />
+                  )}
+                  {selected && displayFare.instantOff > 0 && (
+                    <FareRow label="Instant discount" value={-displayFare.instantOff} positiveIsGood />
+                  )}
+                  {selected && displayFare.wallet > 0 && (
+                    <FareRow label="Wallet applied" value={-displayFare.wallet} positiveIsGood />
+                  )}
+                  <div className="pt-2 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between text-sm font-bold">
+                    <span className="text-gray-900 dark:text-gray-100">Total payable</span>
+                    <span className="text-gray-900 dark:text-gray-100 tabular-nums">
+                      {currency(displayFare.amountToBePaid)}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -980,25 +1191,30 @@ return Array.from(groups.values()).map((g) => {
       </div>
     </div>
   </>
-)
       )}
 
-  {selected && (
+  {fareInfo.length > 0 && (
   <div className="sticky bottom-0 z-40 w-full mt-4">
     <div className="max-w-7xl mx-auto px-4 sm:px-6">
       <div className="bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] rounded-2xl py-4 px-4 flex items-center justify-between gap-4 mb-4">
         <div>
-          <p className="text-lg font-bold text-gray-900 dark:text-gray-100 tabular-nums">
-            {currency(selected.amountToBePaid)}
-          </p>
-          <p className="text-xs text-gray-400 dark:text-gray-500">
-            {travellers.length} Traveller{travellers.length > 1 ? "s" : ""}
-          </p>
+          {displayFare && (
+            <>
+              <p className="text-lg font-bold text-gray-900 dark:text-gray-100 tabular-nums">
+                {currency(displayFare.amountToBePaid)}
+              </p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                {selected
+                  ? `${travellers.length} Traveller${travellers.length > 1 ? "s" : ""}`
+                  : "Select a payment method to continue"}
+              </p>
+            </>
+          )}
         </div>
         <button
           onClick={handlePayNow}
-          disabled={paying}
-          className="h-12 px-6 rounded-full text-sm font-bold flex items-center gap-2 bg-[#FF7626] hover:bg-[#e6661f] disabled:opacity-60 text-white transition-colors"
+          disabled={paying || !selected}
+          className="h-12 px-6 rounded-full text-sm font-bold flex items-center gap-2 bg-[#FF7626] hover:bg-[#e6661f] disabled:opacity-60 disabled:cursor-not-allowed text-white transition-colors"
         >
           {paying ? (
             <>
@@ -1013,6 +1229,7 @@ return Array.from(groups.values()).map((g) => {
     </div>
   </div>
 )}
+      {sessionExpired && <SessionExpiredModal onGoBack={handleSessionExpiredGoBack} />}
     </div>
   );
 }

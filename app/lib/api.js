@@ -18,6 +18,25 @@ let cachedKey = null;
 let inFlightRequest = null;
 let refreshTimer = null;
 
+
+function logError(message, endpoint) {
+    if (typeof window === "undefined" || !BASE_URL || !message) return;
+    try {
+        fetch(`${BASE_URL}/Error/Post`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                Path: window.location.href,
+                ErrorMessage: endpoint ? `[${endpoint}] ${message}` : message,
+            }),
+        }).catch(() => {
+            // Swallow — logging failures must never surface to the caller.
+        });
+    } catch {
+        // Same: never let the logger itself break the calling code.
+    }
+}
+
 function isKeyStillValid(cached) {
     if (!cached?.uniqueKey || !cached?.validity) return false;
     const expiresAt = new Date(cached.validity).getTime();
@@ -48,12 +67,9 @@ async function fetchSignatureKey() {
     const data = await response.json().catch(() => ({}));
 
     if (!response.ok || data?.ServiceResponse?.ErrorCode) {
-        throw new ApiError(
-            response.status,
-            response.statusText,
-            data,
-            data?.ServiceResponse?.Message || "Failed to generate UniqueKey"
-        );
+        const msg = data?.ServiceResponse?.Message || "Failed to generate UniqueKey";
+        logError(msg, "/Auth/Signature");
+        throw new ApiError(response.status, response.statusText, data, msg);
     }
 
     const { UniqueKey, Validity } = data.ServiceResponse;
@@ -72,12 +88,9 @@ async function fetchResetToken(uniqueKey) {
     const data = await response.json().catch(() => ({}));
 
     if (!response.ok || data?.ServiceResponse?.ErrorCode) {
-        throw new ApiError(
-            response.status,
-            response.statusText,
-            data,
-            data?.ServiceResponse?.Message || "Failed to reset token"
-        );
+        const msg = data?.ServiceResponse?.Message || "Failed to reset token";
+        logError(msg, "/Auth/ResetToken");
+        throw new ApiError(response.status, response.statusText, data, msg);
     }
 
     const { UniqueKey, Validity } = data.ServiceResponse;
@@ -155,9 +168,17 @@ if (typeof window !== "undefined") {
     const storedKey = localStorage.getItem(UNIQUE_KEY_STORAGE);
     const storedValidity = localStorage.getItem(VALIDITY_STORAGE);
     if (storedKey) {
-        cachedKey = { uniqueKey: storedKey.trim(), validity: storedValidity, isLoginKey: true };
-
-        scheduleRefresh();
+        const candidate = { uniqueKey: storedKey.trim(), validity: storedValidity, isLoginKey: true };
+        if (isKeyStillValid(candidate)) {
+            cachedKey = candidate;
+            scheduleRefresh();
+        } else {
+            // Stale/expired login token left over from a previous visit —
+            // don't resurrect it as a logged-in session. Wipe it now so the
+            // app starts as a guest and the UI (Navbar, etc.) doesn't show
+            // logged-in state for a token that no longer works.
+            clearPersistedLoginKey();
+        }
     }
 }
 
@@ -212,9 +233,12 @@ async function doFetch(endpoint, { method, body, headers, authHeader, signal }) 
         response = await fetch(`${BASE_URL}${endpoint}`, config);
     } catch (err) {
         if (err?.name === "AbortError") {
+            // Intentional cancellation, not a real failure — don't log it.
             throw err;
         }
-        throw new ApiError(0, "NetworkError", null, "Network error. Please check your connection and try again.");
+        const msg = "Network error. Please check your connection and try again.";
+        logError(msg, endpoint);
+        throw new ApiError(0, "NetworkError", null, msg);
     }
 
     const contentType = response.headers.get("content-type") || "";
@@ -268,17 +292,16 @@ export async function apiRequest(endpoint, options = {}) {
         ? data.ServiceResponse[0]
         : data?.ServiceResponse?.Message;
 
-    throw new ApiError(
-        response.status,
-        response.statusText,
-        data,
-        serviceMsg || data?.Message || data?.message || `HTTP Error: ${response.status}`
-    );
+    const msg = serviceMsg || data?.Message || data?.message || `HTTP Error: ${response.status}`;
+    logError(msg, endpoint);
+
+    throw new ApiError(response.status, response.statusText, data, msg);
 }
 
     return data;
 }
 
 export const API_BASE_URL = BASE_URL;
+export { logError };
 
 export default apiRequest;
