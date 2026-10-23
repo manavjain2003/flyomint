@@ -63,6 +63,7 @@ type FareInfo = {
   GrossFare: number;
   NetFare: number;
   ConvenienceFee?: number;
+  SSRCharge?: number; 
   PTCFare?: PTCFare[];
 };
 
@@ -550,7 +551,8 @@ function BookingConfirmationPage() {
   const totalTax = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.Tax ?? 0), 0) ?? 0;
   const totalDiscount = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.Discount ?? 0), 0) ?? 0;
   const totalGross = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.GrossFare ?? 0), 0) ?? 0;
-  const totalConvenience = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.ConvenienceFee ?? 0), 0) ?? 0;
+const totalConvenience = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.ConvenienceFee ?? 0), 0) ?? 0;
+const totalSSR = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.SSRCharge ?? 0), 0) ?? 0;  
 
   const uniqueTravelers: Traveler[] = booking?.Journey?.[0]?.Travelers ?? [];
   const PAX_TYPE_TO_PTC: Record<string, string> = { A: "ADT", C: "CHD", I: "INF" };
@@ -961,16 +963,21 @@ function BookingConfirmationPage() {
                   </div>
                 )}
 
-                <div className="space-y-2 pb-3 border-b border-gray-100 dark:border-gray-800">
-                  {adultFareTotal > 0 && <FareRow label="Adult Fare" value={currency(adultFareTotal)} />}
-                  {childFareTotal > 0 && <FareRow label="Child Fare" value={currency(childFareTotal)} />}
-                  {infantFareTotal > 0 && <FareRow label="Infant Fare" value={currency(infantFareTotal)} />}
-                  <FareRow label="Taxes & Fees" value={currency(totalTax)} />
-                  {totalConvenience > 0 && <FareRow label="Convenience Fee" value={currency(totalConvenience)} />}
-                  {totalDiscount > 0 && (
-                    <FareRow label="Instant Discount" value={`- ${currency(totalDiscount)}`} positive />
-                  )}
-                </div>
+       <div className="space-y-2 pb-3 border-b border-gray-100 dark:border-gray-800">
+  {adultFareTotal > 0 && <FareRow label="Adult Fare" value={currency(adultFareTotal)} />}
+  {childFareTotal > 0 && <FareRow label="Child Fare" value={currency(childFareTotal)} />}
+  {infantFareTotal > 0 && <FareRow label="Infant Fare" value={currency(infantFareTotal)} />}
+  <FareRow label="Taxes & Fees" value={currency(totalTax)} />
+  {totalSSR > 0 && (
+    <FareRow label="Add-ons (baggage, meals, etc.)" value={currency(totalSSR)} />
+  )}
+  {totalConvenience > 0 && (
+    <FareRow label="Convenience fee" value={currency(totalConvenience)} />
+  )}
+  {totalDiscount > 0 && (
+    <FareRow label="Instant Discount" value={`- ${currency(totalDiscount)}`} positive />
+  )}
+</div>
 
                 <div className="flex items-center justify-between pt-3">
                   <div>

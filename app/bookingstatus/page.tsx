@@ -63,6 +63,7 @@ type FareInfo = {
   GrossFare: number;
   NetFare: number;
   ConvenienceFee?: number;
+  SSRCharge?: number;   
   PTCFare?: PTCFare[];
 };
 
@@ -637,8 +638,8 @@ function BookingConfirmationPage() {
   const totalTax = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.Tax ?? 0), 0) ?? 0;
   const totalDiscount = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.Discount ?? 0), 0) ?? 0;
   const totalGross = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.GrossFare ?? 0), 0) ?? 0;
-  const totalConvenience = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.ConvenienceFee ?? 0), 0) ?? 0;
-
+const totalConvenience = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.ConvenienceFee ?? 0), 0) ?? 0;
+const totalSSR = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.SSRCharge ?? 0), 0) ?? 0;   
   const paxTypeToPTC: Record<string, string> = { A: "ADT", C: "CHD", I: "INF" };
 
   const ptcTotals = (() => {
@@ -1128,10 +1129,13 @@ function BookingConfirmationPage() {
                   (ptcTotals.ADT === 0 && ptcTotals.CHD === 0 && ptcTotals.INF === 0) ? (
                     <FareRow label="Base Fare" value={currency(totalBase)} />
                   ) : null}
-                  <FareRow label="Taxes & fees" value={currency(totalTax)} />
-                  {totalConvenience > 0 && (
-                    <FareRow label="Convenience fee" value={currency(totalConvenience)} />
-                  )}
+                 <FareRow label="Taxes & fees" value={currency(totalTax)} />
+{totalSSR > 0 && (
+  <FareRow label="Add-ons (baggage, meals, etc.)" value={currency(totalSSR)} />
+)}
+{totalConvenience > 0 && (
+  <FareRow label="Convenience fee" value={currency(totalConvenience)} />
+)}
                   {totalDiscount > 0 && (
                     <FareRow label="Instant discount" value={`- ${currency(totalDiscount)}`} positive />
                   )}
