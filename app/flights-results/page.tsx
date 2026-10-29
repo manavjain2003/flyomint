@@ -1,0 +1,279 @@
+"use client";
+
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import FlightResults from "@/app/components/flights/FlightResults";
+import ReviewBooking from "@/app/components/booking/ReviewBooking";
+import FlightAddOns, { type AddOnPassenger } from "@/app/components/booking/FlightAddOns";
+import { readCachedSearch } from "@/app/components/flights/searchCache";
+import PaymentStep from "../components/booking/PaymentStep";
+
+function toApiDate(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function getSearchKey(params: URLSearchParams) {
+  return [
+    params.get("from"),
+    params.get("to"),
+    params.get("departureDate"),
+    params.get("returnDate"),
+    params.get("tripType"),
+    params.get("adults"),
+    params.get("children"),
+    params.get("infants"),
+    params.get("cabinClass"),
+  ].join("|");
+}
+
+const REVIEW_KEY = "flyomint_review_payload";
+const BOOKING_KEY = "flyomint_booking_data";
+const ADDONS_KEY = "flyomint_addons_data";
+
+
+export default function FlightResultsPageWrapper() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="w-12 h-12 rounded-full border-4 border-[#1c8fc7]/20 border-t-[#1c8fc7] animate-spin" />
+        </div>
+      }
+    >
+      <FlightResultsPage />
+    </Suspense>
+  );
+}
+
+function FlightResultsPage() {
+  const router = useRouter();
+  const params = useSearchParams();
+
+  const from = params.get("from") || "";
+  const to = params.get("to") || "";
+  const fromCityParam = params.get("fromCity") || "";
+  const toCityParam = params.get("toCity") || "";
+  const departureDate = new Date(params.get("departureDate") || "");
+  const returnDateParam = params.get("returnDate");
+  const tripType = (params.get("tripType") as "oneway" | "roundtrip") || "oneway";
+  const adults = Number(params.get("adults") || 1);
+  const childrenCount = Number(params.get("children") || 0);
+  const infants = Number(params.get("infants") || 0);
+  const cabinClass = (params.get("cabinClass") as any) || "economy";
+  const specialFare = (params.get("specialFare") as any) || "regular";
+const directOnly = params.get("direct") === "1";
+ const urlStep = params.get("bookingStep") as "review" | "addons" | "payment" | null;
+
+
+  const searchKey = getSearchKey(params);
+
+  const [cachedSearch, setCachedSearch] = useState<ReturnType<typeof readCachedSearch> | null>(null);
+
+  useEffect(() => {
+
+    setCachedSearch(readCachedSearch());
+  }, [searchKey]);
+
+
+  const fromCity = fromCityParam || (cachedSearch && cachedSearch.from === from ? cachedSearch.fromCity : undefined);
+  const toCity = toCityParam || (cachedSearch && cachedSearch.to === to ? cachedSearch.toCity : undefined);
+  const fromAirport = cachedSearch && cachedSearch.from === from ? cachedSearch.fromAirport : null;
+  const toAirport = cachedSearch && cachedSearch.to === to ? cachedSearch.toAirport : null;
+
+  const [reviewPayload, setReviewPayload] = useState<any>(null);
+  const [bookingData, setBookingData] = useState<any>(null);
+const [addOnData, setAddOnData] = useState<any>(null);
+
+  useEffect(() => {
+    try {
+      const storedKey = sessionStorage.getItem("flyomint_search_key");
+      if (storedKey === searchKey) {
+        const rp = sessionStorage.getItem(REVIEW_KEY);
+        const bd = sessionStorage.getItem(BOOKING_KEY);
+        const ad = sessionStorage.getItem(ADDONS_KEY);
+        if (rp) setReviewPayload(JSON.parse(rp));
+        if (bd) setBookingData(JSON.parse(bd));
+        if (ad) setAddOnData(JSON.parse(ad));
+
+      } else {
+        sessionStorage.removeItem("flyomint_search_key");
+        sessionStorage.removeItem(REVIEW_KEY);
+        sessionStorage.removeItem(BOOKING_KEY);
+        sessionStorage.removeItem(ADDONS_KEY);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [searchKey]);
+
+  function goToReview(payload: any) {
+    setReviewPayload(payload);
+    try {
+      sessionStorage.setItem("flyomint_search_key", searchKey);
+      sessionStorage.setItem(REVIEW_KEY, JSON.stringify(payload));
+    } catch { /* ignore */ }
+    const p = new URLSearchParams(params.toString());
+    p.set("bookingStep", "review");
+    router.replace(`/flights-results?${p.toString()}`, { scroll: false });
+  }
+
+   function goToPayment(data: any) {
+     setAddOnData(data);
+     try {
+       sessionStorage.setItem("flyomint_search_key", searchKey);
+       sessionStorage.setItem(ADDONS_KEY, JSON.stringify(data));
+     } catch { /* ignore */ }
+     const p = new URLSearchParams(params.toString());
+     p.set("bookingStep", "payment");
+     router.replace(`/flights-results?${p.toString()}`, { scroll: false });
+   }
+
+  function goToAddons(data: any) {
+    setBookingData(data);
+    try {
+      sessionStorage.setItem("flyomint_search_key", searchKey);
+      sessionStorage.setItem(BOOKING_KEY, JSON.stringify(data));
+    } catch { /* ignore */ }
+    const p = new URLSearchParams(params.toString());
+    p.set("bookingStep", "addons");
+    router.replace(`/flights-results?${p.toString()}`, { scroll: false });
+  }
+
+  function goToResults() {
+    setReviewPayload(null);
+    setBookingData(null);
+    setAddOnData(null);
+    try {
+      sessionStorage.removeItem("flyomint_search_key");
+      sessionStorage.removeItem(REVIEW_KEY);
+      sessionStorage.removeItem(BOOKING_KEY);
+      sessionStorage.removeItem(ADDONS_KEY);
+    } catch { /* ignore */ }
+    const p = new URLSearchParams(params.toString());
+    p.delete("bookingStep");
+    router.replace(`/flights-results?${p.toString()}`, { scroll: false });
+  }
+
+  if (urlStep === "addons" && reviewPayload && bookingData) {
+    const passengersForAddOns: AddOnPassenger[] = bookingData.passengers.map(
+      (p: any, i: number) => {
+        const type: "ADT" | "CHD" | "INF" =
+          p.type ||
+          p.passengerType ||
+          (i >= adults + childrenCount ? "INF" : i >= adults ? "CHD" : "ADT");
+        return {
+          id: p.id || `${type}-${i}`,
+          label:
+            [p.title, p.firstName, p.lastName].filter(Boolean).join(" ") ||
+            `${type === "INF" ? "Infant" : type === "CHD" ? "Child" : "Adult"} ${i + 1}`,
+          type,
+        };
+      }
+    );
+
+       return (
+      <FlightAddOns
+        tokenId={reviewPayload.tokenId}
+        bookingId={bookingData.bookingId || reviewPayload.bookingId}
+        passengers={passengersForAddOns}
+        tripSummary={{
+          from: reviewPayload.onward?.journey?.From || from,
+          to: reviewPayload.onward?.journey?.To || to,
+          date: reviewPayload.onward?.journey?.DepartureDateTime || "",
+          isRoundtrip: tripType === "roundtrip",
+        }}
+        baseFareTotal={bookingData.totalAmount}
+        baseFare={bookingData.baseFareTotal}
+        taxTotal={bookingData.taxTotal}
+        grossFareTotal={bookingData.grossFareTotal}
+        netFareTotal={bookingData.netFareTotal}
+        fareDisplayType={bookingData.fareDisplayType}
+        onBack={() => {
+          const p = new URLSearchParams(params.toString());
+          p.set("bookingStep", "review");
+          router.replace(`/flights-results?${p.toString()}`, { scroll: false });
+        }}
+        onContinue={goToPayment}
+      />
+    );
+  }
+
+  if (urlStep === "review" && reviewPayload) {
+    return (
+      <ReviewBooking
+        from={from}
+        to={to}
+        tripType={tripType}
+        onward={reviewPayload.onward}
+        ret={reviewPayload.ret || undefined}
+        adults={adults}
+        children={childrenCount}
+        infants={infants}
+        cabinClass={cabinClass}
+        tokenId={reviewPayload.tokenId}
+        bookingId={reviewPayload.bookingId}
+        index={reviewPayload.index}
+        searchType={reviewPayload.searchType || (tripType === "roundtrip" ? "R" : "O")}
+        onBack={goToResults}
+        onContinue={goToAddons}
+      />
+    );
+  }
+  if (urlStep === "payment" && reviewPayload && bookingData) {
+    return (
+      <PaymentStep
+        reviewPayload={reviewPayload}
+        bookingData={bookingData}
+        addOnData={addOnData}
+        onBack={() => {
+          const p = new URLSearchParams(params.toString());
+          p.set("bookingStep", "addons");
+          router.replace(`/flights-results?${p.toString()}`, { scroll: false });
+        }}
+      />
+    );
+  }
+  return (
+    <FlightResults
+      from={from}
+      to={to}
+      fromCity={fromCity}
+      toCity={toCity}
+      departureDate={departureDate}
+      returnDate={returnDateParam ? new Date(returnDateParam) : null}
+      tripType={tripType}
+      fromAirport={fromAirport}
+      toAirport={toAirport}
+      adults={adults}
+      children={childrenCount}
+      infants={infants}
+      cabinClass={cabinClass}
+      specialFare={specialFare}
+      directOnly={directOnly}
+      onModifySearch={(newCriteria, newDeparture, newReturn) => {
+        const p = new URLSearchParams({
+          from: newCriteria.from,
+          to: newCriteria.to,
+          fromCity: newCriteria.fromCity,
+          toCity: newCriteria.toCity,
+          departureDate: toApiDate(newDeparture),
+          tripType: newCriteria.tripType,
+          adults: String(newCriteria.adults),
+          children: String(newCriteria.children),
+          infants: String(newCriteria.infants),
+          cabinClass: newCriteria.cabinClass,
+          specialFare: newCriteria.specialFare,
+          direct: newCriteria.directOnly ? "1" : "0",
+        });
+        if (newReturn) p.set("returnDate", toApiDate(newReturn));
+        router.replace(`/flights-results?${p.toString()}`);
+      }}
+      onReviewBooking={(payload) => {
+        if (payload.onward) goToReview(payload);
+      }}
+    />
+  );
+}
