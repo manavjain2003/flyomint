@@ -6,9 +6,10 @@ import {
     HiOutlineChevronUp,
     HiOutlineChevronDown,
     HiCheck,
+    HiOutlineGift,
 } from "react-icons/hi";
 import { type Journey, type FareInfo, type TravelerCounts } from "@/app/components/flights/types";
-import { primaryFareAmount, formatTime } from "@/app/components/flights/utils";
+import { primaryFareAmount, formatTime, hasFreeMeal } from "@/app/components/flights/utils";
 import AirlineLogo from "./AirlineLogo";
 import FarePriceDisplay from "@/app/components/flights/FarePriceDisplay";
 import FareDetailsPanel from "@/app/components/flights/FareDetailsPanel";
@@ -75,7 +76,15 @@ const [showAllCodes, setShowAllCodes] = useState(false);
                     <HiCheck className="w-3 h-3" /> Selected
                 </div>
             )}
-
+   {/* Free Meal badge */}
+            {fare && hasFreeMeal(fare) && (
+               <span
+                    className={`absolute top-2 ${isSelected ? "left-[110px]" : "left-3"} z-10 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-50 dark:bg-orange-950 text-[#c2570f] dark:text-orange-300 text-[11px] font-semibold leading-none`}
+                >
+                    <HiOutlineGift className="w-3.5 h-3.5 shrink-0" />
+                    Free Meal
+                </span>
+            )}
             {/* Main row */}
             <div
                 onClick={!directBooking ? () => fare && onSelectFlight?.(journey, fare) : undefined}
@@ -92,6 +101,11 @@ const [showAllCodes, setShowAllCodes] = useState(false);
 >
   {firstSeg?.AirlineName}
 </p>
+{firstSeg?.OperatingAirline && (
+    <p className="text-[11px] font-medium text-green-600 dark:text-green-400 leading-tight">
+        {firstSeg.OperatingAirline}
+    </p>
+)}
  <p className="text-[16px] text-gray-400 dark:text-gray-500 leading-tight break-words">
     {(() => {
         const codes = journey.Segments.map((s) => `${s.AirlineCode}-${s.FlightNo}`);

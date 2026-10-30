@@ -29,10 +29,17 @@ export default function SegmentRouteCard({ seg }: { seg: Segment }) {
             {/* Airline header */}
             <div className="flex items-center gap-2.5 mb-4">
                 <AirlineLogo seg={seg} code={seg.AirlineCode} className="w-7 h-7" />
-                <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-                    {seg.AirlineName}
-                    <span className="text-gray-400 dark:text-gray-500 font-normal"> | {seg.AirlineCode} {seg.FlightNo}</span>
-                </p>
+              <div>
+                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                       {seg.AirlineName}
+                        <span className="text-gray-400 dark:text-gray-500 font-normal"> | {seg.AirlineCode} {seg.FlightNo}</span>
+                   </p>
+                    {seg.OperatingAirline && (
+                       <p className="text-[11px] font-medium text-green-600 dark:text-green-400 leading-tight">
+                            {seg.OperatingAirline}
+                        </p>
+                    )}
+                </div>
             </div>
 
             {/* Route */}

@@ -45,6 +45,11 @@ export default function CombinedLegRow({
                         >
                             {firstSeg?.AirlineName}
                         </p>
+                        {firstSeg?.OperatingAirline && (
+                            <p className="text-[10px] font-medium text-green-600 dark:text-green-400 truncate" title={firstSeg.OperatingAirline}>
+                                {firstSeg.OperatingAirline}
+                            </p>
+                        )}
                         <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">
                             {journey.Segments
                                 .map((s) => `${s.AirlineCode}-${s.FlightNo}`)

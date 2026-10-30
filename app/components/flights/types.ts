@@ -29,13 +29,20 @@ export type FareInfo = {
     FareDisplayType?: "P" | "S" | "G" | "N";
     PTCFare?: PTCFareEntry[];
     Baggage?: { PTC?: string; CabinBag?: string; CheckinBaggage?: string }[];
+    Amenity?: Amenity[];
 };
+export type Amenity = {
+    SegID?: string;
+    AmenityType?: string;
+    AmenityDesc?: string;
+ };
 
 export type Segment = {
     SID: string;
     FlightNo: string;
     AirlineCode: string;
     AirlineName: string;
+    OperatingAirline?: string;
     DepartureTime: string;
     ArrivalTime: string;
     DepartureAirportCode: string;

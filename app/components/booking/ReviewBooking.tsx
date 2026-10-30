@@ -63,6 +63,7 @@ type FareInfo = {
 type Segment = {
     SID: string;
     AirlineName: string;
+    OperatingAirline?: string;
     AirlineCode: string;
     FlightNo: string;
     VAC?: string;
@@ -325,6 +326,11 @@ function SegmentLeg({
                 <span className="text-[18px] text-gray-400 dark:text-gray-500 leading-[1.4]">
                     | {seg.AirlineCode}-{seg.FlightNo}
                     </span>
+                     {seg.OperatingAirline && (
+                  <span className="text-[12px] font-medium text-green-600 dark:text-green-400 leading-[1.4]">
+                       {seg.OperatingAirline}
+                    </span>
+                )}
             </div>
 
         

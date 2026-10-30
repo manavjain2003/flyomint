@@ -3,7 +3,8 @@
 import { useState, useMemo } from "react";
 import { HiOutlineChevronUp, HiOutlineChevronDown } from "react-icons/hi";
 import { type JourneyPair, type FareInfo, type TravelerCounts } from "./types";
-import { formatPrice, resolveFareDisplay } from "./utils";
+import { formatPrice, resolveFareDisplay, hasFreeMeal } from "./utils";
+import { HiOutlineGift } from "react-icons/hi";
 import CombinedLegRow from "@/app/components/flights/CombinedLegRow";
 import FareDetailsPanel from "@/app/components/flights/FareDetailsPanel";
 
@@ -52,6 +53,12 @@ export default function CombinedFlightCard({
             <div className="flex flex-col lg:flex-row">
                 {/* Left — Flight rows */}
                 <div className="flex-1 p-4 sm:p-5">
+                    {(hasFreeMeal(onwardFare) || hasFreeMeal(returnFare)) && (
+                       <span className="inline-flex items-center gap-1 mb-2 px-2 py-0.5 rounded-md bg-orange-50 dark:bg-orange-950 text-[#c2570f] dark:text-orange-300 text-[11px] font-semibold leading-none">
+                           <HiOutlineGift className="w-3.5 h-3.5 shrink-0" />
+                            Free Meal
+                       </span>
+                    )}
                     <div className="divide-y divide-gray-100 dark:divide-gray-800">
                         <CombinedLegRow label="Onward" journey={pair.onward} />
                         <CombinedLegRow label="Return" journey={pair.ret} />

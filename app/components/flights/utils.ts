@@ -261,3 +261,7 @@ export function toggleSetValue<T>(set: Set<T>, value: T): Set<T> {
     else next.add(value);
     return next;
 }
+
+export function hasFreeMeal(fare?: { Amenity?: { AmenityType?: string }[] } | null): boolean {
+    return (fare?.Amenity ?? []).some((a) => a.AmenityType?.trim().toLowerCase() === "meal");
+}
