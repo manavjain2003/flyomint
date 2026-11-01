@@ -32,6 +32,8 @@ import {
     CABIN_LABEL,
     PROMOS,
     EMPTY_FILTERS,
+    journeyHasFreeMeal,
+    pairHasFreeMeal,
     toApiDate,
     formatAirportCodeLabel,
     formatDayLabel,
@@ -340,6 +342,8 @@ const onwardJourneys = trips[0]?.Journey ?? [];
         let max = 0;
         const stopsMap = new Map<number, number>();
         const airlineMap = new Map<string, { name: string; price: number }>();
+        let mealCount = 0;
+        let mealPrice: number | null = null;
 
         for (const j of allJourneys) {
             const fare = cheapestFare(j);
@@ -347,6 +351,11 @@ const onwardJourneys = trips[0]?.Journey ?? [];
             const amount = primaryFareAmount(fare);
             min = Math.min(min, amount);
             max = Math.max(max, amount);
+
+            if (journeyHasFreeMeal(j)) {
+                mealCount++;
+                mealPrice = mealPrice == null ? amount : Math.min(mealPrice, amount);
+            }
 
             const prevStop = stopsMap.get(j.Stops);
             stopsMap.set(j.Stops, prevStop != null ? Math.min(prevStop, amount) : amount);
@@ -369,6 +378,7 @@ const onwardJourneys = trips[0]?.Journey ?? [];
             airlines: [...airlineMap.entries()]
                 .sort((a, b) => a[1].price - b[1].price)
                 .map(([code, v]) => ({ code, name: v.name, price: v.price })),
+            freeMeal: { count: mealCount, price: mealPrice },
         };
     }, [allJourneys]);
 
@@ -430,11 +440,18 @@ const onwardJourneys = trips[0]?.Journey ?? [];
         let max = 0;
         const stopsMap = new Map<number, number>();
         const airlineMap = new Map<string, { name: string; price: number }>();
+        let mealCount = 0;
+        let mealPrice: number | null = null;
 
         for (const pair of combinedPairs) {
             const amount = primaryFareAmount(pair.onwardFare) + primaryFareAmount(pair.retFare);
             min = Math.min(min, amount);
             max = Math.max(max, amount);
+
+            if (pairHasFreeMeal(pair)) {
+                mealCount++;
+                mealPrice = mealPrice == null ? amount : Math.min(mealPrice, amount);
+            }
 
 
             const stopsKey = Math.max(pair.onward.Stops, pair.ret.Stops);
@@ -459,6 +476,7 @@ const onwardJourneys = trips[0]?.Journey ?? [];
             airlines: [...airlineMap.entries()]
                 .sort((a, b) => a[1].price - b[1].price)
                 .map(([code, v]) => ({ code, name: v.name, price: v.price })),
+            freeMeal: { count: mealCount, price: mealPrice },
         };
     }, [combinedPairs]);
 

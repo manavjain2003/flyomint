@@ -18,6 +18,7 @@ export default function FilterSidebar({
         maxPrice: number;
         stops: { stops: number; price: number }[];
         airlines: { code: string; name: string; price: number }[];
+        freeMeal: { count: number; price: number | null };
     };
     onClear: () => void;
 }) {
@@ -100,6 +101,32 @@ export default function FilterSidebar({
                         ))}
                         {options.airlines.length === 0 && <p className="text-xs text-gray-400 dark:text-gray-500">No options yet</p>}
                     </div>
+                </div>
+
+                {/* Meals */}
+                <div className="mb-5">
+                    <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Meals</p>
+                    <label
+                        className={`flex items-center justify-between text-sm ${
+                            options.freeMeal.count === 0 && !filters.freeMealOnly
+                                ? "opacity-50 cursor-not-allowed"
+                                : "cursor-pointer"
+                        }`}
+                    >
+                        <span className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                checked={filters.freeMealOnly}
+                                disabled={options.freeMeal.count === 0 && !filters.freeMealOnly}
+                                onChange={() => setFilters((f) => ({ ...f, freeMealOnly: !f.freeMealOnly }))}
+                                className="accent-[#1c8fc7]"
+                            />
+                            <span className="text-gray-700 dark:text-gray-300">Free meals</span>
+                        </span>
+                        {options.freeMeal.price != null && (
+                            <span className="text-gray-400 dark:text-gray-500">{formatPrice(options.freeMeal.price)}</span>
+                        )}
+                    </label>
                 </div>
 
                 {/* Departure Time */}

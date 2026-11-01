@@ -377,6 +377,7 @@ function TripLegSummaryRow({ leg, showDetails }: { leg: any; showDetails: boolea
               {firstSeg.airlineCode}-{firstSeg.flightNo}
             </span>
           )}
+          
           <span className="flex items-center gap-1.5">
             <HiOutlineCalendarDays className="w-3.5 h-3.5 text-gray-400" />
             {formatSegDate(firstSeg?.departureTime)}

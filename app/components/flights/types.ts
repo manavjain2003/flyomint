@@ -103,6 +103,7 @@ export type Filters = {
     stops: Set<number>;
     airlines: Set<string>;
     timeSlots: Set<TimeSlot>;
+    freeMealOnly: boolean;
 };
 
 export type SearchCriteria = {

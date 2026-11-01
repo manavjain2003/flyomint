@@ -56,6 +56,7 @@ export const EMPTY_FILTERS: Filters = {
     stops: new Set(),
     airlines: new Set(),
     timeSlots: new Set(),
+    freeMealOnly: false,
 };
 
 export const PROMOS = [
@@ -242,6 +243,7 @@ export function journeyPasses(journey: Journey, filters: Filters): boolean {
     const firstSeg = journey.Segments[0];
     if (filters.airlines.size > 0 && firstSeg && !filters.airlines.has(firstSeg.AirlineCode)) return false;
     if (filters.timeSlots.size > 0 && !filters.timeSlots.has(getTimeSlot(journey.DepartureDateTime))) return false;
+    if (filters.freeMealOnly && !journeyHasFreeMeal(journey)) return false;
     return true;
 }
 
@@ -252,6 +254,7 @@ export function pairPasses(pair: JourneyPair, filters: Filters): boolean {
     const firstSeg = pair.onward.Segments[0];
     if (filters.airlines.size > 0 && firstSeg && !filters.airlines.has(firstSeg.AirlineCode)) return false;
     if (filters.timeSlots.size > 0 && !filters.timeSlots.has(getTimeSlot(pair.onward.DepartureDateTime))) return false;
+    if (filters.freeMealOnly && !pairHasFreeMeal(pair)) return false;
     return true;
 }
 
@@ -262,6 +265,25 @@ export function toggleSetValue<T>(set: Set<T>, value: T): Set<T> {
     return next;
 }
 
-export function hasFreeMeal(fare?: { Amenity?: { AmenityType?: string }[] } | null): boolean {
-    return (fare?.Amenity ?? []).some((a) => a.AmenityType?.trim().toLowerCase() === "meal");
+export function hasFreeMeal(
+    fare?: { Amenity?: { AmenityType?: string; AmenityDesc?: string }[] } | null
+): boolean {
+    return (fare?.Amenity ?? []).some((a) =>
+        /meal/i.test(`${a.AmenityType ?? ""} ${a.AmenityDesc ?? ""}`)
+    );
+}
+
+// Same rule the FlightCard / CombinedFlightCard "free meal" badges use,
+// so the filter and the badge always agree.
+export function journeyHasFreeMeal(journey: Journey): boolean {
+    return (journey.FareInfo ?? []).some((f) => hasFreeMeal(f));
+}
+
+export function pairHasFreeMeal(pair: JourneyPair): boolean {
+    return (
+        hasFreeMeal(pair.onwardFare) ||
+        hasFreeMeal(pair.retFare) ||
+        journeyHasFreeMeal(pair.onward) ||
+        journeyHasFreeMeal(pair.ret)
+    );
 }

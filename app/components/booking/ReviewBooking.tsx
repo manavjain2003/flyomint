@@ -326,13 +326,13 @@ function SegmentLeg({
                 <span className="text-[18px] text-gray-400 dark:text-gray-500 leading-[1.4]">
                     | {seg.AirlineCode}-{seg.FlightNo}
                     </span>
-                     {seg.OperatingAirline && (
-                  <span className="text-[12px] font-medium text-green-600 dark:text-green-400 leading-[1.4]">
+                
+            </div>
+     {seg.OperatingAirline && (
+                  <span className="text-[16px] font-medium text-green-600 dark:text-green-400 leading-[1.4]">
                        {seg.OperatingAirline}
                     </span>
                 )}
-            </div>
-
         
             <div className="grid grid-cols-[minmax(0,180px)_1fr_minmax(0,180px)] items-start gap-2">
                 <div className="min-w-0">
