@@ -60,7 +60,6 @@ export default function HelpCenterPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Hero */}
       <div className="bg-slate-50 border-b border-gray-200">
         <div className="max-w-3xl mx-auto px-6 py-16 text-center">
           <div className="w-12 h-12 mx-auto mb-6 rounded-full bg-blue-100 flex items-center justify-center">
@@ -88,7 +87,6 @@ export default function HelpCenterPage() {
         </div>
       </div>
 
-      {/* Content */}
       <div className="max-w-3xl mx-auto px-6 py-12 space-y-10">
         {categories.map((cat, catIdx) => (
           <section key={catIdx}>

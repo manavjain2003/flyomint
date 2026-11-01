@@ -8,15 +8,12 @@ export default function ContactPage() {
   return (
     <main className="min-h-screen bg-slate-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto">
-        {/* Page Header */}
         <div className="mb-10">
           <p className="text-sm font-medium text-sky-500 mb-2">Contact</p>
           <h1 className="text-4xl font-bold text-slate-900">Contact us</h1>
         </div>
 
-        {/* Two Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-          {/* Left Column - Info */}
           <div className="bg-white rounded-2xl border border-slate-200 p-8 space-y-8">
             <p className="text-sm text-slate-500">
               We answer every message. Here&apos;s the fastest way to reach us.
@@ -93,7 +90,6 @@ export default function ContactPage() {
             </div>
           </div>
 
-          {/* Right Column - Form */}
           <div className="bg-white rounded-2xl border border-slate-200 p-8">
             <h2 className="text-lg font-bold text-slate-900 mb-1">
               Send us a message
@@ -103,7 +99,6 @@ export default function ContactPage() {
             </p>
 
             <form className="space-y-5">
-              {/* Name & Email */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
                   <label className="flex items-center gap-1 text-xs font-medium text-slate-700 mb-1.5">
@@ -161,7 +156,6 @@ export default function ContactPage() {
                 </div>
               </div>
 
-              {/* Phone & Subject */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
                   <label className="block text-xs font-medium text-slate-500 mb-1.5">
@@ -185,7 +179,6 @@ export default function ContactPage() {
                 </div>
               </div>
 
-              {/* Message */}
               <div>
                 <label className="block text-xs font-medium text-slate-700 mb-1.5">
                   Message <span className="text-red-500">*</span>
@@ -205,7 +198,6 @@ export default function ContactPage() {
                 </div>
               </div>
 
-              {/* Footer */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2">
                 <p className="text-[11px] text-slate-400">
                   We reply to every message. Average response time &lt; 2 hours.

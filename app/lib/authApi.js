@@ -63,11 +63,6 @@ export async function verifyLoginOtp({ mobile, userKey, otp }) {
     }
 }
 
-// Two independent parts of the UI can legitimately ask for the profile at
-// nearly the same moment (e.g. the Navbar's name-in-dropdown fetch and the
-// /my-profile page's own load, both firing on the same page load). Rather
-// than have every call site coordinate with every other, share one in-flight
-// request the same way api.js already does for the auth-token fetch.
 let inFlightProfileRequest = null;
 
 export async function getUserProfile({ signal } = {}) {

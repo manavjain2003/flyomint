@@ -30,13 +30,11 @@ export default function CombinedFlightCard({
     const onwardDisplay = resolveFareDisplay(onwardFare);
     const returnDisplay = resolveFareDisplay(returnFare);
     const totalFare = onwardDisplay.mainAmount + returnDisplay.mainAmount;
-    // S: show combined gross struck through below net total
     const totalStrike =
         onwardDisplay.strikeAmount != null || returnDisplay.strikeAmount != null
             ? (onwardDisplay.strikeAmount ?? onwardDisplay.gross) +
               (returnDisplay.strikeAmount ?? returnDisplay.gross)
             : null;
-    // P: Extra Off badge (gross - net discount)
     const combinedDiscount =
         (onwardDisplay.showOff || returnDisplay.showOff)
             ? (onwardDisplay.gross + returnDisplay.gross) - (onwardDisplay.net + returnDisplay.net)
@@ -51,7 +49,6 @@ export default function CombinedFlightCard({
     return (
         <div className="relative rounded-2xl border border-[#FF7626] overflow-hidden bg-white dark:bg-gray-900">
             <div className="flex flex-col lg:flex-row">
-                {/* Left — Flight rows */}
                 <div className="flex-1 p-4 sm:p-5">
                     {(hasFreeMeal(onwardFare) || hasFreeMeal(returnFare)) && (
                        <span className="inline-flex items-center gap-1 mb-2 px-2 py-0.5 rounded-md bg-orange-50 dark:bg-orange-950 text-[#c2570f] dark:text-orange-300 text-[11px] font-semibold leading-none">
@@ -71,7 +68,6 @@ export default function CombinedFlightCard({
                     )}
                 </div>
 
-                {/* Right — Price & CTA */}
                 <div className="lg:w-[220px] shrink-0 p-4 sm:p-5 border-t lg:border-t-0 lg:border-l border-gray-100 dark:border-gray-800 flex flex-col justify-center gap-4">
                     <div>
                         <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">
@@ -107,7 +103,6 @@ export default function CombinedFlightCard({
                 </div>
             </div>
 
-            {/* Original orange Fare Details bar */}
             <button
                 type="button"
                 onClick={onToggleExpand}

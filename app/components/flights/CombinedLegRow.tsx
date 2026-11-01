@@ -31,7 +31,6 @@ export default function CombinedLegRow({
             </p>
 
             <div className="flex items-center gap-3 sm:gap-4">
-                {/* Airline */}
                 <div className="flex items-center gap-2.5 w-[130px] sm:w-[150px] shrink-0">
                     <AirlineLogo
                         seg={firstSeg}
@@ -58,7 +57,6 @@ export default function CombinedLegRow({
                     </div>
                 </div>
 
-                {/* Departure */}
                 <div className="w-[65px] sm:w-[75px] shrink-0">
                     <p className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100 leading-tight">
                         {formatTime(journey.DepartureDateTime)}
@@ -68,7 +66,6 @@ export default function CombinedLegRow({
                     </p>
                 </div>
 
-                {/* Duration / Stops */}
                 <div className="flex-1 flex flex-col items-center text-gray-400 dark:text-gray-500 min-w-[80px]">
                     <span className="text-[11px] mb-0.5 whitespace-nowrap">
                         {journey.Duration}
@@ -86,7 +83,6 @@ export default function CombinedLegRow({
                     </span>
                 </div>
 
-                {/* Arrival */}
                 <div className="w-[65px] sm:w-[75px] shrink-0 text-right">
                     <p className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100 leading-tight">
                         {formatTime(journey.ArrivalDateTime)}

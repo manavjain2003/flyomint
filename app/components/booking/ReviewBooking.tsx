@@ -329,7 +329,11 @@ function SegmentLeg({
                 
             </div>
      {seg.OperatingAirline && (
-                  <span className="text-[16px] font-medium text-green-600 dark:text-green-400 leading-[1.4]">
+                  <span className="text-[16px] inline-flex items-center w-fit px-2.5 py-2 rounded-full
+bg-green-50 dark:bg-green-950
+border border-green-200 dark:border-green-800
+text-green-700 dark:text-green-300
+text-[11px] font-semibold leading-none mb-2">
                        {seg.OperatingAirline}
                     </span>
                 )}
@@ -353,8 +357,6 @@ function SegmentLeg({
                     )}
                 </div>
 
-                {/* Duration divider — centered within its own fixed-width grid track,
-                    so the dot-line-dot midpoint lines up identically across every card. */}
                 <div className="flex flex-col items-center justify-center self-center text-gray-400 dark:text-gray-500 pt-1">
                     {seg.Duration && <span className="text-[15px] mb-1.5 whitespace-nowrap leading-[1.4]">{formatDurationShort(seg.Duration)}</span>}
                     <div className="w-full flex items-center gap-1">
@@ -364,7 +366,6 @@ function SegmentLeg({
                     </div>
                 </div>
 
-                {/* Arrival */}
                 <div className="min-w-0 text-right">
                     {seg.ArrivalTime && <p className="text-[12px] text-gray-400 dark:text-gray-500 mb-2 leading-[1.4]">{formatDate(seg.ArrivalTime)}</p>}
                     <p className="text-[30px] font-bold text-gray-900 dark:text-gray-100 leading-tight">{formatTime(seg.ArrivalTime)}</p>
@@ -385,7 +386,6 @@ function SegmentLeg({
                 </div>
             </div>
 
-            {/* Baggage - moved below the departure/arrival row, spanning full width */}
             {hasBaggage && (
                 <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
                     <p className="text-[12px] font-semibold text-gray-500 dark:text-gray-400 mb-2 leading-[1.4]">Baggage</p>
@@ -723,13 +723,11 @@ function FareRuleSidebar({
 
     return (
         <>
-            {/* Backdrop */}
             <div
                 className={`fixed inset-0 bg-black/40 z-40 transition-opacity ${open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
                     }`}
                 onClick={onClose}
             />
-            {/* Drawer */}
             <div
                 className={`fixed top-0 right-0 h-full w-full sm:w-[680px] bg-[#f5f8fb] z-50 shadow-2xl transition-transform duration-300 flex flex-col ${open ? "translate-x-0" : "translate-x-full"
                     }`}

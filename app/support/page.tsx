@@ -8,13 +8,11 @@ export default function HelpCenterPage() {
     return (
         <main className="min-h-screen bg-[#f7f8fa]">
             <div className="max-w-3xl mx-auto px-6 sm:px-0 pt-20 pb-24">
-                {/* Header */}
                 <h1 className="text-5xl font-bold text-gray-900 tracking-tight mb-2">
                     Help center
                 </h1>
                 <p className="text-sm text-gray-400 mb-10">Last updated 7 Jun 2026</p>
 
-                {/* Intro */}
                 <p className="text-[15px] text-gray-600 leading-relaxed mb-10">
                     Most questions are already answered on the{" "}
                     <Link href="/faqs" className="text-[#1c8fc7] underline underline-offset-2">
@@ -23,7 +21,6 @@ export default function HelpCenterPage() {
                     . If you need a human:
                 </p>
 
-                {/* Urgent */}
                 <section className="mb-8">
                     <h2 className="text-xl font-bold text-gray-900 mb-3">
                         Urgent (travel within 24 hours)
@@ -34,7 +31,6 @@ export default function HelpCenterPage() {
                     </p>
                 </section>
 
-                {/* Regular */}
                 <section className="mb-8">
                     <h2 className="text-xl font-bold text-gray-900 mb-3">Regular</h2>
                     <p className="text-[15px] text-gray-600 leading-relaxed">
@@ -50,7 +46,6 @@ export default function HelpCenterPage() {
                     </p>
                 </section>
 
-                {/* Refund status */}
                 <section>
                     <h2 className="text-xl font-bold text-gray-900 mb-3">Refund status</h2>
                     <p className="text-[15px] text-gray-600 leading-relaxed">

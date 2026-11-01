@@ -147,7 +147,6 @@ export default function BillingAddressForm({
 
     return (
         <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 sm:p-6">
-            {/* Header */}
             <div className="flex items-center gap-2 mb-4">
                 <span className="grid place-items-center w-8 h-8 rounded-full bg-[#e8f4fb] text-[#1c8fc7] shrink-0">
                     <HiOutlineHome className="w-4 h-4" />
@@ -162,10 +161,8 @@ export default function BillingAddressForm({
                 )}
             </div>
 
-            {/* 2×2 grid */}
             <div className="grid grid-cols-2 gap-3">
 
-                {/* Row 1 — PIN Code | State */}
                 <div>
                     {label("PIN Code")}
                     <div className="relative">
@@ -195,7 +192,6 @@ export default function BillingAddressForm({
                     />
                 </div>
 
-                {/* Row 2 — City | Address */}
                 <div>
                     {label("City")}
                     <input
@@ -217,7 +213,6 @@ export default function BillingAddressForm({
 
             </div>
 
-            {/* Save to profile checkbox */}
             <label className="mt-4 flex items-start gap-2.5 cursor-pointer select-none">
                 <input
                     type="checkbox"

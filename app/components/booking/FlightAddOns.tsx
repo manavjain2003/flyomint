@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     HiOutlineChevronLeft,
     HiOutlineChevronDown,
@@ -23,6 +23,7 @@ type Segment = {
     flightNo: string;
     airlineCode: string;
     airlineName: string;
+    operatingAirline?: string;
     vacLogo?: string;
     macLogo?: string;
     oacLogo?: string;
@@ -66,6 +67,7 @@ export type AddOnLegSummary = {
     segments: {
         airlineCode: string;
         airlineName: string;
+        operatingAirline?: string;
         flightNo: string;
         logo?: string;
         departureTime: string;
@@ -84,6 +86,7 @@ export type FlightAddOnsProps = {
     grossFareTotal?: number;
     netFareTotal?: number;
     fareDisplayType?: FareDisplayType;
+    operatingAirlineMap?: Record<string, string>;
     onBack: () => void;
     onContinue: (data: {
         addOnTotal: number;
@@ -133,6 +136,7 @@ export default function FlightAddOns({
     grossFareTotal,
     netFareTotal,
     fareDisplayType = "P",
+    operatingAirlineMap,
     onBack,
     onContinue,
 }: FlightAddOnsProps) {
@@ -170,12 +174,15 @@ export default function FlightAddOns({
         [legs]
     );
 
-    /**
-     * Display-ready leg summary derived from the SSR response, handed off to
-     * PaymentStep via onContinue so the payment screen renders the itinerary
-     * from this authoritative source rather than re-deriving it from
-     * ReviewBooking's pricing state.
-     */
+
+    const resolveOperating = useCallback(
+        (seg: Segment) =>
+            seg.operatingAirline ||
+            operatingAirlineMap?.[`${seg.airlineCode}-${seg.flightNo}`] ||
+            "",
+        [operatingAirlineMap]
+    );
+
     const legsSummary = useMemo<AddOnLegSummary[]>(
         () =>
             legs.map((leg) => ({
@@ -186,13 +193,14 @@ export default function FlightAddOns({
                 segments: leg.segments.map((seg) => ({
                     airlineCode: seg.airlineCode,
                     airlineName: seg.airlineName,
+                    operatingAirline: resolveOperating(seg),
                     flightNo: seg.flightNo,
                     logo: seg.vacLogo || seg.macLogo || seg.oacLogo,
                     departureTime: seg.departureTime,
                     arrivalTime: seg.arrivalTime,
                 })),
             })),
-        [legs]
+        [legs, resolveOperating]
     );
 
 
@@ -415,7 +423,6 @@ export default function FlightAddOns({
             </div>
 
             <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-[850px_1fr] gap-6 items-start">
-              {/* Left column */}
                 <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 min-w-0 order-1 lg:order-1">
                     <div className="flex items-center justify-between flex-wrap gap-3 mb-4 pb-3 border-b border-gray-100 dark:border-gray-800">
                         {(() => {
@@ -457,7 +464,6 @@ export default function FlightAddOns({
 
                  {(legsToShow.length > 1 || (activeTab === "meal" && availableMealSegments.length > 1)) && (
     <div className="flex flex-col gap-3 mb-4">
-        {/* Parent flight / leg options — different UI (not round pills) */}
         {legsToShow.length > 1 && (
             <div className="flex items-center gap-2 overflow-x-auto flex-nowrap scrollbar-hide">
                 {legsToShow.map(({ leg, i }) => (
@@ -477,7 +483,6 @@ export default function FlightAddOns({
             </div>
         )}
 
-        {/* Segment options for meals — appear in the next row */}
         {activeTab === "meal" && availableMealSegments.length > 1 && (
             <div className="flex items-center gap-2 overflow-x-auto flex-nowrap scrollbar-hide">
                 {availableMealSegments.map(({ seg, i }) => (
@@ -608,7 +613,6 @@ export default function FlightAddOns({
                             key={opt.code}
                             className="flex items-center gap-3 py-2.5 border-b border-gray-50 dark:border-gray-800 last:border-b-0"
                         >
-                            {/* Generic placeholder — API doesn't return per-meal imagery */}
                             <div
                                 className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-base shrink-0"
                                 aria-hidden="true"
@@ -640,12 +644,15 @@ export default function FlightAddOns({
     })()}
                 </div>
                
-                {/* Right column */}
                 <div className="space-y-5 order-1 lg:order-1">
                     <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
                         <div className="flex items-center justify-between mb-3">
                             <span className="text-sm font-bold text-gray-900 dark:text-gray-100">Your Flight</span>
-                            <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">
+                            <span className="inline-flex items-center w-fit px-2.5 py-1 rounded-full
+bg-green-50 dark:bg-green-950
+border border-green-200 dark:border-green-800
+text-green-700 dark:text-green-300
+text-[11px] font-semibold leading-none">
                                 {tripSummary.isRoundtrip ? "Round Trip" : "One Way"}
                             </span>
                         </div>
@@ -678,6 +685,20 @@ export default function FlightAddOns({
                                                 </span>
                                             </div>
                                         )}
+                                      {leg.segments.map((seg) => {
+    const remark = resolveOperating(seg);
+    if (!remark) return null;
+    return (
+        <p key={`op-${seg.sid}-${seg.flightNo}`}
+           className="inline-flex items-center w-fit px-2.5 py-1 rounded-full
+bg-green-50 dark:bg-green-950
+border border-green-200 dark:border-green-800
+text-green-700 dark:text-green-300
+text-[11px] font-semibold leading-none mb-2">
+            {remark}
+        </p>
+    );
+})}
 
                                         <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 mb-2">
                                             {formatDateLabel(firstSeg?.departureTime)}
@@ -765,7 +786,6 @@ export default function FlightAddOns({
                             </div>
                         )}
 
-                        {/* Fallback single line when breakdown fields are not passed */}
                         {!showBreakdown && (
                             <div className="flex items-center justify-between text-sm pb-3 border-b border-gray-100 dark:border-gray-800">
                                 <span className="text-gray-500 dark:text-gray-400">Base fare + taxes</span>
@@ -775,7 +795,6 @@ export default function FlightAddOns({
                             </div>
                         )}
 
-                        {/* Add-ons row (collapsible) */}
                         <div className="pt-3">
                             <button
                                 type="button"
@@ -810,7 +829,6 @@ export default function FlightAddOns({
                             )}
                         </div>
 
-                        {/* Total with optional strikethrough on gross (same as ReviewBooking) */}
                         <div className="flex items-center justify-between pt-3 mt-3 border-t border-gray-100 dark:border-gray-800">
                             <div>
                                 <p className="text-sm font-bold text-gray-900 dark:text-gray-100 leading-tight">

@@ -26,7 +26,6 @@ export default function SegmentRouteCard({ seg }: { seg: Segment }) {
 
     return (
         <div className="py-4">
-            {/* Airline header */}
             <div className="flex items-center gap-2.5 mb-4">
                 <AirlineLogo seg={seg} code={seg.AirlineCode} className="w-7 h-7" />
               <div>
@@ -42,9 +41,7 @@ export default function SegmentRouteCard({ seg }: { seg: Segment }) {
                 </div>
             </div>
 
-            {/* Route */}
             <div className="flex items-start gap-4">
-                {/* Departure */}
                 <div className="flex-1 min-w-0">
                     <p className="text-xs text-gray-400 dark:text-gray-500 mb-0.5">{formatDateLabel(seg.DepartureTime)}</p>
                     <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 leading-tight">{formatTimeLabel(seg.DepartureTime)}</p>
@@ -63,7 +60,6 @@ export default function SegmentRouteCard({ seg }: { seg: Segment }) {
                     )}
                 </div>
 
-                {/* Duration / dashed connector */}
                 <div className="flex flex-col items-center pt-1 shrink-0 w-24 sm:w-32">
                     <span className="text-[11px] text-gray-400 dark:text-gray-500 mb-1 whitespace-nowrap">{seg.Duration}</span>
                     <div className="w-full flex items-center">
@@ -73,7 +69,6 @@ export default function SegmentRouteCard({ seg }: { seg: Segment }) {
                     </div>
                 </div>
 
-                {/* Arrival */}
                 <div className="flex-1 min-w-0 text-right">
                     <p className="text-xs text-gray-400 dark:text-gray-500 mb-0.5">{formatDateLabel(seg.ArrivalTime)}</p>
                     <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 leading-tight">{formatTimeLabel(seg.ArrivalTime)}</p>

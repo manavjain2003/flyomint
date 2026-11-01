@@ -27,7 +27,6 @@ export default function AirlinePartners() {
             </div>
 
             <div className="relative">
-                {/* Edge fade masks */}
               <div
                     className="pointer-events-none absolute inset-y-0 left-0 w-16 sm:w-32 z-10 bg-gradient-to-r from-white dark:from-gray-900 to-transparent"
                     aria-hidden

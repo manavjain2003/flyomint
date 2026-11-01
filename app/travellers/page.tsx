@@ -102,13 +102,8 @@ function CountryCodeField({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [resolving, setResolving] = useState(false);
-  // Tracks which `value` we've already resolved a display name for, so we
-  // don't re-fetch on every render once it's settled.
   const resolvedFor = useRef<string | null>(null);
 
-  // Resolve an incoming code into a full country name for display.
-  // Skipped while the user is actively typing/searching (open === true) so
-  // it never overwrites what they're mid-typing.
   useEffect(() => {
     if (open) return;
 
@@ -228,7 +223,6 @@ export default function MyTravelersPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
-  // Pagination
   const [currentPage, setCurrentPage] = useState(1);
 
   const [showForm, setShowForm] = useState(false);
@@ -262,7 +256,6 @@ export default function MyTravelersPage() {
     return () => controller.abort();
   }, []);
 
-  // Derived pagination values
   const totalItems = travelers.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
   const safePage = Math.min(currentPage, totalPages);
@@ -539,7 +532,6 @@ export default function MyTravelersPage() {
                       </ul>
                     </div>
 
-                    {/* Pagination controls */}
                     {totalPages > 1 && (
                       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-3.5 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
                         <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -564,10 +556,8 @@ export default function MyTravelersPage() {
                             <HiOutlineChevronLeft className="w-4 h-4" />
                           </button>
 
-                          {/* Page numbers – show a window around current page */}
                           {Array.from({ length: totalPages }, (_, i) => i + 1)
                             .filter((page) => {
-                              // Always show first, last, and pages near current
                               if (page === 1 || page === totalPages) return true;
                               return Math.abs(page - safePage) <= 1;
                             })

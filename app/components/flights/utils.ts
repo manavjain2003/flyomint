@@ -273,8 +273,6 @@ export function hasFreeMeal(
     );
 }
 
-// Same rule the FlightCard / CombinedFlightCard "free meal" badges use,
-// so the filter and the badge always agree.
 export function journeyHasFreeMeal(journey: Journey): boolean {
     return (journey.FareInfo ?? []).some((f) => hasFreeMeal(f));
 }

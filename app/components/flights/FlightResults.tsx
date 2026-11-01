@@ -581,7 +581,6 @@ const onwardJourneys = trips[0]?.Journey ?? [];
 
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-24">
-            {/* Top bar */}
             <div className="bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800">
                 <div className="max-w-8xl mx-auto px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-4">
                     <div className="flex items-center gap-2 text-gray-900 dark:text-gray-100">
@@ -592,7 +591,6 @@ const onwardJourneys = trips[0]?.Journey ?? [];
                     </div>
 
                     <div className="flex items-center gap-6">
-                        {/* Departure */}
                         <div className="flex items-center gap-2 text-sm">
                             <HiOutlineCalendar className="w-4 h-4 text-gray-400 dark:text-gray-500" />
                             <div>
@@ -608,7 +606,6 @@ const onwardJourneys = trips[0]?.Journey ?? [];
                             </div>
                         </div>
 
-                        {/* Return — added */}
                         {tripType === "roundtrip" && returnDate && (
                             <>
                                 <div className="w-px h-8 bg-gray-200 dark:bg-gray-700" />
@@ -631,7 +628,6 @@ const onwardJourneys = trips[0]?.Journey ?? [];
 
                         <div className="w-px h-8 bg-gray-200 dark:bg-gray-700" />
 
-                        {/* Travelers */}
                         <div className="flex items-center gap-2 text-sm">
                             <HiOutlineUserGroup className="w-4 h-4 text-gray-400 dark:text-gray-500" />
                             <div>
@@ -669,7 +665,6 @@ const onwardJourneys = trips[0]?.Journey ?? [];
                 )}
             </div>
 
-            {/* Promo strip */}
          {(() => {
                 const isOneway = tripType === "oneway";
 const promoRef = useRef<HTMLDivElement>(null);
@@ -921,7 +916,6 @@ const promoStrip = (
                 );
             })()}
 
-            {/* Sticky booking summary bar */}
             {showFooter && (
                 <div className="fixed bottom-0 inset-x-0 bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 px-4 sm:px-6 py-3 flex items-center justify-between gap-4 shadow-[0_-2px_10px_rgba(0,0,0,0.04)]">
                     <div className="flex items-center gap-6 min-w-0">

@@ -49,10 +49,8 @@ export default function ThemeProvider({
 }: {
   children: React.ReactNode;
 }) {
-  // Start with "light" to match SSR; the script + useEffect will correct it
   const [theme, setThemeState] = useState<Theme>("light");
 
-  // On mount: read storage (or system) and apply
   useEffect(() => {
     const initial = getStoredTheme();
     setThemeState(initial);

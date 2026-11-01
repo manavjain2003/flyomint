@@ -174,8 +174,18 @@ const [addOnData, setAddOnData] = useState<any>(null);
       }
     );
 
+    const operatingAirlineMap: Record<string, string> = {};
+    [reviewPayload.onward, reviewPayload.ret].forEach((leg: any) => {
+      (leg?.journey?.Segments ?? []).forEach((s: any) => {
+        if (s?.OperatingAirline) {
+          operatingAirlineMap[`${s.AirlineCode}-${s.FlightNo}`] = s.OperatingAirline;
+        }
+      });
+    });
+
        return (
       <FlightAddOns
+        operatingAirlineMap={operatingAirlineMap}
         tokenId={reviewPayload.tokenId}
         bookingId={bookingData.bookingId || reviewPayload.bookingId}
         passengers={passengersForAddOns}

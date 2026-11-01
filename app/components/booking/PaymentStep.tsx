@@ -23,10 +23,8 @@ function SessionExpiredModal({ onGoBack }: { onGoBack: () => void }) {
     <>
       <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" />
 
-      {/* Modal */}
       <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm p-8 flex flex-col items-center text-center">
-          {/* Hourglass illustration */}
           <div className="w-16 h-16 mb-4 flex items-center justify-center rounded-full bg-orange-50 dark:bg-orange-950">
             <svg viewBox="0 0 64 64" className="w-10 h-10" fill="none">
               <path d="M20 8h24M20 56h24" stroke="#f97316" strokeWidth="3" strokeLinecap="round" />
@@ -377,6 +375,18 @@ function TripLegSummaryRow({ leg, showDetails }: { leg: any; showDetails: boolea
               {firstSeg.airlineCode}-{firstSeg.flightNo}
             </span>
           )}
+         {(leg.segments ?? []).map((seg: any, idx: number) =>
+  seg?.operatingAirline ? (
+    <span key={`op-${idx}`}
+          className="inline-flex items-center w-fit px-2.5 py-1 rounded-full
+bg-green-50 dark:bg-green-950
+border border-green-200 dark:border-green-800
+text-green-700 dark:text-green-300
+text-[11px] font-semibold leading-none">
+      {seg.operatingAirline}
+    </span>
+  ) : null
+)}
           
           <span className="flex items-center gap-1.5">
             <HiOutlineCalendarDays className="w-3.5 h-3.5 text-gray-400" />
@@ -424,9 +434,6 @@ export default function PaymentStep({
   const [payError, setPayError] = useState<string | null>(null);
   const [legDetailsOpen, setLegDetailsOpen] = useState(true);
 
-  // Payment-session countdown: starts the moment this page mounts (not on
-  // review), so it reflects time actually spent on payment rather than
-  // ticking down while the person is still filling in traveller details.
   const [sessionSeconds, setSessionSeconds] = useState<number>(SESSION_DURATION);
   const [sessionExpired, setSessionExpired] = useState(false);
 
@@ -586,7 +593,6 @@ return Array.from(groups.values()).map((g) => {
 });
   }, [fareInfo]);
 
-  // No payment method is auto-selected — the person must actively pick one.
 
   const travellers = bookingData?.passengers ?? [];
   const gstDetails = bookingData?.gst ?? null;
@@ -632,7 +638,6 @@ return Array.from(groups.values()).map((g) => {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-32">
-        {/* Header */}
         <div className="sticky top-0 z-10 bg-white/95 dark:bg-gray-900/95 backdrop-blur border-b border-gray-100 dark:border-gray-800 px-4 sm:px-8 py-4">
           <div className="max-w-5xl mx-auto flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-800 animate-pulse" />
@@ -644,7 +649,6 @@ return Array.from(groups.values()).map((g) => {
         </div>
 
         <div className="max-w-5xl mx-auto px-4 pt-5 grid grid-cols-[minmax(0,1fr)_650px] sm:grid-cols-[minmax(0,1fr)_300px] gap-3 sm:gap-5 items-start">
-          {/* Left: payment methods skeleton */}
           <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden">
             <div className="px-5 py-4 flex items-center gap-2 border-b border-gray-100 dark:border-gray-800">
               <div className="w-5 h-5 rounded bg-gray-200 dark:bg-gray-800 animate-pulse" />
@@ -672,7 +676,6 @@ return Array.from(groups.values()).map((g) => {
             <div className="mx-5 mb-5 mt-2 h-3 w-4/5 rounded bg-gray-100 dark:bg-gray-800/70 animate-pulse" />
           </div>
 
-          {/* Right: fare summary skeleton */}
           <div className="space-y-4">
             <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5">
               <div className="h-4 w-28 rounded bg-gray-200 dark:bg-gray-800 animate-pulse mb-3" />
@@ -712,7 +715,6 @@ return Array.from(groups.values()).map((g) => {
           </div>
         </div>
 
-        {/* Sticky bottom bar skeleton */}
         <div className="fixed bottom-0 inset-x-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 px-4 py-3">
           <div className="max-w-5xl mx-auto flex items-center gap-4">
             <div className="flex-1">
@@ -773,7 +775,6 @@ return Array.from(groups.values()).map((g) => {
       ) : (
   <>
     <div className="max-w-7xl mx-auto px-4 pt-5 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-3 sm:gap-5 items-start">
-      {/* LEFT COLUMN: trip/traveller details + payment methods */}
       <div className="space-y-4 min-w-0">
         {(itineraryLegs.length > 0 || travellers.length > 0) && (
           <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden">
@@ -945,7 +946,6 @@ return Array.from(groups.values()).map((g) => {
               : "bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800/60 border-transparent"
           }`}
         >
-          {/* Left: icon + label */}
           <div className="flex items-center gap-3 min-w-0">
             <span
               className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
@@ -966,7 +966,6 @@ return Array.from(groups.values()).map((g) => {
             </div>
           </div>
 
-          {/* Right: logos + chevron */}
           <div className="flex items-center gap-2 flex-shrink-0">
             {logos.length > 0 && (
               <div className="flex items-center gap-1">

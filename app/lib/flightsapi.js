@@ -358,6 +358,7 @@ export async function getAirlineSSR({ tokenId, bookingId }) {
                     flightNo: seg.FlightNo,
                     airlineCode: seg.AirlineCode,
                     airlineName: seg.AirlineName,
+                    operatingAirline: seg.OperatingAirline || "",
                     vacLogo: seg.VACLogo,
                     macLogo: seg.MACLogo,
                     oacLogo: seg.OACLogo,
@@ -553,7 +554,6 @@ export async function getAirlinePaymentUrl({ tokenId, transactionId, pgId, pgCod
 
 function normalizeServicePayload(res) {
   const raw = res?.ServiceResponse ?? res ?? {};
-  // API sometimes returns a plain string error in ServiceResponse
   if (typeof raw === "string") {
     return {
       ErrorCode: "AUTH_OR_API_ERROR",
@@ -578,7 +578,6 @@ export async function getPaymentStatus(transactionId, { signal } = {}) {
       (typeof res?.ServiceResponse === "string" ? res.ServiceResponse : null) ||
       null;
 
-    // Explicit error from gateway (login, session, etc.)
     if (payload.ErrorCode || status === "failed" || /not a valid login|unauthorized|session/i.test(message || "")) {
       return {
         success: false,
@@ -649,9 +648,6 @@ export async function pollBookingConfirmation(transactionId, { signal } = {}) {
         return { stage: "payment", status: "pending", message: pay.message };
     }
 
-    // Payment succeeded — do one lightweight booking-status check.
-    // (The caller still does a fuller AirlineBookingRetrieve afterwards;
-    // this is just an early signal, so it should not loop either.)
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
     const booking = await getBookingStatus(transactionId, { signal });
@@ -1002,7 +998,6 @@ const bookings = Array.from(grouped.values()).map((b) => ({
     legs: b.legs.sort((a, c) => (legOrder[a.searchType] ?? 9) - (legOrder[c.searchType] ?? 9)),
 }));
  
-        // Most recently created first.
         bookings.sort((a, b) => new Date(b.createdDate) - new Date(a.createdDate));
  
         return {

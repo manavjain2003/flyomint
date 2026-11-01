@@ -67,7 +67,6 @@ const [showAllCodes, setShowAllCodes] = useState(false);
             }`}
             onClick={!directBooking ? () => fare && onSelectFlight?.(journey, fare) : undefined}
         >
-            {/* SELECTED ribbon */}
             {isSelected && (
                <div
                     className="absolute top-0 left-0 bg-[#FF7626] text-white text-[11px] font-bold uppercase tracking-wide px-3 py-1.5 rounded-tl-2xl rounded-br-lg flex items-center gap-1 z-10"
@@ -76,7 +75,6 @@ const [showAllCodes, setShowAllCodes] = useState(false);
                     <HiCheck className="w-3 h-3" /> Selected
                 </div>
             )}
-   {/* Free Meal badge */}
             {fare && hasFreeMeal(fare) && (
                <span
                     className={`absolute top-2 ${isSelected ? "left-[110px]" : "left-3"} z-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-50 dark:bg-orange-950 text-[#c2570f] dark:text-orange-300 text-[11px] font-semibold leading-none`}
@@ -85,7 +83,6 @@ const [showAllCodes, setShowAllCodes] = useState(false);
                     Free Meal
                 </span>
             )}
-            {/* Main row */}
             <div
                 onClick={!directBooking ? () => fare && onSelectFlight?.(journey, fare) : undefined}
                className={`px-4 sm:px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4 pt-9 ${
@@ -124,7 +121,6 @@ const [showAllCodes, setShowAllCodes] = useState(false);
 </div>
 
                 <div className="flex-1 flex items-start gap-4 min-w-0">
-                    {/* Departure */}
                     <div className="text-left shrink-0">
                         <p className="text-xl font-bold text-gray-900 dark:text-gray-100 leading-tight">
                             {formatTime(journey.DepartureDateTime)}
@@ -138,7 +134,6 @@ const [showAllCodes, setShowAllCodes] = useState(false);
 )}
                     </div>
 
-                    {/* Duration / Stops */}
                     <div className="flex-1 flex flex-col items-center text-gray-400 dark:text-gray-500 min-w-[80px] mt-1.5">
                         <span className="text-[11px] mb-0.5 whitespace-nowrap shrink-0">{journey.Duration}</span>
                         <div className="w-full flex items-center">
@@ -154,7 +149,6 @@ const [showAllCodes, setShowAllCodes] = useState(false);
 </span>
                     </div>
 
-                    {/* Arrival */}
                     <div className="w-[70px] shrink-0 text-right">
                         <p className="text-xl font-bold text-gray-900 dark:text-gray-100 leading-tight">
                             {formatTime(journey.ArrivalDateTime)}
@@ -244,7 +238,6 @@ const [showAllCodes, setShowAllCodes] = useState(false);
     </div>
 )}
 
-            {/* Orange fare bar */}
             {fare && !fareDropdownOpen && (
                 <button
                     type="button"

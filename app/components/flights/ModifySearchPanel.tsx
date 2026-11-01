@@ -264,9 +264,7 @@ const [hoveredFare, setHoveredFare] = useState<Exclude<SpecialFare, "regular"> |
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-6 gap-3 items-end">
-                    {/* From + To */}
                     <div className="col-span-2 md:col-span-2 relative grid grid-cols-2 gap-3">
-                        {/* From */}
                         <div className="relative" ref={fromRef}>
                             <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">From</p>
                             <div
@@ -300,7 +298,6 @@ const [hoveredFare, setHoveredFare] = useState<Exclude<SpecialFare, "regular"> |
                             )}
                         </div>
 
-                        {/* To */}
                         <div className="relative" ref={toRef}>
                             <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">To</p>
                             <div
@@ -344,7 +341,6 @@ const [hoveredFare, setHoveredFare] = useState<Exclude<SpecialFare, "regular"> |
                         </button>
                     </div>
 
-                    {/* Departure date */}
                     <div className="col-span-1">
                         <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">Departure</p>
                         <DatePicker
@@ -363,7 +359,6 @@ const [hoveredFare, setHoveredFare] = useState<Exclude<SpecialFare, "regular"> |
                         />
                     </div>
 
-{/* Return date */}
 <div className={`col-span-1 ${draft.tripType === "roundtrip" ? "" : "opacity-50"}`}>
     <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">Return</p>
     <DatePicker
@@ -392,7 +387,6 @@ const [hoveredFare, setHoveredFare] = useState<Exclude<SpecialFare, "regular"> |
     />
 </div>
 
-                    {/* Travelers & class */}
                     <div className="col-span-2 md:col-span-1 relative" ref={travelersRef}>
                         <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">
                             Travelers &amp; Class

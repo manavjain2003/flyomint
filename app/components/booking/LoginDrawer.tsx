@@ -43,19 +43,12 @@ export function isLoggedInSession(): boolean {
 
     const validity = localStorage.getItem(LOGIN_VALIDITY_KEY);
     if (!validity) {
-        // No expiry on record for a stored key — treat as untrustworthy
-        // rather than silently logged-in forever.
         clearLoginSession();
         return false;
     }
 
     const expiresAt = new Date(validity).getTime();
     if (Number.isNaN(expiresAt) || expiresAt <= Date.now()) {
-        // Stale/expired login session (e.g. from a previous visit whose
-        // background refresh never got a chance to run before the tab was
-        // closed). Wipe it here so the rest of the app — starting with
-        // whatever just called this — doesn't keep treating an expired
-        // token as a logged-in account.
         clearLoginSession();
         return false;
     }
@@ -235,13 +228,11 @@ export default function LoginDrawer({ open, onClose, onLoginSuccess }: LoginDraw
 
     return (
         <>
-            {/* Backdrop */}
             <div
                 className="fixed inset-0 z-[60] bg-black/40 transition-opacity"
                 onClick={handleClose}
                 aria-hidden="true"
             />
-            {/* Drawer panel */}
             <div className="fixed inset-y-0 right-0 z-[70] w-full max-w-md bg-white dark:bg-gray-900 shadow-2xl flex flex-col">
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
                     <Image src="/assets/logo.jpg" alt="Flyomint" width={140} height={35} className="h-8 w-auto" />

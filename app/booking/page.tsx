@@ -462,7 +462,6 @@ function BookingConfirmationPage() {
           setStage("landing");
         }
       } else {
-        // No journey data yet — keep polling
         setBookingStatus("pending");
         setStage("landing");
 
@@ -579,7 +578,6 @@ const totalSSR = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.SSRCharg
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8">
 
-          {/* Confirmed banner */}
           {isFullyConfirmed && (
             <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900 px-5 py-5 flex items-start gap-3 mb-4">
               <div className="w-9 h-9 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -609,7 +607,6 @@ const totalSSR = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.SSRCharg
             </div>
           )}
 
-          {/* Booking pending banner */}
           {isBookingPending && (
             <PendingStatusBanner
               message={pendingMessage}
@@ -623,7 +620,6 @@ const totalSSR = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.SSRCharg
           <div className="grid grid-cols-1 lg:grid-cols-[750px_1fr] gap-6 items-start">
             <div className="min-w-0 order-1 lg:order-1 space-y-4">
 
-              {/* Action cards */}
               {isFullyConfirmed && (
                 <div className="grid grid-cols-3 gap-3">
                   <ActionCard label="Web Check-in" sublabel="Complete before airport" />
@@ -642,7 +638,6 @@ const totalSSR = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.SSRCharg
                 </div>
               )}
 
-              {/* Journey cards */}
               {booking?.Journey.map((journey, jIdx) => {
                 const cabin = cabinLabel(journey.Segments?.[0]?.Cabin);
                 const journeyIsPending = isPendingStatus(journey.BookingStatus);
@@ -662,7 +657,6 @@ const totalSSR = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.SSRCharg
                     key={jIdx}
                     className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden"
                   >
-                    {/* Journey header */}
                     <div className="px-5 pt-5 pb-3 flex items-start justify-between gap-3">
                       <div>
                         <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
@@ -695,7 +689,6 @@ const totalSSR = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.SSRCharg
                       )}
                     </div>
 
-                    {/* Journey-level pending message */}
                     {journeyIsPending && (journey.Message?.trim() || pendingMessage) && (
                       <div className="mx-5 mb-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 px-3.5 py-2.5">
                         <p className="text-sm text-blue-800 dark:text-blue-200">
@@ -704,14 +697,12 @@ const totalSSR = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.SSRCharg
                       </div>
                     )}
 
-                    {/* Segments — each rendered separately */}
                     {journey.Segments.map((seg, sIdx) => {
                       const freeBag = getFreeBaggage(journey.Travelers, seg.SID);
 
                       return (
                         <div key={seg.SID}>
                           <div className="px-5 py-4 border-t border-gray-100 dark:border-gray-800">
-                            {/* Airline + flight header */}
                             <div className="flex items-center gap-2 mb-3">
                               <AirlineLogo seg={seg} code={seg.AirlineCode} className="w-7 h-7" />
                               <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
@@ -726,7 +717,6 @@ const totalSSR = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.SSRCharg
                               </span>
                             </div>
 
-                            {/* Flight timeline */}
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 tabular-nums leading-none">
@@ -780,7 +770,6 @@ const totalSSR = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.SSRCharg
                               </div>
                             </div>
 
-                            {/* Free baggage */}
                             {freeBag && (
                               <div className="mt-3 flex items-center gap-4">
                                 <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">Baggage</p>
@@ -809,7 +798,6 @@ const totalSSR = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.SSRCharg
                               </div>
                             )}
 
-                            {/* Traveler table per segment */}
                             {journey.Travelers?.length > 0 && (
                               <div className="mt-3 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-800 overflow-hidden">
                                 <div className="grid grid-cols-4 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide px-3 py-2 bg-gray-100/70 dark:bg-gray-800">
@@ -831,7 +819,6 @@ const totalSSR = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.SSRCharg
                             )}
                           </div>
 
-                          {/* Layover banner */}
                           {sIdx < journey.Segments.length - 1 && seg.Layover && (
                             <div className="border-t border-b border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-5 py-2.5 flex items-center gap-2">
                               <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-amber-500 flex-shrink-0" stroke="currentColor" strokeWidth="2">
@@ -847,7 +834,6 @@ const totalSSR = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.SSRCharg
                       );
                     })}
 
-                    {/* Baggage / fare terms disclaimer — once per journey, after the last segment's traveler table */}
                     <div className="mx-5 mb-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3.5 py-2.5">
                       <p className="text-[11px] leading-relaxed text-amber-800 dark:text-amber-300">
                         Baggage & fare are subject to airline policy and may change.
@@ -857,7 +843,6 @@ const totalSSR = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.SSRCharg
                 );
               })}
 
-              {/* Contact & Help card */}
               {((booking?.ContactInfo && (booking.ContactInfo.Mobile || booking.ContactInfo.Email)) ||
                 booking?.Journey?.[0]?.Segments?.[0]) && (
                 <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5 space-y-5">
@@ -944,7 +929,6 @@ const totalSSR = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.SSRCharg
               )}
             </div>
 
-            {/* Right column */}
             <div className="space-y-4 order-2 lg:order-2 lg:sticky lg:top-8">
               <div className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5">
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Amount Paid</p>
@@ -1045,7 +1029,6 @@ const totalSSR = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.SSRCharg
   );
 }
 
-// ─── BookingFailedCard ─────────────────────────────────────────────────────────
 
 function BookingFailedCard({
   message,
@@ -1265,7 +1248,6 @@ function ModifyBookingPanel({
   );
 }
 
-// ─── Small UI components ───────────────────────────────────────────────────────
 
 function ActionCard({ label, sublabel, onClick, disabled }: { label: string; sublabel: string; onClick?: () => void; disabled?: boolean }) {
   return (

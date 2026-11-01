@@ -46,12 +46,6 @@ export default function MyProfilePage() {
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState("");
     const [saveSuccess, setSaveSuccess] = useState("");
-
-    // Tracks the AbortController for the most recent loadProfile() call.
-    // Both the mount effect and the "flyomint:login" listener call
-    // loadProfile — sharing this ref means a new call always cancels any
-    // still-in-flight previous one, so at most one UserProfile request is
-    // ever live at a time.
     const activeProfileControllerRef = useRef<AbortController | null>(null);
 
     useEffect(() => {
@@ -101,7 +95,6 @@ export default function MyProfilePage() {
             if (err instanceof Error && err.name === "AbortError") return;
             throw err;
         }
-        // A newer loadProfile() call has since taken over — ignore this stale result.
         if (activeProfileControllerRef.current !== controller) return;
         setLoadingProfile(false);
 
@@ -270,7 +263,6 @@ export default function MyProfilePage() {
 
                     <div className="flex-1 min-w-0">
                         <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700">
-                            {/* Tabs */}
                             <div className="flex border-b border-gray-200 dark:border-gray-700 px-6">
                                 {TABS.map((tab) => (
                                     <button
@@ -307,7 +299,6 @@ export default function MyProfilePage() {
                                     </div>
                                 ) : (
                                 <div className="p-6">
-                                    {/* Avatar + name row */}
                                     <div className="flex items-center gap-3 pb-6 border-b border-gray-100 dark:border-gray-800">
                                         <span className="grid place-items-center w-14 h-14 rounded-full bg-[#0284c7] text-white text-xl font-semibold shrink-0">
                                             {fullName.charAt(0).toUpperCase() || "?"}
@@ -324,7 +315,6 @@ export default function MyProfilePage() {
                                         )}
                                     </div>
 
-                                    {/* Form fields */}
                                     <div className="pt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div>
                                             <label className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
@@ -349,7 +339,6 @@ export default function MyProfilePage() {
                                                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-2.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#0f172a]/10 focus:border-[#0f172a]"
                                             />
 
-                                            {/* ── EMAIL VERIFICATION UI ── */}
                                             {emailChanged && (
                                                 <div className="mt-3 p-3 rounded-xl bg-orange-50 dark:bg-orange-950 border border-orange-100 dark:border-orange-900">
                                                     {emailStatus === "idle" && (
@@ -475,7 +464,6 @@ export default function MyProfilePage() {
                                 )
                             ) : (
                                 <div className="p-6">
-                                    {/* Security tab content placeholder */}
                                     <p className="text-sm text-gray-500 dark:text-gray-400">
                                         Password and security settings go here.
                                     </p>

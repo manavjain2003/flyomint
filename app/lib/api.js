@@ -30,10 +30,10 @@ function logError(message, endpoint) {
                 ErrorMessage: endpoint ? `[${endpoint}] ${message}` : message,
             }),
         }).catch(() => {
-            // Swallow — logging failures must never surface to the caller.
+            //  logging failures must never surface to the caller.
         });
     } catch {
-        // Same: never let the logger itself break the calling code.
+        //  never let the logger itself break the calling code.
     }
 }
 
@@ -173,10 +173,6 @@ if (typeof window !== "undefined") {
             cachedKey = candidate;
             scheduleRefresh();
         } else {
-            // Stale/expired login token left over from a previous visit —
-            // don't resurrect it as a logged-in session. Wipe it now so the
-            // app starts as a guest and the UI (Navbar, etc.) doesn't show
-            // logged-in state for a token that no longer works.
             clearPersistedLoginKey();
         }
     }
@@ -233,7 +229,6 @@ async function doFetch(endpoint, { method, body, headers, authHeader, signal }) 
         response = await fetch(`${BASE_URL}${endpoint}`, config);
     } catch (err) {
         if (err?.name === "AbortError") {
-            // Intentional cancellation, not a real failure — don't log it.
             throw err;
         }
         const msg = "Network error. Please check your connection and try again.";

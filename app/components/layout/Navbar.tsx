@@ -48,13 +48,10 @@ function SessionTimer({ seconds }: { seconds: number }) {
 function SessionExpiredModal({ onGoBack }: { onGoBack: () => void }) {
     return (
         <>
-            {/* Grey overlay — blocks all interaction */}
             <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm" />
 
-            {/* Modal */}
             <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
                 <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm p-8 flex flex-col items-center text-center">
-                    {/* Hourglass illustration */}
                     <div className="w-16 h-16 mb-4 flex items-center justify-center rounded-full bg-orange-50 dark:bg-orange-950">
                         <svg viewBox="0 0 64 64" className="w-10 h-10" fill="none">
                             <path d="M20 8h24M20 56h24" stroke="#f97316" strokeWidth="3" strokeLinecap="round" />
@@ -82,9 +79,6 @@ function SessionExpiredModal({ onGoBack }: { onGoBack: () => void }) {
     );
 }
 
-// Isolated reader for the `bookingStep` search param. Kept as its own
-// component so the useSearchParams() call can be wrapped in <Suspense>
-// without pulling the rest of the navbar out of static rendering.
 function PaymentStepFlag({ onChange }: { onChange: (isPaymentStep: boolean) => void }) {
     const searchParams = useSearchParams();
     const isPaymentStep = searchParams.get("bookingStep") === "payment";
@@ -113,8 +107,6 @@ export default function Navbar() {
 
     const visibleNavLinks = NAV_LINKS.filter((link) => !link.authOnly || loggedIn);
 
-    // Reset the countdown fresh each time the payment step is entered, and
-    // leave it alone once it's already expired so it doesn't restart itself.
     useEffect(() => {
         if (isPaymentStep) {
             setSessionSeconds(SESSION_DURATION);
@@ -146,10 +138,6 @@ export default function Navbar() {
 
         window.addEventListener("flyomint:login", check);
         window.addEventListener("flyomint:logout", check);
-        // Dispatched by app/lib/api.js when a login token's refresh fails —
-        // without this, the navbar could keep showing "My Trips"/profile
-        // menus after the token underneath has already fallen back to a
-        // guest token.
         window.addEventListener("flyomint:sessionExpired", check);
         document.addEventListener("visibilitychange", handleVisibility);
 
@@ -234,8 +222,6 @@ export default function Navbar() {
 
     return (
         <>
-            {/* Reads ?bookingStep=payment without blocking the rest of the navbar
-                from static rendering. Renders nothing visually. */}
             <Suspense fallback={null}>
                 <PaymentStepFlag onChange={setIsPaymentStep} />
             </Suspense>
@@ -248,13 +234,11 @@ export default function Navbar() {
                 }`}
             >
                 <div className="max-w-8xl mx-auto h-full px-4 sm:px-6 flex items-center justify-between gap-6">
-                    {/* Logo */}
                     <Link href="/" className="flex items-center gap-2 shrink-0 bg-white rounded-full" aria-label="Flyomint home">
                         <Image src="/assets/logo.jpg" alt="Flyomint" width={180} height={52} className="h-9 w-auto" priority />
                     </Link>
 
-                    {/* Center nav — hidden on the payment step so there's nowhere to
-                        navigate away to mid-checkout. */}
+          
                     {!isPaymentStep && (
                         <nav className="hidden lg:flex items-center gap-1 absolute left-1/2 -translate-x-1/2">
                             {visibleNavLinks.map(({ href, label, icon: Icon }) => {
@@ -277,14 +261,9 @@ export default function Navbar() {
                         </nav>
                     )}
 
-                    {/* Right side */}
                     <div className="flex items-center gap-3">
-                        {/* Payment-session countdown — only visible on the payment step,
-                            in place of the other (hidden) menu options. */}
                         {isPaymentStep && <SessionTimer seconds={sessionSeconds} />}
 
-                        {/* Theme toggle — also hidden on the payment step, along with
-                            every other menu option. */}
                         {!isPaymentStep && (
                             <button
                                 type="button"

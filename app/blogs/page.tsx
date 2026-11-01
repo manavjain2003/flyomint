@@ -25,7 +25,6 @@ export default function TravelJournalPage() {
   return (
     <main className="min-h-screen bg-white dark:bg-gray-900">
       <section className="max-w-6xl mx-auto px-6 py-16">
-        {/* Header */}
         <div className="mb-10">
           <p className="text-xs font-medium text-sky-600 dark:text-sky-400 tracking-wide uppercase mb-2">
             Travel Journal
@@ -38,17 +37,14 @@ export default function TravelJournalPage() {
           </p>
         </div>
 
-        {/* Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {articles.map((article, i) => (
             <article
               key={i}
               className="group rounded-2xl border border-slate-100 bg-white dark:bg-gray-900 overflow-hidden hover:shadow-lg transition-shadow duration-300"
             >
-              {/* Gradient Image Placeholder */}
               <div className="relative h-52 w-full bg-gradient-to-br from-sky-100 via-sky-200 to-sky-400" />
 
-              {/* Content */}
               <div className="p-5">
                 <p className="text-[10px] font-semibold text-slate-400 tracking-widest uppercase mb-2">
                   {article.tag}

@@ -34,7 +34,6 @@ export default function FilterSidebar({
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 pb-4 filter-scrollbar">
-                {/* Price Range */}
                 <div className="mb-5">
                     <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Price Range</p>
                     <input
@@ -55,7 +54,6 @@ export default function FilterSidebar({
                     </div>
                 </div>
 
-                {/* Stops */}
                 <div className="mb-5">
                     <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Stops</p>
                     <div className="space-y-2">
@@ -79,7 +77,6 @@ export default function FilterSidebar({
                     </div>
                 </div>
 
-                {/* Airlines */}
                 <div className="mb-5">
                     <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Airlines</p>
                     <div className="space-y-2">
@@ -103,7 +100,6 @@ export default function FilterSidebar({
                     </div>
                 </div>
 
-                {/* Meals */}
                 <div className="mb-5">
                     <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Meals</p>
                     <label
@@ -129,7 +125,6 @@ export default function FilterSidebar({
                     </label>
                 </div>
 
-                {/* Departure Time */}
                 <div>
                     <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Departure Time</p>
                     <div className="space-y-2">

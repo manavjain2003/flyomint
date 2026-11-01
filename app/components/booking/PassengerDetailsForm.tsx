@@ -251,8 +251,6 @@ function CountryField({
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
 
-    // Tracks the code whose name is already correctly reflected in `query`,
-    // so we don't refetch after the user's own click-to-select.
     const resolvedCodeRef = useRef<string | null>(null);
 
     useEffect(() => {
@@ -262,7 +260,6 @@ function CountryField({
             return;
         }
 
-        // Already resolved locally (e.g. user just picked it from the dropdown)
         if (resolvedCodeRef.current === value) return;
 
         let cancelled = false;
@@ -279,7 +276,6 @@ function CountryField({
                     return;
                 }
             }
-            // fallback if lookup fails — at least don't leave it blank
             resolvedCodeRef.current = value;
             setQuery(value);
         })();
@@ -532,7 +528,6 @@ function DOBField({
             setDay("");
             handleChange("", newMonth, year);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [year]);
 
     useEffect(() => {
