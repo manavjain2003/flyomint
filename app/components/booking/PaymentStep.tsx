@@ -568,7 +568,6 @@ const savings = useMemo(() => {
       const pgName = (f.pgDetails?.pgName || "").trim();
       const pgCode = (f.pgDetails?.pgCode || "").trim();
 
-      // Parse amount properly - handle strings
       const rawAmount = f.amountToBePaid;
       const amount = typeof rawAmount === "string" ? parseFloat(rawAmount) : rawAmount;
 

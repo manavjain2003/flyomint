@@ -28,6 +28,7 @@ export default function AirlineLogo({
             <img
                 src={logoUrl}
                 alt={code || "airline logo"}
+                decoding="async"
                 className="w-full h-full object-contain p-1"
                 onError={() => setFailed(true)}
             />

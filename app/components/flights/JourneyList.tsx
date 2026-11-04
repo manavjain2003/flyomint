@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { type Journey, type FareInfo, type TravelerCounts } from "@/app/components/flights/types";
 import FlightCard from "@/app/components/flights/FlightCard";
-
-const PAGE_SIZE = 6;
+import { OFFSCREEN_SKIP_STYLE, useProgressiveList } from "@/app/components/flights/useProgressiveList";
 
 export default function JourneyList({
     title,
@@ -39,32 +38,33 @@ export default function JourneyList({
     tokenId?: string; 
     searchType?: string
 }) {
-    const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-    const sentinelRef = useRef<HTMLDivElement>(null);
+    const { visible: visibleJourneys, hasMore, sentinelRef } = useProgressiveList(journeys);
 
+    const latest = useRef({ onSelectFlight, onBookFare, setExpandedGroupId, expandedGroupId });
     useEffect(() => {
-        setVisibleCount(PAGE_SIZE);
-    }, [journeys]);
-
-    useEffect(() => {
-        const node = sentinelRef.current;
-        if (!node) return;
-
-        const observer = new IntersectionObserver(
-            (entries) => {
-                if (entries[0].isIntersecting) {
-                    setVisibleCount((v) => Math.min(v + PAGE_SIZE, journeys.length));
-                }
-            },
-            { rootMargin: "300px 0px" }
-        );
-
-        observer.observe(node);
-        return () => observer.disconnect();
-    }, [journeys.length]);
-
-    const visibleJourneys = journeys.slice(0, visibleCount);
-    const hasMore = visibleCount < journeys.length;
+        latest.current = { onSelectFlight, onBookFare, setExpandedGroupId, expandedGroupId };
+    });
+    const hasSelect = !!onSelectFlight;
+    const hasBook = !!onBookFare;
+    const stableSelect = useMemo(
+        () => (hasSelect ? (j: Journey, f: FareInfo) => latest.current.onSelectFlight?.(j, f) : undefined),
+        [hasSelect]
+    );
+    const stableBook = useMemo(
+        () => (hasBook ? (j: Journey, f: FareInfo) => latest.current.onBookFare?.(j, f) : undefined),
+        [hasBook]
+    );
+    const toggleExpand = useCallback((id: string) => {
+        const c = latest.current;
+        c.setExpandedGroupId(id === c.expandedGroupId ? null : id);
+    }, []);
+    const adults = travelerCounts?.adults;
+    const kids = travelerCounts?.children;
+    const infs = travelerCounts?.infants;
+    const stableCounts = useMemo(
+        () => (travelerCounts ? { adults, children: kids, infants: infs } as TravelerCounts : undefined),
+        [adults, kids, infs]
+    );
 
     return (
         <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl overflow-hidden">
@@ -107,28 +107,28 @@ export default function JourneyList({
 
             {journeys.length > 0 && (
                 <div className="flex flex-col gap-3 p-4">
-                    {visibleJourneys.map((journey, idx) => (
-                        <FlightCard
-    key={journey.GroupId + idx}
-    journey={journey}
-    isSelected={journey.GroupId === selectedGroupId}
-    isExpanded={journey.GroupId === expandedGroupId}
-    onToggleExpand={() =>
-        setExpandedGroupId(journey.GroupId === expandedGroupId ? null : journey.GroupId)
-    }
-    onSelectFlight={onSelectFlight}
-    onBookFare={onBookFare}
-    directBooking={directBooking}
-    travelerCounts={travelerCounts}
-    tokenId={tokenId}
-    searchType={searchType}   
-/>
-                    ))}
+                    {visibleJourneys.map((journey, idx) => {
+                        const isExpanded = journey.GroupId === expandedGroupId;
+                        return (
+                            <div key={journey.GroupId + idx} style={isExpanded ? undefined : OFFSCREEN_SKIP_STYLE}>
+                                <FlightCard
+                                    journey={journey}
+                                    isSelected={journey.GroupId === selectedGroupId}
+                                    isExpanded={isExpanded}
+                                    onToggleExpand={toggleExpand}
+                                    onSelectFlight={stableSelect}
+                                    onBookFare={stableBook}
+                                    directBooking={directBooking}
+                                    travelerCounts={stableCounts}
+                                    tokenId={tokenId}
+                                    searchType={searchType}
+                                />
+                            </div>
+                        );
+                    })}
 
                     {hasMore && (
-                        <div ref={sentinelRef} className="flex items-center justify-center py-4">
-                            <span className="h-5 w-5 rounded-full border-2 border-gray-200 dark:border-gray-700 border-t-[#1c8fc7] animate-spin" />
-                        </div>
+                        <div ref={sentinelRef} aria-hidden className="h-px" />
                     )}
                 </div>
             )}

@@ -246,9 +246,6 @@ const grossFareTotal = totalAcrossTravelers(fareLegsForTotal, "GrossFare", total
 const netFareTotal = totalAcrossTravelers(fareLegsForTotal, "NetFare", totalCounts);
 const discountTotal = grossFareTotal - netFareTotal;
 
-    // FareDisplayType: "G" Gross fare only, "N" Net fare only, "S" Gross fare
-    // struck through, "P" discount + strike-through only if discounted —
-    // identical semantics to ReviewBooking.
     const fareDisplayType = fareLegsForTotal[0]?.fare.FareDisplayType ?? "P";
 
     const showBreakdown = fareDisplayType !== "N";

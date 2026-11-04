@@ -81,7 +81,6 @@ export default function MyProfilePage() {
     }, []);
 
     async function loadProfile() {
-        // Cancel any previous in-flight profile load before starting a new one.
         activeProfileControllerRef.current?.abort();
         const controller = new AbortController();
         activeProfileControllerRef.current = controller;

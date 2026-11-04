@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { memo, useState, useMemo } from "react";
 import { HiOutlineChevronUp, HiOutlineChevronDown } from "react-icons/hi";
 import { type JourneyPair, type FareInfo, type TravelerCounts } from "./types";
 import { formatPrice, resolveFareDisplay, hasFreeMeal } from "./utils";
@@ -8,7 +8,7 @@ import { HiOutlineGift } from "react-icons/hi";
 import CombinedLegRow from "@/app/components/flights/CombinedLegRow";
 import FareDetailsPanel from "@/app/components/flights/FareDetailsPanel";
 
-export default function CombinedFlightCard({
+function CombinedFlightCard({
     pair,
     isExpanded,
     onToggleExpand,
@@ -19,7 +19,7 @@ export default function CombinedFlightCard({
 }: {
     pair: JourneyPair;
     isExpanded: boolean;
-    onToggleExpand: () => void;
+    onToggleExpand: (groupId: string) => void;
     onBookPair: (pair: JourneyPair) => void;
     travelerCounts?: TravelerCounts;
     tokenId?: string;
@@ -49,6 +49,7 @@ export default function CombinedFlightCard({
     return (
         <div className="relative rounded-2xl border border-[#FF7626] overflow-hidden bg-white dark:bg-gray-900">
             <div className="flex flex-col lg:flex-row">
+                {/* Left — Flight rows */}
                 <div className="flex-1 p-4 sm:p-5">
                     {(hasFreeMeal(onwardFare) || hasFreeMeal(returnFare)) && (
                        <span className="inline-flex items-center gap-1 mb-2 px-2 py-0.5 rounded-md bg-orange-50 dark:bg-orange-950 text-[#c2570f] dark:text-orange-300 text-[11px] font-semibold leading-none">
@@ -68,6 +69,7 @@ export default function CombinedFlightCard({
                     )}
                 </div>
 
+                {/* Right — Price & CTA */}
                 <div className="lg:w-[220px] shrink-0 p-4 sm:p-5 border-t lg:border-t-0 lg:border-l border-gray-100 dark:border-gray-800 flex flex-col justify-center gap-4">
                     <div>
                         <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">
@@ -103,9 +105,10 @@ export default function CombinedFlightCard({
                 </div>
             </div>
 
+            {/* Original orange Fare Details bar */}
             <button
                 type="button"
-                onClick={onToggleExpand}
+                onClick={() => onToggleExpand(`${pair.onward.GroupId}-${pair.ret.GroupId}`)}
                 className="w-full flex items-center justify-between px-4 sm:px-5 py-2.5 bg-[#FF7626] text-white"
             >
                 <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide">
@@ -145,3 +148,5 @@ export default function CombinedFlightCard({
         </div>
     );
 }
+
+export default memo(CombinedFlightCard);

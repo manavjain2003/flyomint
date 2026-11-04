@@ -900,7 +900,7 @@ const promoStrip = (
                             />
                         </aside>
 
-                        <div className={isOneway ? "flex-1 min-w-0 lg:max-w-[1120px]" : "flex-1 min-w-0"}>
+                        <div className={isOneway ? "flex-1 min-w-0 lg:w-full" : "flex-1 min-w-0"}>
                             {promoStrip}
                             {dateStripEl}
                             {viewTabsEl}

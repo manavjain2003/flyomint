@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { type JourneyPair, type TravelerCounts } from "./types";
 import CombinedFlightCard from "./CombinedFlightCard";
-
-const PAGE_SIZE = 6;
+import { OFFSCREEN_SKIP_STYLE, useProgressiveList } from "./useProgressiveList";
 
 export default function CombinedJourneyList({
     fromCity,
@@ -31,32 +30,24 @@ export default function CombinedJourneyList({
     tokenId?: string; 
     searchType?: string;
 }) {
-    const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-    const sentinelRef = useRef<HTMLDivElement>(null);
+    const { visible: visiblePairs, hasMore, sentinelRef } = useProgressiveList(pairs);
 
+    const latest = useRef({ onBookPair, setExpandedGroupId, expandedGroupId });
     useEffect(() => {
-        setVisibleCount(PAGE_SIZE);
-    }, [pairs]);
-
-    useEffect(() => {
-        const node = sentinelRef.current;
-        if (!node) return;
-
-        const observer = new IntersectionObserver(
-            (entries) => {
-                if (entries[0].isIntersecting) {
-                    setVisibleCount((v) => Math.min(v + PAGE_SIZE, pairs.length));
-                }
-            },
-            { rootMargin: "300px 0px" }
-        );
-
-        observer.observe(node);
-        return () => observer.disconnect();
-    }, [pairs.length]);
-
-    const visiblePairs = pairs.slice(0, visibleCount);
-    const hasMore = visibleCount < pairs.length;
+        latest.current = { onBookPair, setExpandedGroupId, expandedGroupId };
+    });
+    const stableBookPair = useCallback((pair: JourneyPair) => latest.current.onBookPair(pair), []);
+    const toggleExpand = useCallback((id: string) => {
+        const c = latest.current;
+        c.setExpandedGroupId(id === c.expandedGroupId ? null : id);
+    }, []);
+    const adults = travelerCounts?.adults;
+    const kids = travelerCounts?.children;
+    const infs = travelerCounts?.infants;
+    const stableCounts = useMemo(
+        () => (travelerCounts ? { adults, children: kids, infants: infs } as TravelerCounts : undefined),
+        [adults, kids, infs]
+    );
 
     return (
         <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl overflow-hidden">
@@ -101,24 +92,24 @@ export default function CombinedJourneyList({
                 <div className="flex flex-col gap-3 p-4">
                     {visiblePairs.map((pair, idx) => {
                         const pairKey = `${pair.onward.GroupId}-${pair.ret.GroupId}`;
+                        const isExpanded = pairKey === expandedGroupId;
                         return (
-                            <CombinedFlightCard
-                                key={pairKey + idx}
-                                pair={pair}
-                                isExpanded={pairKey === expandedGroupId}
-                                onToggleExpand={() => setExpandedGroupId(pairKey === expandedGroupId ? null : pairKey)}
-                                onBookPair={onBookPair}
-                                travelerCounts={travelerCounts}
-                                tokenId={tokenId}
-                                searchType={searchType}
-                            />
+                            <div key={pairKey + idx} style={isExpanded ? undefined : OFFSCREEN_SKIP_STYLE}>
+                                <CombinedFlightCard
+                                    pair={pair}
+                                    isExpanded={isExpanded}
+                                    onToggleExpand={toggleExpand}
+                                    onBookPair={stableBookPair}
+                                    travelerCounts={stableCounts}
+                                    tokenId={tokenId}
+                                    searchType={searchType}
+                                />
+                            </div>
                         );
                     })}
 
                     {hasMore && (
-                        <div ref={sentinelRef} className="flex items-center justify-center py-4">
-                            <span className="h-5 w-5 rounded-full border-2 border-gray-200 dark:border-gray-700 border-t-[#1c8fc7] animate-spin" />
-                        </div>
+                        <div ref={sentinelRef} aria-hidden className="h-px" />
                     )}
                 </div>
             )}

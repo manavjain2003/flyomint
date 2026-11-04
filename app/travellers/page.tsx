@@ -247,7 +247,7 @@ export default function MyTravelersPage() {
       return;
     }
     setTravelers(res.travelers || []);
-    setCurrentPage(1); // reset to first page after reload
+    setCurrentPage(1); 
   }
 
   useEffect(() => {
