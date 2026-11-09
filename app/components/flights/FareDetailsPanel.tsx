@@ -7,6 +7,7 @@ import { AiOutlineLoading3Quarters } from "react-icons/ai";
 import { type Journey, type FareInfo, type TravelerCounts, type DetailTab } from "@/app/components/flights/types";
 import { formatPrice, formatOffMessage } from "@/app/components/flights/utils";
 import SegmentRouteCard from "@/app/components/flights/SegmentRouteCard";
+import DBFarePolicy, { type DBPolicy } from "@/app/components/flights/DBFarePolicy";
 import { getAirlineFareRule } from "@/app/lib/flightsapi";
 
 const PTC_LABEL: Record<string, string> = {
@@ -34,6 +35,8 @@ type RuleEntry = {
     fareRuleText?: string;
     additionalCharge?: string | null;
     sections: RuleSection[];
+    /** Present when the API returned IsDBResponse = true */
+    dbPolicy?: DBPolicy;
 };
 
 export type FareLeg = {
@@ -505,7 +508,9 @@ const discountTotal = grossFareTotal - netFareTotal;
                                     !rError &&
                                     rData &&
                                     rData.length > 0 &&
-                                    rData.map((entry, i) => (
+                                    rData.map((entry, i) => entry.dbPolicy ? (
+                                        <DBFarePolicy key={i} policy={entry.dbPolicy} />
+                                    ) : (
                                         <div key={i} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                                             {entry.originDestination && (
                                                 <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800">

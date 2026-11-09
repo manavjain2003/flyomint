@@ -260,6 +260,55 @@ export async function getAirlineFareRule({ tokenId, index, searchType }) {
             return { success: false, message: payload.Message || "Could not fetch fare rules", rules: [] };
         }
 
+        // IsDBResponse === true -> rules come from DB in FareRule (CancelRuleInfo /
+        // ChangeRuleInfo) and Trips is null. Normalise into a single entry that
+        // carries `dbPolicy`, which the UI renders as the Cleartrip-style
+        // Cancellation / Date change policy timeline.
+        if (payload.IsDBResponse === true) {
+            const fr = payload.FareRule || {};
+            const cancel = (fr.CancelRuleInfo || []).map((r) => ({
+                allowed: r.IsCancelAllowed !== false,
+                ruleText: r.RuleText || "",
+                start: r.StartDateTime || "",
+                end: r.EndDateTime || "",
+                airlineCharge: Number(r.CancelDescription?.AirlineCharge) || 0,
+                serviceCharge: Number(r.CancelDescription?.ServiceCharge) || 0,
+                refundAmount: Number(r.CancelDescription?.RefundAmount) || 0,
+                info: r.CancelDescription?.Info || "",
+                currency: r.CurrencyCode || "INR",
+            }));
+            const change = (fr.ChangeRuleInfo || []).map((r) => ({
+                allowed: r.IsChangeAllowed !== false,
+                ruleText: r.RuleText || "",
+                start: r.StartDateTime || "",
+                end: r.EndDateTime || "",
+                airlineCharge: Number(r.ChangeDescription?.AirlineCharge) || 0,
+                serviceCharge: Number(r.ChangeDescription?.ServiceCharge) || 0,
+                changeFee: Number(r.ChangeDescription?.ChangeFee) || 0,
+                info: r.ChangeDescription?.Info || "",
+                currency: r.CurrencyCode || "INR",
+            }));
+
+            if (cancel.length === 0 && change.length === 0) {
+                return { success: true, message: payload.Message || null, isDBResponse: true, rules: [] };
+            }
+
+            return {
+                success: true,
+                message: payload.Message || null,
+                isDBResponse: true,
+                rules: [
+                    {
+                        originDestination: "",
+                        fareRuleText: "",
+                        additionalCharge: null,
+                        sections: [],
+                        dbPolicy: { cancel, change },
+                    },
+                ],
+            };
+        }
+
         const trips = payload.Trips || [];
 
         const rules = trips.flatMap((trip) => {

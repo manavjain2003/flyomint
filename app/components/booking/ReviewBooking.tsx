@@ -19,6 +19,7 @@ import {
 import { HiOutlineLocationMarker } from "react-icons/hi";
 import { AiOutlineLoading3Quarters } from "react-icons/ai";
 import { getAirlinePricing, getAirlineFareRule } from "@/app/lib/flightsapi";
+import DBFarePolicy from "@/app/components/flights/DBFarePolicy";
 import PassengerDetailsForm, {
     passengerFormIsValid,
     type PassengerDetails,
@@ -591,6 +592,9 @@ function RulesCard({ legs, ruleLoading, ruleError, ruleData, onRetry }: {
                 ruleData &&
                 ruleData.length > 0 &&
                 ruleData.map((entry, i) => {
+                    if (entry.dbPolicy) {
+                        return <DBFarePolicy key={i} policy={entry.dbPolicy} />;
+                    }
                     const routeLabel = ruleEntryRouteLabel(entry, i, legs);
                     return (
                         <div key={i} className="bg-white dark:bg-gray-900 overflow-hidden">
@@ -1033,6 +1037,15 @@ async function fetchPricing() {
             setFareRuleState((prev) => ({
                 ...prev,
                 [legIndex]: { loading: false, error: null, data: [] },
+            }));
+            return;
+        }
+
+        // IsDBResponse: policy comes pre-built (cancel + date change windows), no merging needed.
+        if (res.rules.some((entry: any) => entry.dbPolicy)) {
+            setFareRuleState((prev) => ({
+                ...prev,
+                [legIndex]: { loading: false, error: null, data: [res.rules.find((entry: any) => entry.dbPolicy)] },
             }));
             return;
         }
