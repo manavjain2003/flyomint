@@ -111,6 +111,19 @@ function optionsForPax(options: SSROption[], paxType: string) {
     return options.filter((o) => o.paxType === paxType);
 }
 
+// SSRCharge can come back as number or string from the API.
+function isFreeOption(opt: SSROption) {
+    return Number(opt.charge) === 0;
+}
+
+function firstFreeOption(options: SSROption[], paxType: string) {
+    return optionsForPax(options, paxType).find(isFreeOption) ?? null;
+}
+
+function priceLabel(charge: number) {
+    return Number(charge) === 0 ? "Free" : formatPrice(charge);
+}
+
 function formatDateLabel(iso: string | undefined) {
     if (!iso) return "";
     const d = new Date(iso);
@@ -271,6 +284,37 @@ export default function FlightAddOns({
         load();
     }, [tokenId, bookingId]);
 
+
+    // Default selection: if an airline offers a free (₹0) meal and/or baggage,
+    // pre-select the first free one for every passenger (meal per segment,
+    // baggage per leg). Runs once after options load, so if the user later
+    // removes or changes it we never re-apply the default.
+    const hasAutoSelected = useRef(false);
+    useEffect(() => {
+        if (loading || legs.length === 0 || hasAutoSelected.current) return;
+        hasAutoSelected.current = true;
+
+        const nextBaggage: BaggageSelection = {};
+        const nextMeals: MealSelection = {};
+
+        passengers.forEach((p) => {
+            legs.forEach((leg, legIndex) => {
+                const freeBag = firstFreeOption(leg.baggageOptions, p.type);
+                if (freeBag) {
+                    nextBaggage[p.id] = { ...nextBaggage[p.id], [legIndex]: freeBag.code };
+                }
+                leg.segments.forEach((seg) => {
+                    const freeMeal = firstFreeOption(seg.mealOptions, p.type);
+                    if (freeMeal) {
+                        nextMeals[p.id] = { ...nextMeals[p.id], [seg.sid]: freeMeal.code };
+                    }
+                });
+            });
+        });
+
+        setBaggage((prev) => ({ ...nextBaggage, ...prev }));
+        setMeals((prev) => ({ ...nextMeals, ...prev }));
+    }, [loading, legs, passengers]);
 
     useEffect(() => {
         if (availableMealSegments.length === 0) {
@@ -560,7 +604,7 @@ export default function FlightAddOns({
                                     >
                                         <div>
                                             <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{opt.desc}</p>
-                                            <p className="text-xs text-gray-400 dark:text-gray-500">{formatPrice(opt.charge)}</p>
+                                            <p className={`text-xs ${isFreeOption(opt) ? "text-green-600 dark:text-green-400 font-semibold" : "text-gray-400 dark:text-gray-500"}`}>{priceLabel(opt.charge)}</p>
                                         </div>
                                         <button
                                             type="button"
@@ -623,7 +667,7 @@ export default function FlightAddOns({
                                 <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate uppercase tracking-tight">
                                     {opt.desc}
                                 </p>
-                                <p className="text-xs text-gray-400 dark:text-gray-500">{formatPrice(opt.charge)}</p>
+                                <p className={`text-xs ${isFreeOption(opt) ? "text-green-600 dark:text-green-400 font-semibold" : "text-gray-400 dark:text-gray-500"}`}>{priceLabel(opt.charge)}</p>
                             </div>
                             <button
                                 type="button"
@@ -822,7 +866,7 @@ text-[11px] font-semibold leading-none mb-2">
                                             className="flex items-center justify-between text-[11px] text-gray-400 dark:text-gray-500"
                                         >
                                             <span className="truncate pr-2">{s.label}</span>
-                                            <span className="shrink-0">{formatPrice(s.charge)}</span>
+                                            <span className="shrink-0">{priceLabel(s.charge)}</span>
                                         </li>
                                     ))}
                                 </ul>
@@ -873,7 +917,7 @@ text-[11px] font-semibold leading-none mb-2">
                             <p className="text-xs text-gray-400 dark:text-gray-500">
                                 {passengers.length} Traveller{passengers.length > 1 ? "s" : ""}
                             </p>
-                        </div>
+                        </div> 
                         <button
                             type="button"
                             onClick={() => onContinue({ addOnTotal, selections: selectionList, legs: legsSummary })}
