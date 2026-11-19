@@ -31,8 +31,6 @@ export type DBPolicy = { cancel: DBCancelWindow[]; change: DBChangeWindow[] };
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-// API sends airline-local time without a timezone ("2026-11-19T19:45:00").
-// Parse the string directly so the browser's timezone never shifts it.
 function parseParts(iso: string) {
     const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(iso || "");
     if (!m) return null;
@@ -120,7 +118,6 @@ function PolicySection({
             {open && (
                 <div className="mt-4 overflow-x-auto no-scrollbar">
                     <div style={{ minWidth: `calc(128px + ${n * MIN_WINDOW_PX}px)` }}>
-                        {/* Row 1: "Cancel between" + boundary times */}
                         <div className="flex items-end">
                             <div className={`${LABEL_COL} text-xs sm:text-[13px] text-gray-900 dark:text-gray-100 leading-[1.3]`}>
                                 {rowLabel}
@@ -146,7 +143,6 @@ function PolicySection({
                             </div>
                         </div>
 
-                        {/* Row 2: coloured timeline bar */}
                         <div className="flex items-center mt-1.5">
                             <div className={LABEL_COL} />
                             <div className="flex-1 flex gap-1">
@@ -156,7 +152,6 @@ function PolicySection({
                             </div>
                         </div>
 
-                        {/* Row 3: "Amount refundable" + value under each segment */}
                         <div className="flex items-start mt-4">
                             <div className={`${LABEL_COL} text-xs sm:text-[13px] text-gray-900 dark:text-gray-100 leading-[1.3]`}>
                                 {valueLabel}

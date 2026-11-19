@@ -293,7 +293,6 @@ function findBaggage(fare: FareInfo, seg: Segment, ptc: string = "A"): Baggage |
     });
 }
 
-/** Reformats the API's "2 Hr 50 Minutes" style string into "2h 50m" for the compact divider. Falls back to the original string if it doesn't match. */
 function formatDurationShort(duration?: string): string {
     if (!duration) return "";
     const hMatch = duration.match(/(\d+)\s*Hr/i);
@@ -1041,7 +1040,7 @@ async function fetchPricing() {
             return;
         }
 
-        // IsDBResponse: policy comes pre-built (cancel + date change windows), no merging needed.
+        // IsDBResponse
         if (res.rules.some((entry: any) => entry.dbPolicy)) {
             setFareRuleState((prev) => ({
                 ...prev,
