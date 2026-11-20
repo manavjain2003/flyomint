@@ -151,3 +151,25 @@ html::-webkit-scrollbar {
         }
         .checking-fade-in { animation: checking-fade-in 0.5s ease-out; }
       
+/* ---------- CMS rich text (admin-authored HTML) ---------- */
+.cms-richtext { font-size: 15px; line-height: 1.75; color: #475569; font-weight: 400; }
+.cms-richtext > * + * { margin-top: 1rem; }
+.cms-richtext h1, .cms-richtext h2, .cms-richtext h3, .cms-richtext h4 { color: #0f172a; line-height: 1.3; margin-top: 1.75rem; }
+.cms-richtext h1 { font-size: 1.75rem; }
+.cms-richtext h2 { font-size: 1.4rem; }
+.cms-richtext h3 { font-size: 1.15rem; }
+.cms-richtext a { color: #1c8fc7; text-decoration: underline; text-underline-offset: 2px; }
+.cms-richtext ul { list-style: disc; padding-left: 1.5rem; }
+.cms-richtext ol { list-style: decimal; padding-left: 1.5rem; }
+.cms-richtext li + li { margin-top: .35rem; }
+.cms-richtext img { max-width: 100%; height: auto; border-radius: .75rem; }
+.cms-richtext blockquote { border-left: 4px solid #cbd5e1; padding-left: 1rem; color: #64748b; font-style: italic; }
+.cms-richtext table { width: 100%; border-collapse: collapse; display: block; overflow-x: auto; }
+.cms-richtext th, .cms-richtext td { border: 1px solid #e2e8f0; padding: .5rem .75rem; text-align: left; }
+.cms-richtext th { background: #f8fafc; color: #0f172a; }
+.cms-richtext iframe { max-width: 100%; border-radius: .75rem; }
+.dark .cms-richtext { color: #cbd5e1; }
+.dark .cms-richtext h1, .dark .cms-richtext h2, .dark .cms-richtext h3, .dark .cms-richtext h4 { color: #f1f5f9; }
+.dark .cms-richtext th { background: #1e293b; color: #f1f5f9; }
+.dark .cms-richtext th, .dark .cms-richtext td { border-color: #334155; }
+.dark .cms-richtext blockquote { border-color: #475569; color: #94a3b8; }

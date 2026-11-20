@@ -106,7 +106,7 @@ function PaymentFailedContent() {
         
           <button
             type="button"
-            onClick={() => router.push("/support")}
+            onClick={() => router.push("/help-center")}
             className="w-full h-11 rounded-full border border-gray-200 dark:border-gray-700 text-[#FF7626] font-semibold text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
             Contact Support

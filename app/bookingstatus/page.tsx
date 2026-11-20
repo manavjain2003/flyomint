@@ -590,7 +590,7 @@ function BookingConfirmationPage() {
         buttonLabel={isAuthError ? "Login" : "Contact Support"}
         onTryAgain={() => {
           if (isAuthError) router.push("/login");
-          else router.push("/contact");
+          else router.push("/contact-us");
         }}
       />
     );
@@ -615,7 +615,7 @@ function BookingConfirmationPage() {
             : ""
         }
         buttonLabel="Contact Support"
-        onTryAgain={() => router.push("/contact")}
+        onTryAgain={() => router.push("/contact-us")}
       />
     );
   }
@@ -1005,7 +1005,7 @@ const totalSSR = booking?.Journey.reduce((sum, j) => sum + (j.FareInfo?.SSRCharg
                     <p className="text-base font-bold text-gray-900 dark:text-gray-100 mb-3">Need Help?</p>
                     <button
                       type="button"
-                      onClick={() => router.push("/contact")}
+                      onClick={() => router.push("/contact-us")}
                       className="w-full flex items-center justify-between text-left group"
                     >
                       <div className="flex items-center gap-3 min-w-0">
