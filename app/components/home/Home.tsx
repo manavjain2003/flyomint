@@ -19,6 +19,7 @@ import { getAirlineToken } from "@/app/lib/flightsapi";
 import { readCachedSearch, writeCachedSearch } from "@/app/components/flights/searchCache";
 import { type Airport, type CabinClass, type FlightType, type SpecialFare, type TripType } from "@/app/components/flights/types";
 import { CABIN_LABEL as CABIN_LABELS, CABIN_CODE } from "@/app/components/flights/utils";
+import type { CityBrief, SearchBoxConfig } from "@/app/lib/cms/types";
 
 const FLIGHT_TYPES: { key: FlightType; label: string }[] = [
     { key: "all", label: "All" },
@@ -82,11 +83,28 @@ function formatAirportSummary(airport: Airport | null, fallbackCode: string) {
     return `${airport.AirportCode} - ${airport.CityName}`;
 }
 
-const MAX_DATE = addDays(new Date(), 350);
-const TODAY = new Date();
-export default function Hero() {
+const range = (from: number, to: number) => Array.from({ length: Math.max(to - from + 1, 0) }, (_, i) => from + i);
+
+/** Used when the CMS cannot be reached: the search box keeps its built-in behaviour. */
+const DEFAULT_CONFIG: Pick<SearchBoxConfig, "tripTypes" | "maxAdults" | "maxChildren" | "maxInfants" | "cabinClasses" | "specialFares" | "directFlightsOption" | "maxAdvanceBookingDays"> = {
+    tripTypes: { oneWay: true, roundTrip: true, multiCity: false },
+    maxAdults: 9, maxChildren: 8, maxInfants: 4,
+    cabinClasses: { economy: true, premiumEconomy: true, business: true, first: true },
+    specialFares: { student: true, seniorCitizen: true, armedForces: true, doctorsNurses: false },
+    directFlightsOption: true,
+    maxAdvanceBookingDays: 350,
+};
+
+export default function Hero({ config }: { config?: SearchBoxConfig | null }) {
+    const cfg = { ...DEFAULT_CONFIG, ...(config ?? {}) };
+    const ph = config?.placeholders;
+    const errs = config?.errorMessages;
+    const popularCities: CityBrief[] = config?.popularCities ?? [];
     const router = useRouter();
-    const [tripType, setTripType] = useState<TripType>("oneway");
+    const MAX_DATE = addDays(new Date(), Math.min(cfg.maxAdvanceBookingDays || 350, 365));
+    const visibleCabins = CABIN_CLASSES.filter((c) => ({ economy: cfg.cabinClasses.economy, premium: cfg.cabinClasses.premiumEconomy, business: cfg.cabinClasses.business, first: cfg.cabinClasses.first } as Record<string, boolean>)[c.key] !== false);
+    const visibleSpecialFares = SPECIAL_FARES.filter((f) => ({ student: cfg.specialFares.student, senior: cfg.specialFares.seniorCitizen, armed: cfg.specialFares.armedForces } as Record<string, boolean>)[f.key] !== false);
+    const [tripType, setTripType] = useState<TripType>(!cfg.tripTypes.oneWay && cfg.tripTypes.roundTrip ? "roundtrip" : "oneway");
     const [flightType, setFlightType] = useState<FlightType>("all");
     const [specialFare, setSpecialFare] = useState<SpecialFare>("regular");
     const [fromCode, setFromCode] = useState("");
@@ -163,6 +181,31 @@ const [departureDate, setDepartureDate] = useState<Date>(addDays(new Date(), 1))
         window.addEventListener("pageshow", handlePageShow);
         return () => window.removeEventListener("pageshow", handlePageShow);
     }, []);
+
+    // CMS default From/To cities (only when the visitor has no previous search)
+    useEffect(() => {
+        const defFrom = config?.defaultFrom?.code;
+        const defTo = config?.defaultTo?.code;
+        if ((!defFrom && !defTo) || readCachedSearch()) return;
+        let cancelled = false;
+        const load = async (code: string, apply: (a: Airport) => void) => {
+            const res = await searchAirports(code);
+            if (cancelled || !res.success) return;
+            const match = res.airports.find((a: Airport) => a.AirportCode === code) ?? res.airports[0];
+            if (match) apply(match);
+        };
+        if (defFrom) load(defFrom, (a) => { setFromCode(a.AirportCode); setFromAirport(a); });
+        if (defTo) load(defTo, (a) => { setToCode(a.AirportCode); setToAirport(a); });
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [config?.defaultFrom?.code, config?.defaultTo?.code]);
+
+    const pickPopular = async (city: CityBrief, side: "from" | "to") => {
+        const res = await searchAirports(city.code);
+        const match = res.success ? (res.airports.find((a: Airport) => a.AirportCode === city.code) ?? res.airports[0]) : null;
+        if (!match) return;
+        if (side === "from") selectFromAirport(match); else selectToAirport(match);
+    };
 
     useEffect(() => {
         function handleClickOutside(e: MouseEvent) {
@@ -254,11 +297,17 @@ const [departureDate, setDepartureDate] = useState<Date>(addDays(new Date(), 1))
     const totalTravelers = adults + children + infants;
     const travelersSummary = `${totalTravelers} Traveler${totalTravelers > 1 ? "s" : ""}, ${CABIN_LABELS[cabinClass]}`;
 
-    const maxAdults = Math.min(9 - children - infants, 9);
-    const maxChildren = Math.min(adults * 2, 9 - adults - infants);
-    const maxInfants = Math.min(adults, 9 - adults - children);
+    const maxAdults = Math.min(9 - children - infants, 9, cfg.maxAdults);
+    const maxChildren = Math.min(adults * 2, 9 - adults - infants, cfg.maxChildren);
+    const maxInfants = Math.min(adults, 9 - adults - children, cfg.maxInfants);
 
-    const canSearch = Boolean(fromAirport && toAirport);
+    const sameCity = Boolean(fromCode && toCode && fromCode === toCode);
+    const canSearch = Boolean(fromAirport && toAirport) && !sameCity;
+    const searchHint = sameCity
+        ? errs?.sameCity || "From and To cannot be the same"
+        : !fromAirport
+            ? errs?.missingFrom || "Select airport in From and To for search"
+            : errs?.missingTo || "Select airport in From and To for search";
 
     const handleSearchFlights = async () => {
         if (!canSearch) return;
@@ -337,7 +386,7 @@ const [departureDate, setDepartureDate] = useState<Date>(addDays(new Date(), 1))
                 <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-xl p-8 sm:p-10 lg:p-14 min-h-[420px]">
                     <div className="flex items-center gap-8 mb-8">
                         <div className="flex items-center gap-3">
-    <button
+    {cfg.tripTypes.oneWay && <button
         type="button"
         onClick={() => { setTripType("oneway"); setReturnDate(null); }}
         className={`px-5 py-2 rounded-full border text-sm font-medium transition-colors ${
@@ -347,8 +396,8 @@ const [departureDate, setDepartureDate] = useState<Date>(addDays(new Date(), 1))
         }`}
     >
         One Way
-    </button>
-    <button
+    </button>}
+    {cfg.tripTypes.roundTrip && <button
         type="button"
         onClick={() => setTripType("roundtrip")}
         className={`px-5 py-2 rounded-full border text-sm font-medium transition-colors ${
@@ -358,7 +407,7 @@ const [departureDate, setDepartureDate] = useState<Date>(addDays(new Date(), 1))
         }`}
     >
         Round Trip
-    </button>
+    </button>}
 </div>
                     </div>
 
@@ -375,11 +424,14 @@ const [departureDate, setDepartureDate] = useState<Date>(addDays(new Date(), 1))
                                         setFromOpen(true);
                                         setFromQuery("");
                                     }}
-                                    placeholder="From"
+                                    placeholder={ph?.from || "From"}
                                     className="w-full bg-transparent text-base font-semibold text-gray-900 dark:text-gray-100 outline-none placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-medium"
                                 />
                             </Field>
 
+                            {fromOpen && fromQuery.length === 0 && popularCities.length > 0 && (
+                                <PopularCities cities={popularCities} onPick={(c) => pickPopular(c, "from")} />
+                            )}
                             {fromOpen && fromQuery.length > 0 && (
                                 <AirportDropdown
                                     loading={fromLoading}
@@ -412,11 +464,14 @@ const [departureDate, setDepartureDate] = useState<Date>(addDays(new Date(), 1))
                                         setToOpen(true);
                                         setToQuery("");
                                     }}
-                                    placeholder="To"
+                                    placeholder={ph?.to || "To"}
                                     className="w-full bg-transparent text-base font-semibold text-gray-900 dark:text-gray-100 outline-none placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-medium"
                                 />
                             </Field>
 
+                            {toOpen && toQuery.length === 0 && popularCities.length > 0 && (
+                                <PopularCities cities={popularCities} onPick={(c) => pickPopular(c, "to")} />
+                            )}
                             {toOpen && toQuery.length > 0 && (
                                 <AirportDropdown
                                     loading={toLoading}
@@ -443,7 +498,7 @@ const [departureDate, setDepartureDate] = useState<Date>(addDays(new Date(), 1))
                                 wrapperClassName="block w-full"
                                 openToDate={returnDate || departureDate}
                                 customInput={
-                                    <Field label="Departure">
+                                    <Field label={ph?.departure || "Departure"}>
                                         <div className="flex items-center justify-between">
                                             <span className="text-base font-semibold text-gray-900 dark:text-gray-100">
                                                 {formatShort(departureDate)}
@@ -470,7 +525,7 @@ const [departureDate, setDepartureDate] = useState<Date>(addDays(new Date(), 1))
     wrapperClassName="block w-full"
     openToDate={returnDate || departureDate}
     customInput={
-        <Field label="Return">
+        <Field label={ph?.return || "Return"}>
             <div className="flex items-center justify-between">
                 <span
                     className={`text-base ${returnDate ? "font-semibold text-gray-900 dark:text-gray-100" : "font-medium text-gray-400 dark:text-gray-500"
@@ -502,7 +557,7 @@ const [departureDate, setDepartureDate] = useState<Date>(addDays(new Date(), 1))
 
                         <div className="relative w-full lg:flex-[1.2] lg:min-w-0" ref={travelersRef}>
                             <Field
-                                label="Travelers & class"
+                                label={ph?.travellers || "Travelers & class"}
                                 onClick={() => setTravelersOpen((v) => !v)}
                                 active={travelersOpen}
                             >
@@ -535,13 +590,13 @@ const [departureDate, setDepartureDate] = useState<Date>(addDays(new Date(), 1))
                                         title="Adults"
                                         subtitle="12 yrs or above"
                                         value={adults}
-                                        options={[1, 2, 3, 4, 5, 6, 7, 8, 9]}
-                                        disabledOptions={[1, 2, 3, 4, 5, 6, 7, 8, 9].filter((n) => n > maxAdults)}
+                                        options={range(1, Math.min(9, cfg.maxAdults))}
+                                        disabledOptions={range(1, Math.min(9, cfg.maxAdults)).filter((n) => n > maxAdults)}
                                         onChange={(v) => {
                                             setAdults(v);
-                                            const newMaxChildren = Math.min(v * 2, 9 - v - infants);
+                                            const newMaxChildren = Math.min(v * 2, 9 - v - infants, cfg.maxChildren);
                                             if (children > newMaxChildren) setChildren(newMaxChildren);
-                                            const newMaxInfants = Math.min(v, 9 - v - children);
+                                            const newMaxInfants = Math.min(v, 9 - v - children, cfg.maxInfants);
                                             if (infants > newMaxInfants) setInfants(newMaxInfants);
                                         }}
                                     />
@@ -551,8 +606,8 @@ const [departureDate, setDepartureDate] = useState<Date>(addDays(new Date(), 1))
                                         subtitle="2-12 years"
                                         titleSuffix="(2y-12y)"
                                         value={children}
-                                        options={[0, 1, 2, 3, 4, 5, 6, 7, 8]}
-                                        disabledOptions={[0, 1, 2, 3, 4, 5, 6, 7, 8].filter((n) => n > maxChildren)}
+                                        options={range(0, Math.min(8, cfg.maxChildren))}
+                                        disabledOptions={range(0, Math.min(8, cfg.maxChildren)).filter((n) => n > maxChildren)}
                                         onChange={(v) => setChildren(v)}
                                     />
 
@@ -561,8 +616,8 @@ const [departureDate, setDepartureDate] = useState<Date>(addDays(new Date(), 1))
                                         subtitle="on the day of travel"
                                         titleSuffix="(below 2y)"
                                         value={infants}
-                                        options={[0, 1, 2, 3, 4]}
-                                        disabledOptions={[0, 1, 2, 3, 4].filter((n) => n > maxInfants)}
+                                        options={range(0, Math.min(4, cfg.maxInfants))}
+                                        disabledOptions={range(0, Math.min(4, cfg.maxInfants)).filter((n) => n > maxInfants)}
                                         onChange={(v) => setInfants(v)}
                                     />
 
@@ -583,7 +638,7 @@ const [departureDate, setDepartureDate] = useState<Date>(addDays(new Date(), 1))
 
                                     <p className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-1.5">Cabin Class</p>
                                     <div className="grid grid-cols-2 gap-1.5 mb-2">
-                                        {CABIN_CLASSES.map((c) => {
+                                        {visibleCabins.map((c) => {
                                             const selected = cabinClass === c.key;
                                             return (
                                                 <button
@@ -621,7 +676,7 @@ const [departureDate, setDepartureDate] = useState<Date>(addDays(new Date(), 1))
 
                     <div className="mt-9 flex flex-col lg:flex-row lg:items-end justify-between gap-8">
                         <div className="flex flex-col gap-5">
-                            <div>
+                            {cfg.directFlightsOption && <div>
                                 <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Flight Type</p>
                                 <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 p-1 gap-1">
                                     {FLIGHT_TYPES.map((f) => (
@@ -638,12 +693,12 @@ const [departureDate, setDepartureDate] = useState<Date>(addDays(new Date(), 1))
                                         </button>
                                     ))}
                                 </div>
-                            </div>
+                            </div>}
 
- <div className="flex items-center flex-wrap gap-2">
+ {visibleSpecialFares.length > 0 && <div className="flex items-center flex-wrap gap-2">
     <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Special Fares</span>
     <span className="text-xs text-gray-400 dark:text-gray-500 mr-1">(Optional)</span>
-    {SPECIAL_FARES.map((f) => {
+    {visibleSpecialFares.map((f) => {
         const selected = specialFare === f.key;
         return (
             <div
@@ -683,7 +738,7 @@ const [departureDate, setDepartureDate] = useState<Date>(addDays(new Date(), 1))
             </div>
         );
     })}
-</div>
+</div>}
                         </div>
 
                         <div className="flex flex-col items-end gap-2 shrink-0">
@@ -692,7 +747,7 @@ const [departureDate, setDepartureDate] = useState<Date>(addDays(new Date(), 1))
                             )}
                             {!canSearch && (
                                 <p className="text-xs text-gray-400 dark:text-gray-500 max-w-xs text-right">
-                                    Select airport in From and To for search
+                                    {searchHint}
                                 </p>
                             )}
                             <button
@@ -709,6 +764,30 @@ const [departureDate, setDepartureDate] = useState<Date>(addDays(new Date(), 1))
                 </div>
             </div>
         </section>
+    );
+}
+
+function PopularCities({ cities, onPick }: { cities: CityBrief[]; onPick: (c: CityBrief) => void }) {
+    return (
+        <div className="airport-scrollbar absolute left-0 right-0 top-full mt-2 min-w-full w-[370px] bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-800 max-h-72 overflow-y-auto z-50">
+            <p className="px-4 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Popular cities</p>
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                {cities.map((c) => (
+                    <button
+                        key={c.code}
+                        type="button"
+                        onClick={() => onPick(c)}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                    >
+                        <span className="w-11 h-11 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-bold flex items-center justify-center shrink-0">{c.code}</span>
+                        <span className="min-w-0">
+                            <span className="block text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{c.name}</span>
+                            {c.country && <span className="block text-xs text-gray-400 truncate">{c.country}</span>}
+                        </span>
+                    </button>
+                ))}
+            </div>
+        </div>
     );
 }
 

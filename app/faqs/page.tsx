@@ -1,159 +1,51 @@
-"use client";
+import type { Metadata } from "next";
+import FaqAccordion from "@/app/components/cms/FaqAccordion";
+import { EmptyState, PageContainer, SectionHeading } from "@/app/components/cms/Layout";
+import { listResource } from "@/app/lib/cms/server";
+import { cleanHtml } from "@/app/lib/cms/sanitize";
+import type { FaqDoc } from "@/app/lib/cms/types";
 
-import React, { useState } from "react";
+export const metadata: Metadata = {
+    title: "FAQs",
+    description: "Answers about cancellations, baggage, payments, refunds and booking.",
+    alternates: { canonical: "/faqs" },
+};
 
-interface FAQItem {
-  question: string;
-  answer: string;
-}
-
-interface Category {
-  title: string;
-  description: string;
-  items: FAQItem[];
-}
-
-const categories: Category[] = [
-  {
-    title: "Cancellation & Changes",
-    description: "Cancellation policies, date changes, name corrections.",
-    items: [
-      { question: "Can I change the passenger name?", answer: "" },
-      { question: "Can I change the date of my ticket?", answer: "" },
-      { question: "How do I cancel my booking?", answer: "" },
-    ],
-  },
-  {
-    title: "Baggage & Check-in",
-    description: "Cabin and check-in baggage rules, web check-in, boarding pass.",
-    items: [
-      { question: "Can I do web check-in from Flyomint?", answer: "" },
-      { question: "What's my baggage allowance?", answer: "" },
-    ],
-  },
-  {
-    title: "Payments & Refunds",
-    description: "Payment methods, failures, refunds, and chargebacks.",
-    items: [
-      { question: "How are cancellation refunds processed?", answer: "" },
-      { question: "My payment failed but money was debited. What now?", answer: "" },
-      { question: "Which payment methods are supported?", answer: "" },
-    ],
-  },
-  {
-    title: "Booking",
-    description: "Questions about searching flights and creating bookings.",
-    items: [
-      { question: "Will I get an e-ticket or a paper ticket?", answer: "" },
-      { question: "Can I hold a fare without paying?", answer: "" },
-      { question: "How do I book a flight on Flyomint?", answer: "" },
-    ],
-  },
+const CATEGORIES: { key: string; title: string; description: string }[] = [
+    { key: "cancellation", title: "Cancellation & Changes", description: "Cancellation policies, date changes, name corrections." },
+    { key: "baggage", title: "Baggage & Check-in", description: "Cabin and check-in baggage rules, web check-in, boarding pass." },
+    { key: "payment", title: "Payments & Refunds", description: "Payment methods, failures, refunds, and chargebacks." },
+    { key: "booking", title: "Booking", description: "Questions about searching flights and creating bookings." },
+    { key: "other", title: "Other", description: "Everything else." },
 ];
 
-export default function HelpCenterPage() {
-  const [openIndex, setOpenIndex] = useState<string | null>(null);
-
-  const toggle = (key: string) => {
-    setOpenIndex((prev) => (prev === key ? null : key));
-  };
-
-  return (
-    <div className="min-h-screen bg-white">
-      <div className="bg-slate-50 border-b border-gray-200">
-        <div className="max-w-3xl mx-auto px-6 py-16 text-center">
-          <div className="w-12 h-12 mx-auto mb-6 rounded-full bg-blue-100 flex items-center justify-center">
-            <svg
-              className="w-6 h-6 text-blue-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-          </div>
-          <h1 className="text-3xl font-bold text-slate-900 mb-3">
-            How can we help you?
-          </h1>
-          <p className="text-sm text-slate-500">
-            Search our knowledge base for answers to common questions regarding
-            your bookings, flights, and account.
-          </p>
+export default async function FaqsPage() {
+    const data = await listResource<FaqDoc>("faqs", { limit: 200 });
+    const faqs = data?.items ?? [];
+    return (
+        <div className="min-h-screen bg-white dark:bg-gray-950">
+            <div className="bg-slate-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+                <div className="max-w-3xl mx-auto px-6 py-16 text-center">
+                    <h1 className="text-3xl font-bold text-slate-900 dark:text-gray-100 mb-3">How can we help you?</h1>
+                    <p className="text-sm text-slate-500 dark:text-gray-400">Answers to common questions about your bookings, flights, and account.</p>
+                </div>
+            </div>
+            <PageContainer narrow>
+                {faqs.length === 0 && <EmptyState message="No questions yet." />}
+                <div className="space-y-10">
+                    {CATEGORIES.map((cat) => {
+                        const items = faqs.filter((f) => f.category === cat.key);
+                        if (items.length === 0) return null;
+                        return (
+                            <section key={cat.key}>
+                                <SectionHeading>{cat.title}</SectionHeading>
+                                <p className="text-xs text-slate-400 -mt-3 mb-4">{cat.description}</p>
+                                <FaqAccordion items={items.map((f) => ({ question: f.question, answer: cleanHtml(f.answer) }))} defaultOpen={null} />
+                            </section>
+                        );
+                    })}
+                </div>
+            </PageContainer>
         </div>
-      </div>
-
-      <div className="max-w-3xl mx-auto px-6 py-12 space-y-10">
-        {categories.map((cat, catIdx) => (
-          <section key={catIdx}>
-            <div className="flex items-center gap-2 mb-1">
-              <h2 className="text-lg font-semibold text-slate-900">
-                {cat.title}
-              </h2>
-              <svg
-                className="w-4 h-4 text-slate-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                />
-              </svg>
-            </div>
-            <p className="text-xs text-slate-400 mb-4">{cat.description}</p>
-
-            <div className="space-y-3">
-              {cat.items.map((item, itemIdx) => {
-                const key = `${catIdx}-${itemIdx}`;
-                const isOpen = openIndex === key;
-                return (
-                  <div
-                    key={key}
-                    className="border border-gray-200 rounded-xl overflow-hidden"
-                  >
-                    <button
-                      onClick={() => toggle(key)}
-                      className="w-full flex items-center justify-between px-5 py-4 text-left bg-white hover:bg-gray-50 transition-colors"
-                    >
-                      <span className="text-sm text-slate-700 font-medium">
-                        {item.question}
-                      </span>
-                      <svg
-                        className={`w-4 h-4 text-slate-400 transition-transform ${
-                          isOpen ? "rotate-180" : ""
-                        }`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M19 9l-7 7-7-7"
-                        />
-                      </svg>
-                    </button>
-                    {isOpen && (
-                      <div className="px-5 pb-4 text-sm text-slate-600">
-                        {item.answer || "Answer content goes here."}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        ))}
-      </div>
-    </div>
-  );
+    );
 }
