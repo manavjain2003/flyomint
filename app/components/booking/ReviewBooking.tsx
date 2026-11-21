@@ -1022,7 +1022,9 @@ async function fetchPricing() {
             return;
         }
 
-        const res = await getAirlineFareRule({ tokenId, index: [idx], searchType });
+        // Split view: onward leg -> "ON", return leg -> "RT". Combined -> "RS". One-way -> "ON".
+        const ruleSearchType = isCombinedRoundtrip ? "RS" : legIndex === 1 ? "RT" : "ON";
+        const res = await getAirlineFareRule({ tokenId, index: [idx], searchType: ruleSearchType });
 
         if (!res.success || !res.rules) {
             setFareRuleState((prev) => ({

@@ -865,7 +865,7 @@ const promoStrip = (
                             directBooking={tripType === "oneway"}
                             travelerCounts={{ adults, children, infants }}
                             tokenId={searchTokenId}
-                            searchType={tripType === "roundtrip" ? "RT" : "ON"}
+                            searchType="ON"
                         />
 
                         {tripType === "roundtrip" && (
@@ -882,7 +882,7 @@ const promoStrip = (
                                 onSelectFlight={(j, f) => handleSelect("return", j, f)}
                                 travelerCounts={{ adults, children, infants }}
                                 tokenId={searchTokenId}
-                                searchType={tripType === "roundtrip" ? "RT" : "ON"}
+                                searchType="RT"
                             />
                         )}
                     </div>
