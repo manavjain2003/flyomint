@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-/**
- * Applies the 301/302 redirects managed in the CMS (SEO → Redirects).
- * The list is cached in memory for 60s so requests are not slowed down; if the CMS is
- * unreachable the site keeps working with the last known list (or none).
- */
+
 type Redirect = { fromPath: string; toPath: string; statusCode: 301 | 302 };
 
 const CMS = (process.env.CMS_API_URL || process.env.NEXT_PUBLIC_CMS_API_URL || "").replace(/\/$/, "");
@@ -32,7 +28,6 @@ export async function proxy(request: NextRequest) {
     if (!CMS) return NextResponse.next();
     if (Date.now() > cache.expires) {
         inflight ??= refresh();
-        // First load blocks briefly; afterwards stale data is served while refreshing in the background.
         if (cache.map.size === 0) await inflight;
     }
 
@@ -46,6 +41,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-    // Skip Next internals, API routes and files with an extension (images, fonts, sitemap, robots...)
     matcher: ["/((?!api|_next/static|_next/image|.*\\..*).*)"],
 };

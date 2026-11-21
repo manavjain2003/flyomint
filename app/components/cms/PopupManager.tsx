@@ -57,7 +57,6 @@ export default function PopupManager({ popups }: { popups: Popup[] }) {
                     <HiX className="h-4 w-4" />
                 </button>
                 {active.image?.url && (
-                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={active.image.url} alt={active.image.alt || ""} className="w-full max-h-56 object-cover" />
                 )}
                 <div className="p-6 flex flex-col gap-3">

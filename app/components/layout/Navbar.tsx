@@ -284,7 +284,6 @@ export default function Navbar({ logoUrl, logoAlt, menu = [], phone, sticky = tr
                 <div className="max-w-8xl mx-auto h-full px-4 sm:px-6 flex items-center justify-between gap-6">
                     <Link href="/" className="flex items-center gap-2 shrink-0 bg-white rounded-full" aria-label="Flyomint home">
                         {logoUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
                             <img src={logoUrl} alt={logoAlt || "Flyomint"} className="h-9 w-auto" />
                         ) : (
                             <Image src="/assets/logo.jpg" alt="Flyomint" width={180} height={52} className="h-9 w-auto" priority />

@@ -19,7 +19,6 @@ declare global {
 
 const input = "w-full px-3 py-2.5 border border-slate-300 dark:border-gray-600 dark:bg-gray-800 rounded-lg text-sm text-slate-900 dark:text-gray-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent";
 
-/** Contact form → POST /enquiries. Shows reCAPTCHA only when the CMS has a site key configured. */
 export default function ContactForm({ submitLabel, thankYouMessage, captchaSiteKey }: Props) {
     const [form, setForm] = useState({ name: "", email: "", phone: "", subject: "", message: "" });
     const [status, setStatus] = useState<{ kind: "idle" | "sending" | "done" | "error"; message?: string }>({ kind: "idle" });
@@ -27,7 +26,6 @@ export default function ContactForm({ submitLabel, thankYouMessage, captchaSiteK
     const captchaToken = useRef("");
     const widgetId = useRef<number | null>(null);
 
-    // Pre-fill from the signed-in account (if any)
     useEffect(() => {
         if (!isLoggedInSession()) return;
         getUserProfile().then((p) => {

@@ -61,7 +61,6 @@ function fmtMoney(amount: number, currency = "INR") {
     }
 }
 
-// green -> amber -> red as departure gets closer
 function barColor(i: number, total: number) {
     if (total <= 1) return "bg-green-500";
     const pos = i / (total - 1);
@@ -98,8 +97,6 @@ function PolicySection({
     if (items.length === 0) return null;
 
     const n = items.length;
-    // Boundaries sit on the junctions between bar segments:
-    // start of every window + end of the last one.
     const boundaries = [...items.map((it) => it.start), items[n - 1].end];
 
     return (

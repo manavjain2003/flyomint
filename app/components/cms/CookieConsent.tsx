@@ -8,7 +8,6 @@ const KEY = "flyomint_cookie_consent";
 
 export default function CookieConsent({ message, buttonText, policyLink }: { message: string; buttonText: string; policyLink?: string }) {
     const [dismissed, setDismissed] = useState(false);
-    // Server snapshot is "accepted" so nothing renders during SSR/hydration; the client reads real storage.
     const stored = useSyncExternalStore(
         () => () => {},
         () => { try { return localStorage.getItem(KEY); } catch { return null; } },

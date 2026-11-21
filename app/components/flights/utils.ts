@@ -167,7 +167,6 @@ export function resolveFareDisplay(fare: FareInfo) {
                 net,
             };
         case "S":
-            // Net on top, Gross struck through below — no Extra Off badge
             return {
                 mainAmount: net,
                 strikeAmount: gross,
@@ -178,7 +177,6 @@ export function resolveFareDisplay(fare: FareInfo) {
             };
         case "P":
         default:
-            // Gross as main, Extra Off badge below when discounted — no strike
             return {
                 mainAmount: gross,
                 strikeAmount: null as number | null,
@@ -213,7 +211,6 @@ export function totalFareForTravelers(fare: FareInfo, travelerCounts?: TravelerC
     if (!fare.PTCFare || fare.PTCFare.length === 0 || !travelerCounts) {
         return primaryFareAmount(fare);
     }
-    // G and P display gross; N and S display net
     const type = fare.FareDisplayType ?? "P";
     const useGross = type === "G" || type === "P";
     const countFor: Record<string, number> = {

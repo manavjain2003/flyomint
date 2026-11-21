@@ -260,10 +260,6 @@ export async function getAirlineFareRule({ tokenId, index, searchType }) {
             return { success: false, message: payload.Message || "Could not fetch fare rules", rules: [] };
         }
 
-        // IsDBResponse === true -> rules come from DB in FareRule (CancelRuleInfo /
-        // ChangeRuleInfo) and Trips is null. Normalise into a single entry that
-        // carries `dbPolicy`, which the UI renders as the Cleartrip-style
-        // Cancellation / Date change policy timeline.
         if (payload.IsDBResponse === true) {
             const fr = payload.FareRule || {};
             const cancel = (fr.CancelRuleInfo || []).map((r) => ({

@@ -1,7 +1,4 @@
-/**
- * Server-side client for the Flyomint CMS public API.
- * Use from Server Components, route handlers and generateMetadata only (browser code uses ./browser).
- */
+
 import type {
     ContactPageDoc, HelpCenter, HomePage, ListResult, SiteBundle,
 } from "./types";
@@ -13,7 +10,6 @@ export type CmsResult<T> = { ok: true; data: T } | { ok: false; status: number }
 
 type Opts = { revalidate?: number | false; noStore?: boolean };
 
-/** Low-level GET. Never throws: network problems come back as status 0. */
 export async function cmsFetch<T>(path: string, opts: Opts = {}): Promise<CmsResult<T>> {
     if (!CMS_API_URL) {
         console.error("[cms] NEXT_PUBLIC_CMS_API_URL is not set");
@@ -61,7 +57,6 @@ export const qs = (params: Record<string, string | number | undefined | null>) =
     return s ? `?${s}` : "";
 };
 
-// ------------------------------------------------------------------ typed helpers
 export const getSiteBundle = () => cmsOptional<SiteBundle>("/site-config");
 export const getHome = () => cmsOptional<HomePage>("/home");
 export const getHelpCenter = () => cmsRequired<HelpCenter>("/help-center");
@@ -71,7 +66,6 @@ export function listResource<T>(resource: string, params: Record<string, string 
     return cmsRequired<ListResult<T>>(`/${resource}${qs(params)}`);
 }
 
-/** Detail page by slug, or the draft behind a `?preview=<token>` link (never cached). */
 export async function getDetail<T>(resource: string, slug: string, preview?: string): Promise<T | null> {
     if (preview) {
         const draft = await cmsOptional<T>(`/preview/${encodeURIComponent(preview)}`, { noStore: true });

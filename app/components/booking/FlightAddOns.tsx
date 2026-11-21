@@ -111,7 +111,6 @@ function optionsForPax(options: SSROption[], paxType: string) {
     return options.filter((o) => o.paxType === paxType);
 }
 
-// SSRCharge can come back as number or string from the API.
 function isFreeOption(opt: SSROption) {
     return Number(opt.charge) === 0;
 }
@@ -284,11 +283,6 @@ export default function FlightAddOns({
         load();
     }, [tokenId, bookingId]);
 
-
-    // Default selection: if an airline offers a free (₹0) meal and/or baggage,
-    // pre-select the first free one for every passenger (meal per segment,
-    // baggage per leg). Runs once after options load, so if the user later
-    // removes or changes it we never re-apply the default.
     const hasAutoSelected = useRef(false);
     useEffect(() => {
         if (loading || legs.length === 0 || hasAutoSelected.current) return;

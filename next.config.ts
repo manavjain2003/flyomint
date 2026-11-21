@@ -11,7 +11,6 @@ const nextConfig: NextConfig = {
 
   devIndicators: false,
 
-  // Old URLs → the URL structure used by the CMS (also what the CMS sitemap and SEO tags point to).
   async redirects() {
     return [
       { source: "/blogs", destination: "/blog", permanent: true },
