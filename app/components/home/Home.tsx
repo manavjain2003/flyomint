@@ -19,7 +19,8 @@ import { getAirlineToken } from "@/app/lib/flightsapi";
 import { readCachedSearch, writeCachedSearch } from "@/app/components/flights/searchCache";
 import { type Airport, type CabinClass, type FlightType, type SpecialFare, type TripType } from "@/app/components/flights/types";
 import { CABIN_LABEL as CABIN_LABELS, CABIN_CODE } from "@/app/components/flights/utils";
-import type { CityBrief, SearchBoxConfig } from "@/app/lib/cms/types";
+import type { Banner, CityBrief, SearchBoxConfig } from "@/app/lib/cms/types";
+import { BannerBackdrop, BannerCopy, useBannerIndex } from "@/app/components/home/HeroBanner";
 
 const FLIGHT_TYPES: { key: FlightType; label: string }[] = [
     { key: "all", label: "All" },
@@ -95,7 +96,9 @@ const DEFAULT_CONFIG: Pick<SearchBoxConfig, "tripTypes" | "maxAdults" | "maxChil
     maxAdvanceBookingDays: 350,
 };
 
-export default function Hero({ config }: { config?: SearchBoxConfig | null }) {
+export default function Hero({ config, banners = [] }: { config?: SearchBoxConfig | null; banners?: Banner[] }) {
+    const hasBanners = banners.length > 0;
+    const banner = useBannerIndex(banners.length);
     const cfg = { ...DEFAULT_CONFIG, ...(config ?? {}) };
     const ph = config?.placeholders;
     const errs = config?.errorMessages;
@@ -363,6 +366,9 @@ const [departureDate, setDepartureDate] = useState<Date>(addDays(new Date(), 1))
             <DatePickerBrandStyles />
             <AirportDropdownStyles />
 
+      {hasBanners ? (
+        <BannerBackdrop banners={banners} index={banner.index} />
+      ) : (
       <div className="absolute inset-0 overflow-hidden" aria-hidden>
     <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat dark:hidden"
@@ -377,10 +383,17 @@ const [departureDate, setDepartureDate] = useState<Date>(addDays(new Date(), 1))
     <div className="absolute inset-x-0 bottom-0 h-[35%]  bg-gradient-to-b from-white/0 dark:from-gray-900/0 via-white/30 dark:via-gray-900/30 to-white/70 dark:to-gray-900/70" />
    
 </div>
+      )}
 
+            {hasBanners ? (
+            <div className="relative max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-32 sm:pt-20 sm:pb-36 h-[440px] sm:h-[460px] box-border">
+                <BannerCopy banners={banners} index={banner.index} onSelect={banner.setIndex} onPause={banner.setPaused} />
+            </div>
+            ) : (
             <div className="relative max-w-7xl mx-auto px-4 sm:px-6 pt-16 pb-40 sm:pt-10 sm:pb-40">
                 <div className="max-w-2xl" />
             </div>
+            )}
 
             <div className="relative max-w-7xl mx-auto px-4 sm:px-6 -mt-28 sm:-mt-32 pb-16">
                 <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-xl p-8 sm:p-10 lg:p-14 min-h-[420px]">
