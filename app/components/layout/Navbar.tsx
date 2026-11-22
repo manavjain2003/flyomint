@@ -518,6 +518,8 @@ export default function Navbar({ logoUrl, logoAlt, menu = [], phone, sticky = tr
                                     {(item.children ?? []).filter((c) => c.isActive !== false).map((c) => (
                                         <MenuLink key={c.label + c.url} item={c} onClick={() => setMobileOpen(false)} className="flex items-center pl-9 pr-3 py-2 rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800" />
                                     ))}
+                                </div>
+                            ))}
                             {visibleNavLinks.map(({ href, label, icon: Icon }) => (
                                 <Link
                                     key={href}
@@ -527,8 +529,6 @@ export default function Navbar({ logoUrl, logoAlt, menu = [], phone, sticky = tr
                                     <Icon className="w-4 h-4 text-gray-400 dark:text-gray-500" />
                                     {label}
                                 </Link>
-                            ))}
-                                </div>
                             ))}
                         </div>
                     </div>
