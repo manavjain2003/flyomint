@@ -29,12 +29,17 @@ export default async function HomePage() {
     // CMS unreachable: the booking search still works.
     if (!home) return <Hero config={site?.searchBox} />;
 
+    // Banners become the hero backdrop when the search box section is on; otherwise they are a standalone slider.
+    const sectionOn = (key: string) => home.sections.find((x) => x.key === key && x.enabled);
+    const heroBanners = ((sectionOn("banners")?.data as Banner[] | undefined) ?? []).filter((b) => b.desktopImage?.url);
+    const searchOn = Boolean(sectionOn("searchBox"));
+
     const render = (s: HomeSection): ReactNode => {
         const common = { heading: s.heading || undefined, text: s.text || undefined };
         const data = s.data;
         switch (s.key) {
-            case "banners": return <BannerSlider banners={(data as Banner[]) ?? []} />;
-            case "searchBox": return <Hero config={(data as SearchBoxConfig | null) ?? site?.searchBox} />;
+            case "banners": return searchOn ? null : <BannerSlider banners={(data as Banner[]) ?? []} />;
+            case "searchBox": return <Hero config={(data as SearchBoxConfig | null) ?? site?.searchBox} banners={heroBanners} />;
             case "domesticRoutes": return <RoutesSection type="domestic" routes={(data as RouteCard[]) ?? []} theme={theme} {...common} />;
             case "internationalRoutes": return <RoutesSection type="international" routes={(data as RouteCard[]) ?? []} theme={theme} {...common} />;
             case "cheapestDeals": return <FareDealsSection deals={(data as DealCard[]) ?? []} theme={theme} {...common} />;

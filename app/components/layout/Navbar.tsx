@@ -15,10 +15,12 @@ import { HiOutlineClock } from "react-icons/hi";
 import { isExternal, safeHref } from "@/app/lib/cms/format";
 import type { MenuItem } from "@/app/lib/cms/types";
 
-const NAV_LINKS = [
-    { href: "/", label: "Search", icon: MdFlight },
+// Navigation itself comes from the CMS "main" menu. These are app features (My Trips needs a login),
+// plus a fallback so the header is never empty if the CMS cannot be reached.
+const NAV_LINKS: { href: string; label: string; icon: typeof MdFlight; authOnly?: boolean; fallback?: boolean }[] = [
+    { href: "/", label: "Search", icon: MdFlight, fallback: true },
     { href: "/my-bookings", label: "My Trips", icon: FiClipboard, authOnly: true },
-    { href: "/help-center", label: "Support", icon: HiSupport },
+    { href: "/help-center", label: "Support", icon: HiSupport, fallback: true },
 ];
 
 const PROFILE_NAME_STORAGE = "profileName";
@@ -153,7 +155,7 @@ export default function Navbar({ logoUrl, logoAlt, menu = [], phone, sticky = tr
     const router = useRouter();
     const { theme, toggleTheme } = useTheme();
 
-    const visibleNavLinks = NAV_LINKS.filter((link) => !link.authOnly || loggedIn);
+    const visibleNavLinks = NAV_LINKS.filter((link) => (!link.authOnly || loggedIn) && (!link.fallback || cmsMenu.length === 0));
 
     useEffect(() => {
         if (isPaymentStep) {
@@ -293,6 +295,7 @@ export default function Navbar({ logoUrl, logoAlt, menu = [], phone, sticky = tr
           
                     {!isPaymentStep && (
                         <nav className="hidden lg:flex items-center justify-center gap-1 flex-1 min-w-0">
+                            <CmsDesktopMenu items={cmsMenu} pathname={pathname} />
                             {visibleNavLinks.map(({ href, label, icon: Icon }) => {
                                 const active = pathname === href;
                                 return (
@@ -310,7 +313,6 @@ export default function Navbar({ logoUrl, logoAlt, menu = [], phone, sticky = tr
                                     </Link>
                                 );
                             })}
-                            <CmsDesktopMenu items={cmsMenu} pathname={pathname} />
                         </nav>
                     )}
 
@@ -510,6 +512,12 @@ export default function Navbar({ logoUrl, logoAlt, menu = [], phone, sticky = tr
                                     )}
                                 </>
                             )}
+                            {cmsMenu.map((item) => (
+                                <div key={item.label + item.url}>
+                                    <MenuLink item={item} onClick={() => setMobileOpen(false)} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800" />
+                                    {(item.children ?? []).filter((c) => c.isActive !== false).map((c) => (
+                                        <MenuLink key={c.label + c.url} item={c} onClick={() => setMobileOpen(false)} className="flex items-center pl-9 pr-3 py-2 rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800" />
+                                    ))}
                             {visibleNavLinks.map(({ href, label, icon: Icon }) => (
                                 <Link
                                     key={href}
@@ -520,12 +528,6 @@ export default function Navbar({ logoUrl, logoAlt, menu = [], phone, sticky = tr
                                     {label}
                                 </Link>
                             ))}
-                            {cmsMenu.map((item) => (
-                                <div key={item.label + item.url}>
-                                    <MenuLink item={item} onClick={() => setMobileOpen(false)} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800" />
-                                    {(item.children ?? []).filter((c) => c.isActive !== false).map((c) => (
-                                        <MenuLink key={c.label + c.url} item={c} onClick={() => setMobileOpen(false)} className="flex items-center pl-9 pr-3 py-2 rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800" />
-                                    ))}
                                 </div>
                             ))}
                         </div>
