@@ -1,10 +1,9 @@
-import Link from "next/link";
 import SectionShell from "@/app/components/cms/SectionShell";
-import RouteCards from "@/app/components/cms/RouteCards";
+import RouteCards, { SearchCard } from "@/app/components/cms/RouteCards";
 import CmsImage from "@/app/components/cms/CmsImage";
 import { formatFare, isExternal, safeHref } from "@/app/lib/cms/format";
 import type {
-    DealCard, Destination, MobileAppDoc, RouteCard, SiteTheme, Testimonial, TrustGroups, WhyItem,
+    DealCard, MobileAppDoc, RouteCard, SiteTheme, Testimonial, TrustGroups, WhyItem,
 } from "@/app/lib/cms/types";
 
 type Common = { heading?: string; text?: string };
@@ -16,7 +15,6 @@ export function RoutesSection({ routes, theme, type, heading, text }: Common & {
             eyebrow={type === "domestic" ? "Domestic" : "International"}
             title={heading || (type === "domestic" ? "Popular domestic routes." : "Popular international routes.")}
             text={text}
-            href={type === "domestic" ? "/domestic-flights" : "/international-flights"}
         >
             <RouteCards routes={routes} theme={theme} />
         </SectionShell>
@@ -29,7 +27,6 @@ export function FareDealsSection({ deals, theme, heading, text }: Common & { dea
         <SectionShell eyebrow="Cheapest fares" title={heading || "Low fares, right now."} text={text}>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                 {deals.map((d) => {
-                    const href = safeHref(d.link);
                     const body = (
                         <>
                             <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-2">{d.section.replace("-", " ")}</p>
@@ -44,29 +41,20 @@ export function FareDealsSection({ deals, theme, heading, text }: Common & { dea
                         </>
                     );
                     const cls = "block bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 hover:shadow-md hover:border-gray-300 transition-shadow";
+                    // A deal on a route runs that search; any other deal uses the link set in the CMS (if it is not a page we no longer have).
+                    if (d.route) {
+                        return (
+                            <SearchCard key={d.id} from={d.route.from.code} to={d.route.to.code} fromCity={d.route.from.name} toCity={d.route.to.name} className={cls}>{body}</SearchCard>
+                        );
+                    }
+                    const href = safeHref(d.link);
+                    if (href === "#") return <div key={d.id} className={cls}>{body}</div>;
                     return isExternal(href)
                         ? <a key={d.id} href={href} target="_blank" rel="noopener noreferrer" className={cls}>{body}</a>
-                        : <Link key={d.id} href={href} className={cls}>{body}</Link>;
+                        : <a key={d.id} href={href} className={cls}>{body}</a>;
                 })}
             </div>
             {theme?.fareDisclaimer && <p className="mt-4 text-xs text-gray-400">{theme.fareDisclaimer}</p>}
-        </SectionShell>
-    );
-}
-
-export function DestinationsSection({ destinations, heading, text }: Common & { destinations: Destination[] }) {
-    if (destinations.length === 0) return null;
-    return (
-        <SectionShell eyebrow="Explore" title={heading || "Popular destinations."} text={text} href="/destinations">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-                {destinations.map((d) => (
-                    <Link key={d.id} href={`/destinations/${d.slug}`} className="group relative block overflow-hidden rounded-2xl aspect-[4/3] bg-gradient-to-br from-sky-100 to-sky-400">
-                        <CmsImage image={d.bannerImage} fallbackAlt={d.name} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                        <p className="absolute bottom-3 left-4 right-4 text-white font-semibold">{d.name}</p>
-                    </Link>
-                ))}
-            </div>
         </SectionShell>
     );
 }

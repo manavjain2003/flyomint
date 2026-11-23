@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { Airline } from "@/app/lib/cms/types";
 
 type Props = { airlines: Airline[]; heading?: string; text?: string };
@@ -38,7 +37,7 @@ function AirlineList({ airlines, hidden }: { airlines: Airline[]; hidden?: boole
         <ul className="flex items-start shrink-0" aria-hidden={hidden}>
             {airlines.map((a) => (
                 <li key={`${a.id}`} className="shrink-0">
-                    <Link href={`/airlines/${a.slug}`} tabIndex={hidden ? -1 : undefined} className="flex flex-col items-center gap-3 px-8 sm:px-10">
+                    <div className="flex flex-col items-center gap-3 px-8 sm:px-10">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                             src={a.logo?.url || `https://www.gstatic.com/flights/airline_logos/70px/${a.code}.png`}
@@ -47,7 +46,7 @@ function AirlineList({ airlines, hidden }: { airlines: Airline[]; hidden?: boole
                             loading="lazy"
                         />
                         <span className="text-[15px] font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">{a.name}</span>
-                    </Link>
+                    </div>
                 </li>
             ))}
         </ul>

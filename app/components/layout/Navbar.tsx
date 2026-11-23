@@ -12,15 +12,11 @@ import LoginDrawer, { isLoggedInSession } from "@/app/components/booking/LoginDr
 import { getUserProfile, logoutUser } from "@/app/lib/authApi";
 import { useTheme } from "@/app/components/shared/ThemeProvider";
 import { HiOutlineClock } from "react-icons/hi";
-import { isExternal, safeHref } from "@/app/lib/cms/format";
-import type { MenuItem } from "@/app/lib/cms/types";
 
-// Navigation itself comes from the CMS "main" menu. These are app features (My Trips needs a login),
-// plus a fallback so the header is never empty if the CMS cannot be reached.
-const NAV_LINKS: { href: string; label: string; icon: typeof MdFlight; authOnly?: boolean; fallback?: boolean }[] = [
-    { href: "/", label: "Search", icon: MdFlight, fallback: true },
+const NAV_LINKS = [
+    { href: "/", label: "Search", icon: MdFlight },
     { href: "/my-bookings", label: "My Trips", icon: FiClipboard, authOnly: true },
-    { href: "/help-center", label: "Support", icon: HiSupport, fallback: true },
+    { href: "/help-center", label: "Support", icon: HiSupport },
 ];
 
 const PROFILE_NAME_STORAGE = "profileName";
@@ -97,50 +93,12 @@ function PaymentStepFlag({ onChange }: { onChange: (isPaymentStep: boolean) => v
 type NavbarProps = {
     logoUrl?: string;
     logoAlt?: string;
-    menu?: MenuItem[];
     phone?: string;
     sticky?: boolean;
     showAuthButtons?: boolean;
 };
 
-function MenuLink({ item, className, onClick }: { item: MenuItem; className: string; onClick?: () => void }) {
-    const href = safeHref(item.url);
-    if (item.target === "_blank" || isExternal(href)) {
-        return <a href={href} target={item.target || "_blank"} rel="noopener noreferrer" className={className} onClick={onClick}>{item.label}</a>;
-    }
-    return <Link href={href} className={className} onClick={onClick}>{item.label}</Link>;
-}
-
-/** Items of the CMS "main" menu; top-level items may have a sub menu. */
-function CmsDesktopMenu({ items, pathname }: { items: MenuItem[]; pathname: string }) {
-    return (
-        <>
-            {items.map((item) => {
-                const children = (item.children ?? []).filter((c) => c.isActive !== false);
-                const active = pathname === item.url;
-                const base = `inline-flex items-center gap-1 h-9 px-3.5 rounded-full text-sm font-medium transition-colors ${
-                    active ? "text-[#FF7626]" : "text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
-                }`;
-                if (children.length === 0) return <MenuLink key={item.label + item.url} item={item} className={base} />;
-                return (
-                    <div key={item.label + item.url} className="relative group">
-                        <MenuLink item={item} className={base} />
-                        <div className="absolute left-0 top-full pt-2 hidden group-hover:block group-focus-within:block min-w-52 z-50">
-                            <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg py-1.5">
-                                {children.map((c) => (
-                                    <MenuLink key={c.label + c.url} item={c} className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700" />
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                );
-            })}
-        </>
-    );
-}
-
-export default function Navbar({ logoUrl, logoAlt, menu = [], phone, sticky = true, showAuthButtons = true }: NavbarProps) {
-    const cmsMenu = menu.filter((m) => m.isActive !== false);
+export default function Navbar({ logoUrl, logoAlt, phone, sticky = true, showAuthButtons = true }: NavbarProps) {
     const [scrolled, setScrolled] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
     const [loginOpen, setLoginOpen] = useState(false);
@@ -155,7 +113,7 @@ export default function Navbar({ logoUrl, logoAlt, menu = [], phone, sticky = tr
     const router = useRouter();
     const { theme, toggleTheme } = useTheme();
 
-    const visibleNavLinks = NAV_LINKS.filter((link) => (!link.authOnly || loggedIn) && (!link.fallback || cmsMenu.length === 0));
+    const visibleNavLinks = NAV_LINKS.filter((link) => !link.authOnly || loggedIn);
 
     useEffect(() => {
         if (isPaymentStep) {
@@ -295,7 +253,6 @@ export default function Navbar({ logoUrl, logoAlt, menu = [], phone, sticky = tr
           
                     {!isPaymentStep && (
                         <nav className="hidden lg:flex items-center justify-center gap-1 flex-1 min-w-0">
-                            <CmsDesktopMenu items={cmsMenu} pathname={pathname} />
                             {visibleNavLinks.map(({ href, label, icon: Icon }) => {
                                 const active = pathname === href;
                                 return (
@@ -512,14 +469,6 @@ export default function Navbar({ logoUrl, logoAlt, menu = [], phone, sticky = tr
                                     )}
                                 </>
                             )}
-                            {cmsMenu.map((item) => (
-                                <div key={item.label + item.url}>
-                                    <MenuLink item={item} onClick={() => setMobileOpen(false)} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800" />
-                                    {(item.children ?? []).filter((c) => c.isActive !== false).map((c) => (
-                                        <MenuLink key={c.label + c.url} item={c} onClick={() => setMobileOpen(false)} className="flex items-center pl-9 pr-3 py-2 rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800" />
-                                    ))}
-                                </div>
-                            ))}
                             {visibleNavLinks.map(({ href, label, icon: Icon }) => (
                                 <Link
                                     key={href}

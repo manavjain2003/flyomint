@@ -65,7 +65,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <Navbar
             logoUrl={logoUrl}
             logoAlt={site?.theme?.siteName}
-            menu={site?.menus?.main}
             phone={site?.header?.phone}
             sticky={site?.header?.stickyHeader !== false}
             showAuthButtons={site?.header?.showAuthButtons !== false}

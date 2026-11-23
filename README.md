@@ -52,16 +52,19 @@ Content is cached for 60 seconds (same as the CMS), so admin changes appear with
 
 | Area | Where |
 | --- | --- |
-| Logo, favicon, site name, header phone, sticky header, sign-in button, main menu | `Navbar`, `app/layout.tsx` |
+| Logo, favicon, site name, header phone, sticky header, sign-in button | `Navbar`, `app/layout.tsx` |
 | Top offer strip, announcement bar, popups, cookie banner, WhatsApp/call buttons, maintenance mode | `app/layout.tsx`, `components/cms/*` |
-| Footer (contact, social, menus, popular links, payment logos, app links, SEO text, copyright) | `components/layout/Footer.tsx` |
-| Home sections (order, headings, enabled flags) | `app/page.tsx` |
+| Footer (contact, social, footer menu, payment logos, app links, SEO text, copyright) | `components/layout/Footer.tsx` |
+| Home sections: banners (hero background), popular routes (click = flight search), cheapest deals, live offers (copy code), airline logos, why choose us, trust badges, testimonials, FAQs, newsletter, app links. Order, headings and on/off flags come from the CMS | `app/page.tsx` |
 | Search box rules (trip types, passenger limits, cabins, special fares, defaults, popular cities, placeholders, errors) | `components/home/Home.tsx` |
-| Blog, guides, offers, airlines, destinations, domestic/international routes | `app/blog`, `app/guides`, `app/offers`, `app/airlines`, `app/destinations`, `app/*-flights` |
+| Travel guides | `app/guides` |
 | About, privacy, terms, disclaimer, refund, special-fare pages | `app/[slug]` (see `app/lib/cms/pages.ts`) |
 | Help center, contact page + enquiry form, FAQs, newsletter (+ confirm/unsubscribe) | `app/help-center`, `app/contact-us`, `app/faqs`, `app/newsletter` |
 | SEO (titles, canonical, Open Graph, JSON-LD), sitemap.xml, robots.txt, 301/302 redirects, GA/GTM/Pixel + custom scripts | `app/lib/cms/seo.ts`, `app/sitemap.xml`, `app/robots.txt`, `proxy.ts`, `components/cms/Analytics.tsx` |
-| Draft preview (`?preview=<token>` links from the CMS) | detail pages |
-| View/click analytics sent to the CMS (`/track`) | `components/cms/Tracking.tsx` |
+| Draft preview (`?preview=<token>` links from the CMS) | guides and info pages |
+| Banner click analytics sent to the CMS (`/track`) | `components/home/HeroBanner.tsx` |
 
-URL structure follows the CMS (`/blog`, `/help-center`, `/contact-us`, `/about-us`, ...). Old URLs (`/blogs`, `/support`, `/contact`, ...) redirect permanently.
+The header keeps the app's own links (Search, My Trips, Support); the CMS "Navigation" menus only drive the footer.
+This site has no pages for blog, offers, airlines, destinations or per-route flights, so CMS sections for destinations and blog are not shown,
+those URLs are removed from `sitemap.xml`, and CMS links (banners, popups, menus) should point to pages that exist
+(`/`, `/help-center`, `/contact-us`, `/faqs`, `/guides`, `/about-us`, ...). Old URLs (`/support`, `/contact`, `/about`, ...) redirect permanently.
