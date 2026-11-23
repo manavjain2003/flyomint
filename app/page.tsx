@@ -4,17 +4,16 @@ import Hero from "@/app/components/home/Home";
 import BannerSlider from "@/app/components/home/BannerSlider";
 import LimitedDeals from "@/app/components/home/LimitedDeals";
 import AirlinePartners from "@/app/components/home/AirlinePartners";
-import BlogSection from "@/app/components/home/BlogSection";
 import FaqSection from "@/app/components/home/FaqSection";
 import NewsletterBox from "@/app/components/home/NewsletterBox";
 import {
-    DestinationsSection, FareDealsSection, MobileAppSection, RoutesSection, TestimonialsSection, TrustSection, WhyChooseUsSection,
+    FareDealsSection, MobileAppSection, RoutesSection, TestimonialsSection, TrustSection, WhyChooseUsSection,
 } from "@/app/components/home/CmsSections";
 import JsonLd from "@/app/components/cms/JsonLd";
 import { getHome, getSiteBundle } from "@/app/lib/cms/server";
 import { seoToMetadata } from "@/app/lib/cms/seo";
 import type {
-    Airline, Banner, Blog, DealCard, Destination, FaqDoc, HomeSection, Offer, RouteCard, SearchBoxConfig, Testimonial, TrustGroups, WhyItem, MobileAppDoc,
+    Airline, Banner, DealCard, FaqDoc, HomeSection, Offer, RouteCard, SearchBoxConfig, Testimonial, TrustGroups, WhyItem, MobileAppDoc,
 } from "@/app/lib/cms/types";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -43,13 +42,14 @@ export default async function HomePage() {
             case "domesticRoutes": return <RoutesSection type="domestic" routes={(data as RouteCard[]) ?? []} theme={theme} {...common} />;
             case "internationalRoutes": return <RoutesSection type="international" routes={(data as RouteCard[]) ?? []} theme={theme} {...common} />;
             case "cheapestDeals": return <FareDealsSection deals={(data as DealCard[]) ?? []} theme={theme} {...common} />;
-            case "offers": return <LimitedDeals offers={(data as Offer[]) ?? []} {...common} />;
+            case "offers": return <LimitedDeals offers={(data as Offer[]) ?? []} dateFormat={theme?.dateFormat} {...common} />;
             case "airlines": return <AirlinePartners airlines={(data as Airline[]) ?? []} {...common} />;
-            case "destinations": return <DestinationsSection destinations={(data as Destination[]) ?? []} {...common} />;
+            // Destinations and blog posts have no pages on this site, so these CMS sections are not shown.
+            case "destinations":
+            case "blogs": return null;
             case "whyChooseUs": return <WhyChooseUsSection items={(data as WhyItem[]) ?? []} {...common} />;
             case "trustBadges": return data ? <TrustSection groups={data as TrustGroups} {...common} /> : null;
             case "testimonials": return <TestimonialsSection items={(data as Testimonial[]) ?? []} {...common} />;
-            case "blogs": return <BlogSection blogs={(data as Blog[]) ?? []} {...common} />;
             case "faqs": return <FaqSection faqs={(data as FaqDoc[]) ?? []} {...common} />;
             case "newsletter": return <NewsletterBox {...common} />;
             case "mobileApp": return <MobileAppSection app={(data as MobileAppDoc) ?? site?.mobileApp ?? null} {...common} />;

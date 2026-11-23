@@ -11,7 +11,7 @@ const PRODUCT_LINKS: FooterLink[] = [
     { url: "/", label: "Flight search" },
     { url: "/my-bookings", label: "My bookings" },
     { url: "/group-booking", label: "Group bookings" },
-    { url: "/blog", label: "Travel guides" },
+    { url: "/guides", label: "Travel guides" },
 ];
 const SUPPORT_LINKS: FooterLink[] = [
     { url: "/help-center", label: "Help center" },
@@ -68,7 +68,7 @@ export default function Footer({ site }: { site: SiteBundle | null }) {
     return (
         <footer className="border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12">
-                <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[1.3fr_repeat(4,1fr)]">
+                <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[1.3fr_repeat(3,1fr)]">
                     <div className="space-y-3 sm:col-span-2 lg:col-span-4 xl:col-span-1">
                         {logo ? (
                             // eslint-disable-next-line @next/next/no-img-element
@@ -105,10 +105,6 @@ export default function Footer({ site }: { site: SiteBundle | null }) {
                     <Group heading="Product" links={PRODUCT_LINKS} />
                     <Group heading="Company" links={quick} />
                     <Group heading="Support" links={SUPPORT_LINKS} />
-                    <Group heading="Domestic flights" links={f?.popularDomesticRoutes ?? []} />
-                    <Group heading="International flights" links={f?.popularInternationalRoutes ?? []} />
-                    <Group heading="Airlines" links={f?.popularAirlines ?? []} />
-                    <Group heading="Destinations" links={f?.popularDestinations ?? []} />
                 </div>
 
                 {f?.seoText && <RichText html={f.seoText} className="mt-10 pt-8 border-t border-gray-100 dark:border-gray-800 text-xs" />}
