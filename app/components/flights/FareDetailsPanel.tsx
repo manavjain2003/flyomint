@@ -8,6 +8,7 @@ import { type Journey, type FareInfo, type TravelerCounts, type DetailTab } from
 import { formatPrice, formatOffMessage } from "@/app/components/flights/utils";
 import SegmentRouteCard from "@/app/components/flights/SegmentRouteCard";
 import DBFarePolicy, { type DBPolicy } from "@/app/components/flights/DBFarePolicy";
+import { FareRuleSrp, type FareRuleEntry } from "@/app/components/flights/FareRuleView";
 import { getAirlineFareRule } from "@/app/lib/flightsapi";
 
 const PTC_LABEL: Record<string, string> = {
@@ -30,7 +31,7 @@ type RuleTier = {
     currencyCode?: string;
 };
 type RuleSection = { head: string; tiers: RuleTier[] };
-type RuleEntry = {
+type RuleEntry = Partial<Omit<FareRuleEntry, "sections">> & {
     originDestination?: string;
     fareRuleText?: string;
     additionalCharge?: string | null;
@@ -508,7 +509,10 @@ const discountTotal = grossFareTotal - netFareTotal;
                                     !rError &&
                                     rData &&
                                     rData.length > 0 &&
-                                    rData.map((entry, i) => entry.dbPolicy ? (
+                                    rData.map((entry, i) => entry.newFormat ? (
+                                        // New FareRule[] format: red timeline first, yellow table as fallback
+                                        <FareRuleSrp key={i} entry={entry as FareRuleEntry} />
+                                    ) : entry.dbPolicy ? (
                                         <DBFarePolicy key={i} policy={entry.dbPolicy} />
                                     ) : (
                                         <div key={i} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">

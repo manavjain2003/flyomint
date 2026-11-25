@@ -20,6 +20,13 @@ import { HiOutlineLocationMarker } from "react-icons/hi";
 import { AiOutlineLoading3Quarters } from "react-icons/ai";
 import { getAirlinePricing, getAirlineFareRule } from "@/app/lib/flightsapi";
 import DBFarePolicy from "@/app/components/flights/DBFarePolicy";
+import {
+    RefundTimeline,
+    FareRuleTable,
+    hasRefundTimeline,
+    hasFareRuleTable,
+    type FareRuleEntry,
+} from "@/app/components/flights/FareRuleView";
 import PassengerDetailsForm, {
     passengerFormIsValid,
     type PassengerDetails,
@@ -425,6 +432,7 @@ function ItineraryCard({
     searchMeta,
     showNearByNotice = false,
     onShowFareRules,
+    fareRuleEntry,
 }: {
     label: string;
     leg: LegSelection;
@@ -432,6 +440,8 @@ function ItineraryCard({
     searchMeta?: SearchMeta;
     showNearByNotice?: boolean;
     onShowFareRules: () => void;
+    /** Fare rule for this leg; the refund timeline is only shown on the page when the response has it. */
+    fareRuleEntry?: FareRuleEntry | null;
 }) {
     const { journey, fare } = leg;
     const stopsLabel = journey.Stops === 0 ? "Direct" : `${journey.Stops} stop${journey.Stops > 1 ? "s" : ""}`;
@@ -508,6 +518,12 @@ function ItineraryCard({
                     </div>
                 ))}
             </div>
+
+            {hasRefundTimeline(fareRuleEntry) && (
+                <div className="px-5 py-4 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
+                    <RefundTimeline entry={fareRuleEntry!} onPolicyClick={onShowFareRules} />
+                </div>
+            )}
 
             {journey.TransitVisa && (
                 <div className="px-5 pb-4 -mt-1">
@@ -591,6 +607,13 @@ function RulesCard({ legs, ruleLoading, ruleError, ruleData, onRetry }: {
                 ruleData &&
                 ruleData.length > 0 &&
                 ruleData.map((entry, i) => {
+                    // New FareRule[] format. The slide shows the yellow part (fare rule table + T&C).
+                    if (entry.newFormat) {
+                        if (hasFareRuleTable(entry)) return <FareRuleTable key={i} entry={entry} />;
+                        // No text rules in the response: fall back to the timeline so the slide isn't empty.
+                        if (hasRefundTimeline(entry)) return <RefundTimeline key={i} entry={entry} />;
+                        return null;
+                    }
                     if (entry.dbPolicy) {
                         return <DBFarePolicy key={i} policy={entry.dbPolicy} />;
                     }
@@ -1024,7 +1047,12 @@ async function fetchPricing() {
 
         // Split view: onward leg -> "ON", return leg -> "RT". Combined -> "RS". One-way -> "ON".
         const ruleSearchType = isCombinedRoundtrip ? "RS" : legIndex === 1 ? "RT" : "ON";
-        const res = await getAirlineFareRule({ tokenId, index: [idx], searchType: ruleSearchType });
+        const res = await getAirlineFareRule({
+            tokenId,
+            index: [idx],
+            searchType: ruleSearchType,
+            bookingId: pricedBookingId,
+        });
 
         if (!res.success || !res.rules) {
             setFareRuleState((prev) => ({
@@ -1038,6 +1066,19 @@ async function fetchPricing() {
             setFareRuleState((prev) => ({
                 ...prev,
                 [legIndex]: { loading: false, error: null, data: [] },
+            }));
+            return;
+        }
+
+        // New FareRule[] format
+        if (res.rules.some((entry: any) => entry.newFormat)) {
+            const route = `${leg.journey.From}-${leg.journey.To}`.toUpperCase();
+            const matching = res.rules.filter(
+                (entry: any) => (entry.originDestination || "").toUpperCase() === route
+            );
+            setFareRuleState((prev) => ({
+                ...prev,
+                [legIndex]: { loading: false, error: null, data: matching.length > 0 ? matching : res.rules },
             }));
             return;
         }
@@ -1138,6 +1179,16 @@ async function fetchPricing() {
     const legs = [displayOnward, isRoundtrip ? displayReturn : null].filter(Boolean) as LegSelection[];
 
     const isCombinedRoundtrip = searchType === "RS";
+
+    // The refund timeline is shown on the page, so load fare rules for every leg as soon as the
+    // priced Index (from the pricing response) is available. Re-runs after a re-price clears the cache.
+    useEffect(() => {
+        if (!isPriced || pricingLoading || !tokenId) return;
+        legs.forEach((leg, i) => {
+            if (!fareRuleState[i]) fetchFareRuleForLeg(i, leg);
+        });
+    }, [isPriced, pricingLoading, fareRuleState]);
+
     const fareLegs = isCombinedRoundtrip && displayOnward ? [displayOnward] : legs;
 
 const travelerCounts = { adults, children, infants };
@@ -1257,6 +1308,7 @@ function handleContinueToPayment() {
                             searchMeta={searchMeta}
                             showNearByNotice
                             onShowFareRules={() => handleShowFareRules(0)}
+                            fareRuleEntry={fareRuleState[0]?.data?.[0] ?? null}
                         />
                     )}
                     {isRoundtrip && displayReturn && (
@@ -1267,6 +1319,7 @@ function handleContinueToPayment() {
                             searchMeta={searchMeta}
                             showNearByNotice
                             onShowFareRules={() => handleShowFareRules(1)}
+                            fareRuleEntry={fareRuleState[1]?.data?.[0] ?? null}
                         />
                     )}
                 {showTravellerForms && (
