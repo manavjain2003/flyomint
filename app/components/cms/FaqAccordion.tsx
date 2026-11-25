@@ -19,13 +19,13 @@ export default function FaqAccordion({ items, defaultOpen = 0 }: { items: FaqEnt
                             type="button"
                             onClick={() => setOpen(isOpen ? null : i)}
                             aria-expanded={isOpen}
-                            className="w-full flex items-center justify-between gap-4 text-left px-6 py-5 hover:bg-gray-50/60 dark:hover:bg-gray-800/60 transition-colors"
+                            className="w-full flex items-center justify-between gap-4 text-left px-6 py-5 hover:bg-gray-50 dark:hover:bg-gray-800/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1c8fc7] transition-colors"
                         >
-                            <span className="text-[15px] font-medium text-gray-900 dark:text-gray-100">{faq.question}</span>
-                            {isOpen ? <HiOutlineChevronUp className="w-4 h-4 text-gray-500 shrink-0" /> : <HiOutlineChevronDown className="w-4 h-4 text-gray-400 shrink-0" />}
+                            <span className="text-[15px] font-semibold text-gray-900 dark:text-gray-100">{faq.question}</span>
+                            {isOpen ? <HiOutlineChevronUp className="w-4 h-4 text-[#1c8fc7] shrink-0" /> : <HiOutlineChevronDown className="w-4 h-4 text-gray-500 dark:text-gray-400 shrink-0" />}
                         </button>
                         {isOpen && (
-                            <div className="px-6 pb-5 -mt-1 max-w-3xl">
+                            <div className="px-6 pb-6 max-w-3xl">
                                 <div className="cms-richtext text-sm" dangerouslySetInnerHTML={{ __html: faq.answer }} />
                             </div>
                         )}

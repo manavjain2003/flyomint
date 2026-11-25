@@ -52,13 +52,13 @@ export default function RouteCards({ routes, theme }: { routes: RouteCard[]; the
                     className="group bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 transition-shadow"
                 >
                     <div className="flex items-center gap-3 mb-4">
-                        <span className="grid place-items-center w-9 h-9 rounded-full bg-[#eaf4fb]"><MdFlight className="w-4 h-4 text-[#1c8fc7] rotate-90" /></span>
-                        <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{r.type}</span>
+                        <span className="grid place-items-center w-9 h-9 rounded-full bg-[#eaf4fb] dark:bg-sky-500/15"><MdFlight className="w-4 h-4 text-[#1c8fc7] rotate-90" /></span>
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{r.type}</span>
                     </div>
                     <p className="text-[15px] font-semibold text-gray-900 dark:text-gray-100 group-hover:text-[#1c8fc7] transition-colors">
-                        {r.from.name} <span className="text-gray-400">→</span> {r.to.name}
+                        {r.from.name} <span className="text-gray-400 dark:text-gray-500">→</span> {r.to.name}
                     </p>
-                    <p className="text-xs text-gray-400 mt-0.5">{r.from.code} – {r.to.code}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{r.from.code} – {r.to.code}</p>
                     {r.fare !== null && (
                         <p className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400">
                             {theme?.fareLabel || "Starting from"} <span className="block text-lg font-bold text-[#FF7626]">{formatFare(r.fare, theme)}</span>

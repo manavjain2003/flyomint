@@ -151,25 +151,82 @@ html::-webkit-scrollbar {
         }
         .checking-fade-in { animation: checking-fade-in 0.5s ease-out; }
       
-/* ---------- CMS rich text (admin-authored HTML) ---------- */
-.cms-richtext { font-size: 15px; line-height: 1.75; color: #475569; font-weight: 400; }
+/* ---------- CMS rich text (admin-authored HTML) ----------
+   All colours come from variables so every element stays readable in both themes. */
+.cms-richtext {
+  --rt-text: #334155;
+  --rt-strong: #0f172a;
+  --rt-muted: #64748b;
+  --rt-link: #0b78ad;
+  --rt-border: #e2e8f0;
+  --rt-surface: #f8fafc;
+  --rt-code: #f1f5f9;
+  --rt-accent: #1c8fc7;
+  color: var(--rt-text);
+  font-size: 15px;
+  line-height: 1.8;
+  font-weight: 400;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+.dark .cms-richtext {
+  --rt-text: #cbd5e1;
+  --rt-strong: #f8fafc;
+  --rt-muted: #94a3b8;
+  --rt-link: #5cc0f0;
+  --rt-border: #334155;
+  --rt-surface: #1e293b;
+  --rt-code: #1e293b;
+}
+@media (min-width: 640px) { .cms-richtext { font-size: 16px; } }
+
+/* Colours pasted into the editor must never override the theme. */
+.cms-richtext [style*="color"] { color: inherit !important; }
+
 .cms-richtext > * + * { margin-top: 1rem; }
-.cms-richtext h1, .cms-richtext h2, .cms-richtext h3, .cms-richtext h4 { color: #0f172a; line-height: 1.3; margin-top: 1.75rem; }
+.cms-richtext > :first-child { margin-top: 0; }
+.cms-richtext strong, .cms-richtext b { color: var(--rt-strong); font-weight: 600; }
+
+.cms-richtext h1, .cms-richtext h2, .cms-richtext h3, .cms-richtext h4, .cms-richtext h5, .cms-richtext h6 {
+  color: var(--rt-strong); line-height: 1.3; font-weight: 700; margin-top: 2rem; scroll-margin-top: 6rem;
+}
 .cms-richtext h1 { font-size: 1.75rem; }
-.cms-richtext h2 { font-size: 1.4rem; }
+.cms-richtext h2 { font-size: 1.4rem; padding-bottom: .5rem; border-bottom: 1px solid var(--rt-border); }
 .cms-richtext h3 { font-size: 1.15rem; }
-.cms-richtext a { color: #1c8fc7; text-decoration: underline; text-underline-offset: 2px; }
+.cms-richtext h4, .cms-richtext h5, .cms-richtext h6 { font-size: 1rem; }
+.cms-richtext > :is(h1, h2, h3, h4, h5, h6):first-child { margin-top: 0; }
+.cms-richtext :is(h1, h2, h3, h4, h5, h6) + * { margin-top: .75rem; }
+
+.cms-richtext a { color: var(--rt-link); text-decoration: underline; text-underline-offset: 3px; font-weight: 500; }
+.cms-richtext a:hover { text-decoration-thickness: 2px; }
+
 .cms-richtext ul { list-style: disc; padding-left: 1.5rem; }
 .cms-richtext ol { list-style: decimal; padding-left: 1.5rem; }
-.cms-richtext li + li { margin-top: .35rem; }
-.cms-richtext img { max-width: 100%; height: auto; border-radius: .75rem; }
-.cms-richtext blockquote { border-left: 4px solid #cbd5e1; padding-left: 1rem; color: #64748b; font-style: italic; }
-.cms-richtext table { width: 100%; border-collapse: collapse; display: block; overflow-x: auto; }
-.cms-richtext th, .cms-richtext td { border: 1px solid #e2e8f0; padding: .5rem .75rem; text-align: left; }
-.cms-richtext th { background: #f8fafc; color: #0f172a; }
-.cms-richtext iframe { max-width: 100%; border-radius: .75rem; }
-.dark .cms-richtext { color: #cbd5e1; }
-.dark .cms-richtext h1, .dark .cms-richtext h2, .dark .cms-richtext h3, .dark .cms-richtext h4 { color: #f1f5f9; }
-.dark .cms-richtext th { background: #1e293b; color: #f1f5f9; }
-.dark .cms-richtext th, .dark .cms-richtext td { border-color: #334155; }
-.dark .cms-richtext blockquote { border-color: #475569; color: #94a3b8; }
+.cms-richtext ul ul { list-style: circle; }
+.cms-richtext li > :is(ul, ol) { margin-top: .35rem; }
+.cms-richtext li + li { margin-top: .4rem; }
+.cms-richtext li::marker { color: var(--rt-muted); }
+
+.cms-richtext img { display: block; max-width: 100%; height: auto; margin-inline: auto; border-radius: .75rem; }
+.cms-richtext figure { margin-inline: 0; }
+.cms-richtext figcaption { margin-top: .5rem; text-align: center; font-size: .8125rem; color: var(--rt-muted); }
+.cms-richtext iframe { display: block; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; height: auto; border: 0; border-radius: .75rem; }
+
+.cms-richtext blockquote {
+  border-left: 4px solid var(--rt-accent); background: var(--rt-surface); color: var(--rt-muted);
+  padding: .75rem 1rem; border-radius: 0 .5rem .5rem 0; font-style: italic;
+}
+.cms-richtext hr { border: 0; border-top: 1px solid var(--rt-border); margin-block: 2rem; }
+.cms-richtext mark { background: #fde68a; color: #1f2937; padding: 0 .25em; border-radius: .25rem; }
+.cms-richtext code { background: var(--rt-code); color: var(--rt-strong); padding: .125rem .375rem; border-radius: .375rem; font-size: .875em; }
+.cms-richtext pre { background: var(--rt-code); color: var(--rt-strong); padding: 1rem; border-radius: .75rem; overflow-x: auto; font-size: .875rem; line-height: 1.6; }
+.cms-richtext pre code { background: transparent; padding: 0; }
+
+/* Tables (cleanHtml wraps each one in .cms-table) */
+.cms-richtext .cms-table { overflow-x: auto; border: 1px solid var(--rt-border); border-radius: .75rem; }
+.cms-richtext table { width: 100%; min-width: 28rem; border-collapse: collapse; font-size: .9rem; overflow-wrap: normal; }
+.cms-richtext th, .cms-richtext td { padding: .65rem .9rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--rt-border); }
+.cms-richtext th { background: var(--rt-surface); color: var(--rt-strong); font-weight: 600; white-space: nowrap; }
+.cms-richtext tbody tr:last-child td { border-bottom: 0; }
+.cms-richtext tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--rt-surface) 55%, transparent); }
+.cms-richtext th + th, .cms-richtext td + td { border-left: 1px solid var(--rt-border); }

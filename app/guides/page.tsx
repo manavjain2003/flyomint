@@ -18,9 +18,9 @@ export default async function GuidesPage() {
             {data && data.items.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                     {data.items.map((g) => (
-                        <Link key={g.id} href={`/guides/${g.slug}`} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md hover:border-gray-300 transition-shadow">
+                        <Link key={g.id} href={`/guides/${g.slug}`} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 block hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 transition-shadow">
                             <h2 className="text-[15px] font-semibold text-gray-900 dark:text-gray-100">{g.title}</h2>
-                            <span className="mt-4 inline-block text-xs font-medium text-[#1c8fc7]">Read guide →</span>
+                            <span className="mt-4 inline-block text-xs font-semibold text-[#0b78ad] dark:text-[#5cc0f0]">Read guide →</span>
                         </Link>
                     ))}
                 </div>
