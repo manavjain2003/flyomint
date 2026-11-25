@@ -17,7 +17,7 @@ declare global {
     }
 }
 
-const input = "w-full px-3 py-2.5 border border-slate-300 dark:border-gray-600 dark:bg-gray-800 rounded-lg text-sm text-slate-900 dark:text-gray-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent";
+const input = "w-full px-3 py-2.5 border border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-lg text-sm text-slate-900 dark:text-gray-100 placeholder:text-slate-500 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent";
 
 export default function ContactForm({ submitLabel, thankYouMessage, captchaSiteKey }: Props) {
     const [form, setForm] = useState({ name: "", email: "", phone: "", subject: "", message: "" });
@@ -89,17 +89,17 @@ export default function ContactForm({ submitLabel, thankYouMessage, captchaSiteK
                 <div><label className={label} htmlFor="c-email">Email <span className="text-red-500">*</span></label><input id="c-email" required type="email" className={input} value={form.email} onChange={set("email")} /></div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <div><label className={label} htmlFor="c-phone">Phone <span className="text-slate-400 font-normal">(optional)</span></label><input id="c-phone" type="tel" className={input} value={form.phone} onChange={set("phone")} /></div>
-                <div><label className={label} htmlFor="c-subject">Subject <span className="text-slate-400 font-normal">(optional)</span></label><input id="c-subject" className={input} value={form.subject} onChange={set("subject")} placeholder="Refund, booking issue, etc." /></div>
+                <div><label className={label} htmlFor="c-phone">Phone <span className="text-slate-500 dark:text-gray-400 font-normal">(optional)</span></label><input id="c-phone" type="tel" className={input} value={form.phone} onChange={set("phone")} /></div>
+                <div><label className={label} htmlFor="c-subject">Subject <span className="text-slate-500 dark:text-gray-400 font-normal">(optional)</span></label><input id="c-subject" className={input} value={form.subject} onChange={set("subject")} placeholder="Refund, booking issue, etc." /></div>
             </div>
             <div>
                 <label className={label} htmlFor="c-message">Message <span className="text-red-500">*</span></label>
                 <textarea id="c-message" required rows={5} maxLength={4000} className={`${input} resize-y`} value={form.message} onChange={set("message")} placeholder="Tell us what's going on. If it's about a booking, include your reference." />
-                <div className="text-right text-xs text-slate-400 mt-1">{form.message.length} / 4000</div>
+                <div className="text-right text-xs text-slate-500 dark:text-gray-400 mt-1">{form.message.length} / 4000</div>
             </div>
             {captchaSiteKey && <div ref={captchaEl} />}
             {status.kind === "error" && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{status.message}</p>}
-            <button type="submit" disabled={status.kind === "sending"} className="inline-flex items-center gap-2 px-6 py-2.5 bg-sky-500 hover:bg-sky-600 disabled:opacity-60 text-white text-sm font-medium rounded-full transition-colors">
+            <button type="submit" disabled={status.kind === "sending"} className="inline-flex items-center gap-2 px-6 py-2.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-60 text-white text-sm font-medium rounded-full transition-colors">
                 {status.kind === "sending" ? "Sending…" : submitLabel || "Send enquiry"}
             </button>
         </form>

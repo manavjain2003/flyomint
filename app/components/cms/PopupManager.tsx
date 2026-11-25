@@ -53,7 +53,7 @@ export default function PopupManager({ popups }: { popups: Popup[] }) {
         <div className="fixed inset-0 z-[70] flex items-center justify-center px-4">
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={close} aria-hidden />
             <div role="dialog" aria-modal="true" aria-label={active.title || active.name} className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white dark:bg-gray-900 shadow-2xl">
-                <button type="button" onClick={close} aria-label="Close" className="absolute right-3 top-3 z-10 grid h-8 w-8 place-items-center rounded-full bg-white/90 text-gray-700 shadow">
+                <button type="button" onClick={close} aria-label="Close" className="absolute right-3 top-3 z-10 grid h-8 w-8 place-items-center rounded-full bg-white/90 text-gray-800 shadow ring-1 ring-black/5">
                     <HiX className="h-4 w-4" />
                 </button>
                 {active.image?.url && (

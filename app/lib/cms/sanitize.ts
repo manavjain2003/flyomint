@@ -14,10 +14,11 @@ const OPTIONS: sanitizeHtml.IOptions = {
         td: ["colspan", "rowspan"],
         th: ["colspan", "rowspan"],
     },
+    // Only alignment survives. Inline colours pasted into the CMS editor (e.g. black text) would be
+    // unreadable in the opposite theme, so text colour is always controlled by the site's own CSS.
     allowedStyles: {
         "*": {
             "text-align": [/^(left|right|center|justify)$/],
-            color: [/^#[0-9a-f]{3,8}$/i, /^rgb\(/i],
         },
     },
     allowedSchemes: ["http", "https", "mailto", "tel"],
@@ -35,7 +36,11 @@ const OPTIONS: sanitizeHtml.IOptions = {
 };
 
 /** Cleans admin-authored rich text before it is rendered with dangerouslySetInnerHTML. */
-export const cleanHtml = (html?: string | null): string => (html ? sanitizeHtml(html, OPTIONS) : "");
+export const cleanHtml = (html?: string | null): string => (html ? wrapTables(sanitizeHtml(html, OPTIONS)) : "");
+
+/** Wraps tables so wide ones scroll inside a bordered box while columns keep their natural alignment. */
+const wrapTables = (html: string): string =>
+    html.replace(/<table(\s|>)/gi, '<div class="cms-table"><table$1').replace(/<\/table>/gi, "</table></div>");
 
 /** Plain-text version (for card excerpts). */
 export const plainText = (html?: string | null, max = 160): string => {

@@ -15,7 +15,7 @@ type Props = {
 /** Common frame for every home page section (matches the existing look). */
 export default function SectionShell({ eyebrow, title, text, href, hrefLabel = "View all", children, overflowHidden }: Props) {
     return (
-        <section className={`bg-dark dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 py-16 ${overflowHidden ? "overflow-hidden" : ""}`}>
+        <section className={`bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 py-16 ${overflowHidden ? "overflow-hidden" : ""}`}>
             <div className="max-w-7xl mx-auto px-4 sm:px-6">
                 <div className="flex items-end justify-between mb-8 gap-4">
                     <div>

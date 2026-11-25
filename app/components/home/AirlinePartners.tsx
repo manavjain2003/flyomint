@@ -6,7 +6,7 @@ type Props = { airlines: Airline[]; heading?: string; text?: string };
 export default function AirlinePartners({ airlines, heading, text }: Props) {
     if (airlines.length === 0) return null;
     return (
-        <section className="bg-dark dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 py-16 overflow-hidden">
+        <section className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 py-16 overflow-hidden">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 mb-10">
                 <span className="inline-block rounded-full bg-[#1c8fc7]/10 text-[#1c8fc7] text-xs font-medium px-3 py-1 mb-4">Airline partners</span>
                 <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-gray-100">{heading || "Carriers we fly with."}</h2>
@@ -37,14 +37,16 @@ function AirlineList({ airlines, hidden }: { airlines: Airline[]; hidden?: boole
         <ul className="flex items-start shrink-0" aria-hidden={hidden}>
             {airlines.map((a) => (
                 <li key={`${a.id}`} className="shrink-0">
-                    <div className="flex flex-col items-center gap-3 px-8 sm:px-10">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                            src={a.logo?.url || `https://www.gstatic.com/flights/airline_logos/70px/${a.code}.png`}
-                            alt={a.logo?.alt || `${a.name} logo`}
-                            className="h-10 w-auto object-contain"
-                            loading="lazy"
-                        />
+                    <div className="flex flex-col items-center gap-3 px-6 sm:px-8">
+                        <span className="grid place-items-center h-16 w-28 rounded-xl bg-white ring-1 ring-gray-200 dark:ring-gray-700">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                                src={a.logo?.url || `https://www.gstatic.com/flights/airline_logos/70px/${a.code}.png`}
+                                alt={a.logo?.alt || `${a.name} logo`}
+                                className="h-10 w-auto max-w-[5.5rem] object-contain"
+                                loading="lazy"
+                            />
+                        </span>
                         <span className="text-[15px] font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">{a.name}</span>
                     </div>
                 </li>

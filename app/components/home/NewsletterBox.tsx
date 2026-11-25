@@ -31,7 +31,7 @@ export default function NewsletterBox({ heading, text, compact }: Props) {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Your email address"
                 aria-label="Email address"
-                className="flex-1 h-12 px-5 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-[#1c8fc7]/30"
+                className="flex-1 h-12 px-5 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-[#1c8fc7]/30"
             />
             <button
                 type="submit"
@@ -49,7 +49,7 @@ export default function NewsletterBox({ heading, text, compact }: Props) {
     if (compact) return <div>{form}{status}</div>;
 
     return (
-        <section className="bg-dark dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 py-16">
+        <section className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 py-16">
             <div className="max-w-7xl mx-auto px-4 sm:px-6">
                 <div className="rounded-3xl bg-[#eaf4fb] dark:bg-gray-800 px-6 sm:px-12 py-12 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
                     <div>

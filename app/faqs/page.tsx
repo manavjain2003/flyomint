@@ -39,7 +39,7 @@ export default async function FaqsPage() {
                         return (
                             <section key={cat.key}>
                                 <SectionHeading>{cat.title}</SectionHeading>
-                                <p className="text-xs text-slate-400 -mt-3 mb-4">{cat.description}</p>
+                                <p className="text-sm text-slate-500 dark:text-gray-400 -mt-3 mb-4">{cat.description}</p>
                                 <FaqAccordion items={items.map((f) => ({ question: f.question, answer: cleanHtml(f.answer) }))} defaultOpen={null} />
                             </section>
                         );
