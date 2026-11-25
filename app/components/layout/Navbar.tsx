@@ -21,7 +21,7 @@ const NAV_LINKS = [
 
 const PROFILE_NAME_STORAGE = "profileName";
 
-const SESSION_DURATION = 10 * 60; // 10 minutes in seconds
+const SESSION_DURATION = 10 * 60; 
 
 function SessionTimer({ seconds }: { seconds: number }) {
     const m = Math.floor(seconds / 60);
