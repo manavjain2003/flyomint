@@ -243,13 +243,103 @@ export async function getRoundtripPricing({ tokenId, bookingId = "", legs }) {
     return { success: true, message: null, results };
 }
 
-export async function getAirlineFareRule({ tokenId, index, searchType }) {
+const toNum = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+};
+
+/** Removes duplicate T&C lines and lines that are just a truncated prefix of another line. */
+function cleanTerms(terms) {
+    const list = (Array.isArray(terms) ? terms : [])
+        .map((t) => (typeof t === "string" ? t.trim() : ""))
+        .filter(Boolean);
+    return list.filter(
+        (t, i) =>
+            list.indexOf(t) === i &&
+            !list.some((other, j) => j !== i && other.length > t.length && other.startsWith(t))
+    );
+}
+
+/** Red part of the UI: date-time based refund timeline (TimeZoneFareRuleInfo). */
+function parseTimelineInfo(info) {
+    if (!info) return null;
+
+    const cancel = (info.CancelFareRuleDetails?.CancelRuleInfo || []).map((r) => {
+        const d = r.CancelDescription || {};
+        const totalFare = toNum(d.TotalFare);
+        const airlineCharge = toNum(d.AirlineCharge);
+        const serviceCharge = toNum(d.ServiceCharge);
+        // TotalCharge is already capped at the fare by the API; fall back to a capped sum.
+        const totalCharge =
+            d.TotalCharge !== undefined && d.TotalCharge !== null
+                ? toNum(d.TotalCharge)
+                : Math.min(airlineCharge + serviceCharge, totalFare);
+        return {
+            start: r.StartDateTime || "",
+            end: r.EndDateTime || "",
+            totalFare,
+            airlineCharge,
+            serviceCharge,
+            totalCharge,
+            refundAmount: Math.max(0, totalFare - totalCharge),
+        };
+    });
+
+    const change = (info.ChangeFareRuleDetails?.ChangeRuleInfo || []).map((r) => {
+        const d = r.ChangeDescription || {};
+        return {
+            allowed: r.IsAllowed !== false,
+            start: r.StartDateTime || "",
+            end: r.EndDateTime || "",
+            totalFare: toNum(d.TotalFare),
+            airlineCharge: toNum(d.AirlineCharge),
+            serviceCharge: toNum(d.ServiceCharge),
+            totalCharge: toNum(d.TotalCharge),
+        };
+    });
+
+    if (cancel.length === 0 && change.length === 0) return null;
+
+    return {
+        currency: info.CancelFareRuleDetails?.CurrencyCode || info.ChangeFareRuleDetails?.CurrencyCode || "INR",
+        cancel,
+        change,
+    };
+}
+
+/** Yellow part of the UI: hour based text table (TextFareRuleInfo). */
+function parseTextInfo(info) {
+    if (!info) return null;
+
+    const mapRows = (list, withAllowed) =>
+        (list || []).map((r) => ({
+            description: r.Description || "",
+            adultAmount: r.AdultAmount || "",
+            childAmount: r.ChildAmount || "",
+            infantAmount: r.InfantAmount || "",
+            ...(withAllowed ? { allowed: r.IsAllowed !== false } : {}),
+        }));
+
+    const cancelRows = mapRows(info.CancelFareRuleDetails?.CancelRuleInfo, false);
+    const changeRows = mapRows(info.ChangeFareRuleDetails?.ChangeRuleInfo, true);
+
+    if (cancelRows.length === 0 && changeRows.length === 0) return null;
+
+    return {
+        currency: info.CancelFareRuleDetails?.CurrencyCode || info.ChangeFareRuleDetails?.CurrencyCode || "INR",
+        cancel: { ruleText: info.CancelFareRuleDetails?.RuleText || "", rows: cancelRows },
+        change: { ruleText: info.ChangeFareRuleDetails?.RuleText || "", rows: changeRows },
+    };
+}
+
+export async function getAirlineFareRule({ tokenId, index, searchType, bookingId = "" }) {
     try {
         const res = await apiRequest("/Flights/AirlineFareRule", {
             method: "POST",
             body: {
                 TokenID: tokenId,
                 Index: Array.isArray(index) ? index : [index],
+                BookingID: bookingId || "",
                 SearchType: searchType,
             },
         });
@@ -258,6 +348,23 @@ export async function getAirlineFareRule({ tokenId, index, searchType }) {
 
         if (payload.ErrorCode) {
             return { success: false, message: payload.Message || "Could not fetch fare rules", rules: [] };
+        }
+
+        // New response format: FareRule is an array, one entry per route.
+        //   TimeZoneFareRuleInfo -> red timeline, TextFareRuleInfo -> yellow table, TermCondition -> T&C.
+        if (Array.isArray(payload.FareRule)) {
+            const rules = payload.FareRule.map((fr) => ({
+                newFormat: true,
+                originDestination: fr.OriginDestination || "",
+                stops: toNum(fr.Stops),
+                fareRuleText: "",
+                additionalCharge: null,
+                sections: [],
+                timeline: parseTimelineInfo(fr.TimeZoneFareRuleInfo),
+                textRule: parseTextInfo(fr.TextFareRuleInfo),
+                terms: cleanTerms(fr.TermCondition),
+            }));
+            return { success: true, message: payload.MSG || payload.Message || null, rules };
         }
 
         if (payload.IsDBResponse === true) {
